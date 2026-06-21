@@ -35,10 +35,16 @@ Candidate output is byte-identical to the reference WebGL2 golden.
 - **Stateful/continuous: 9/9 bit-exact** (`parity/sweep-stateful.sh`) — 2D: `navierStokes`,
   `convolutionFeedback`, `temporalAberration`, `reactionDiffusion`, `cellularAutomata`, `feedback`;
   3D: `cellularAutomata3d`, `reactionDiffusion3d`, `flow3d` (agent sim).
+- **Live corpus: every real composition bit-exact** (`parity/sweep-corpus.sh`) — the full
+  public noisedeck gallery, fetched program-for-program (`parity/fetch-corpus.mjs`) and run
+  through the dual-backend time-series harness, `worst max-abs-diff=0`. These are real,
+  emergent, frequently-stateful user programs (kaleido, reaction-diffusion, 3D lit volumes,
+  attractors, particle→navier-Stokes chains).
 
-Two parity harnesses: `sweep-three.sh` (snapshot, for stateless effects) and `timeseries.mjs`/
+Three parity harnesses: `sweep-three.sh` (snapshot, for stateless effects), `timeseries.mjs`/
 `sweep-stateful.sh` (drives golden [vendored reference WebGL2] + candidate [ThreeBackend] with the
-**identical** deterministic time sequence — the fair test for stateful effects). The snapshot
+**identical** deterministic time sequence — the fair test for stateful effects), and
+`sweep-corpus.sh` (the same time-series test over fetched real programs). The snapshot
 harness renders the golden at a fixed paused time, so it under-reports stateful parity; the
 time-series harness shows those are bit-exact (incl. `reactionDiffusion`, which the sibling
 Metal-vs-Vulkan ports skip — on our shared ANGLE/Metal driver it matches exactly).
