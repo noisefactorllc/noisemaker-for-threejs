@@ -25,32 +25,32 @@ verification* that pass for free when the backend is faithful.
 
 Candidate output is byte-identical to the reference WebGL2 golden.
 
-- **Breadth sweep: 140 PASS / 1 SKIP pixel-perfect** (`parity/sweep-three.sh`), every PASS at
-  `max-abs-diff=0.000, ssim=1.00000` — across synth, filter, mixer, classicNoisedeck:
-  single-pass, multi-pass, two-input, feedback, ping-pong state sims (`cellularAutomata`
-  bit-exact), points (`wormhole`), and MIDI data textures (`roll`). Includes Tier-1
-  (`solid, gradient, noise, cell, shape, osc2d, blur, blendMode`).
-- **Agents subsystem implemented** (MRT mixed-format, points/billboards, additive blend,
-  `uploadDataTexture`): deterministic point effects pass; chaotic agent *behavior* sims
-  (`flow`, `physarum`, …) run end-to-end but diverge over frames like `reactionDiffusion`.
-- **1 documented skip:** `reactionDiffusion` — continuous Gray-Scott solver; seed bit-exact at
-  `speed:0`, evolution fp-divergent (same skip as the same-driver Babylon port and Godot).
+- **Hero integration test: pixel-perfect over a full 30s run.** `parity/integration/hero.dsl` —
+  a complex emergent program (3D perlin → 1M-agent flow field [emit/flow/pointsRender/billboards]
+  → blur → o0; `navierStokes(read o0)` → palette/lighting/adjust → bloom/lens/vignette → o1) —
+  matches the reference at `max-abs-diff=0.000` at every 5s sample across 1800 frames.
+- **Stateless breadth: 142 PASS** (`parity/sweep-three.sh`), every one at `max-abs-diff=0.000` —
+  synth, filter, mixer, classicNoisedeck, points (`wormhole`), MIDI data (`roll`); Tier-1 included.
+- **Stateful/continuous: 6/6 bit-exact** (`parity/sweep-stateful.sh`) — `navierStokes`,
+  `convolutionFeedback`, `temporalAberration`, `reactionDiffusion`, `cellularAutomata`, `feedback`.
 
-Parity criterion (inherited from the sibling ports): `max-abs-diff ≤ 2/255` AND `SSIM ≥ 0.98`.
-Run the sweep: `bash parity/sweep-three.sh`.
+Two parity harnesses: `sweep-three.sh` (snapshot, for stateless effects) and `timeseries.mjs`/
+`sweep-stateful.sh` (drives golden [vendored reference WebGL2] + candidate [ThreeBackend] with the
+**identical** deterministic time sequence — the fair test for stateful effects). The snapshot
+harness renders the golden at a fixed paused time, so it under-reports stateful parity; the
+time-series harness shows those are bit-exact (incl. `reactionDiffusion`, which the sibling
+Metal-vs-Vulkan ports skip — on our shared ANGLE/Metal driver it matches exactly).
 
-### Not yet covered (categorized, see `docs/IMPLEMENTATION-PLAN.md`)
-- **Stateful continuous solvers** (`navierStokes`, `convolutionFeedback`): need run-to-settle
-  multi-sample verification (~30s, sample every 5s), not the 8-frame snapshot.
-- **Audio-driven** (`scope`, `spectrum`): need audio input (like `media`, deferred).
-- **Chaotic agent behavior sims** (`flow`, `physarum`, `dla`, `lenia`, …): the agents subsystem
-  runs them end-to-end, but they diverge over frames (document like `reactionDiffusion`; verify
-  with the 30s/5s multi-sample regime).
-- **Need hand-authored DSL** (11 classicNoisedeck meta/param effects: `composite`, `effects`,
-  `colorLab`, `kaleido`, `refract`, …) — auto-generated default programs are invalid for them.
-- **`remap`**: RGB pixel-perfect (ssim 1.0) but alpha channel diverges (new upstream UBO path).
-- **3D**: `synth3d`/`filter3d` (`createTexture3D`/cubemaps, Phase 5.5). **Audio/external**:
-  `scope`/`spectrum` (audio), `media` (external input) — deferred.
+Parity criterion: `max-abs-diff ≤ 2/255` AND `SSIM ≥ 0.98` (all PASSes hit 0.000).
+
+### Genuinely not yet covered (see `docs/IMPLEMENTATION-PLAN.md`)
+- **`remap`**: RGB pixel-perfect (ssim 1.0) but the alpha channel diverges (new upstream UBO path).
+- **Audio-driven** (`scope`, `spectrum`) and `media`: need audio / external input — deferred.
+- **3D**: `synth3d`/`filter3d` (`createTexture3D` + cubemaps, Phase 5.5).
+- **`buddhabrot`** and a few other points/agent effects: not yet parity-checked individually.
+- **11 classicNoisedeck meta/param effects** (`composite`, `effects`, `colorLab`, `kaleido`,
+  `refract`, …): need hand-authored DSL (auto-generated default programs are invalid for them).
+- Broader corpus validation against **blaster.noisedeck.app**.
 
 ### Integration surface
 - **`NoisemakerCanvas`** — standalone full-screen renderer (the parity workhorse). ✅

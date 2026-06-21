@@ -18,13 +18,14 @@ for prog in "$ROOT"/parity/programs/*.dsl; do
   gold="$ROOT/parity/out/$name.golden.png"
   cand="$ROOT/parity/out/$name.candidate.png"
 
-  # Documented divergences: faithful ports that cannot be bit-reproduced because a
-  # chaotic continuous solver at the stability limit amplifies sub-ULP shader-compilation
-  # fp differences (engine RawShaderMaterial wrapping vs reference). Seed is bit-exact
-  # (verified at speed:0). Same skip as noisemaker-babylon (same ANGLE/Metal driver) and godot.
+  # STATEFUL effects: the snapshot golden (shade-mcp) renders at a FIXED paused time while
+  # the candidate steps frames — unfair for state accumulation, so these look divergent here.
+  # They are bit-exact (max-abs-diff=0.000) under the fair, identically-stepped time-series
+  # harness — see parity/sweep-stateful.sh. (Note: this includes reactionDiffusion, which the
+  # sibling Metal-vs-Vulkan ports skip; on our shared ANGLE/Metal driver it is bit-exact.)
   case "$name" in
-    reactionDiffusion)
-      echo "SKIP $name | continuous Gray-Scott solver; seed bit-exact at speed:0, evolution fp-divergent" | tee -a "$OUT"
+    reactionDiffusion|navierStokes|convolutionFeedback|temporalAberration)
+      echo "SKIP $name | stateful — bit-exact via parity/sweep-stateful.sh (snapshot is fixed-time/unfair)" | tee -a "$OUT"
       skip=$((skip+1)); continue ;;
   esac
 
