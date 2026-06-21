@@ -46,9 +46,10 @@ Metal-vs-Vulkan ports skip — on our shared ANGLE/Metal driver it matches exact
 Parity criterion: `max-abs-diff ≤ 2/255` AND `SSIM ≥ 0.98` (all PASSes hit 0.000).
 
 ### Genuinely not yet covered (see `docs/IMPLEMENTATION-PLAN.md`)
-- **`remap`**: RGB pixel-perfect (ssim 1.0) but the alpha channel diverges (new upstream UBO path).
-- **Audio-driven** (`scope`, `spectrum`), `media`, and **mesh** (`meshLoader`/`meshRender`, OBJ via
-  `canvas.loadOBJFromURL`): need external input — deferred.
+- **Audio-driven** (`scope`, `spectrum`), `media` decode, and **mesh** (`meshLoader`/`meshRender`,
+  OBJ via `canvas.loadOBJFromURL`): need external input/decoding — deferred. (The external-texture
+  *binding* exists — `setExternalTexture`/`updateTextureFromSource` — so `media`'s shader works once
+  fed a source; see `NoisemakerPass`.)
 - **`loopBegin`/`loopEnd`** accumulator-feedback primitives: shaders compile, but the loop-accumulator
   parity path is not yet exercised.
 - Broader corpus validation against **blaster.noisedeck.app**.
@@ -58,6 +59,8 @@ Parity criterion: `max-abs-diff ≤ 2/255` AND `SSIM ≥ 0.98` (all PASSes hit 0
   3D renderers `render3d`/`renderLit3d`/`renderCubemap3d`/`renderCubemapSurface`. Volumes are
   2D-flattened atlases raymarched in-shader (no `createTexture3D`/GL-cubemaps needed); cubemap
   faces render to a 2D `rgba16f` target via the `cubeBasis` uniform.
+- **`remap` bit-exact** — std140 UBO support (`RemapUniforms`/`uniformLayout`), verified trivial +
+  zoned (`max-abs-diff=0.000`).
 - **classicNoisedeck meta/param effects** (`composite`, `effects`, `colorLab`, `kaleido`,
   `refract`, …): pass as filters with hand-authored DSL.
 - **points/agent effects** (attractor, buddhabrot, dla, flock, flow, hydraulic, lenia, life,
@@ -68,15 +71,19 @@ Parity criterion: `max-abs-diff ≤ 2/255` AND `SSIM ≥ 0.98` (all PASSes hit 0
 - **`NoisemakerTexture`** — run a DSL program offscreen, exposed as a stable `THREE.Texture` for
   materials / scene backgrounds, sharing the caller's renderer. ✅ verified pixel-perfect
   (`max-abs-diff=0.000`); see `examples/texture-on-mesh.html`.
-- **`NoisemakerPass`** — EffectComposer post-processing pass. ⏳ next.
+- **`NoisemakerPass`** — EffectComposer post-processing pass. ✅ Filter mode (`media()` samples
+  the scene) or generative overlay. Verified generative output == `NoisemakerCanvas`
+  (`max-abs-diff=0.000`) + scene→source binding (`parity/pass-test.mjs`); see
+  `examples/effect-composer-pass.html`.
 
 ### Remaining (see `docs/IMPLEMENTATION-PLAN.md`)
-- Phase 3 backend features (MRT mixed-format, points/billboards, additive blend,
-  `uploadDataTexture`): **done.** ✅
-- Phase 5.5: 3D volumes + cubemaps for `synth3d`/`filter3d`/`render`: **done** (2D-flattened
-  atlases raymarched in-shader; no real `createTexture3D`/GL-cubemaps needed). ✅
-- `remap` alpha (UBO path); external-input effects (audio, media, mesh); `loopBegin`/`loopEnd`.
-- `NoisemakerPass` (EffectComposer) — needs source-surface input binding.
+- Backend features (MRT mixed-format, points/billboards, additive blend, `uploadDataTexture`,
+  std140 UBO): **done.** ✅
+- 3D volumes + cubemaps for `synth3d`/`filter3d`/`render`: **done** (2D-flattened atlases
+  raymarched in-shader; no real `createTexture3D`/GL-cubemaps needed). ✅
+- Integration trio (`NoisemakerCanvas`/`NoisemakerTexture`/`NoisemakerPass`): **done.** ✅
+- External-input *decoding* (audio `scope`/`spectrum`, `media`, mesh OBJ); `loopBegin`/`loopEnd`
+  accumulator parity; broader **blaster.noisedeck.app** corpus validation.
 
 ## Quickstart
 
