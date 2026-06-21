@@ -42,6 +42,37 @@ function toUniformValue(v) {
   return v // numbers, arrays (three handles vecN/array), THREE.Texture
 }
 
+// --- std140 uniform-block (UBO) packing — mirrors reference webgl2.js exactly ---
+// Effects with a `uniformLayout` (e.g. synth/remap's `layout(std140) uniform
+// RemapUniforms { vec4 data[267]; }`) pack named values into vec4 slots. three.js
+// only manages a UBO when given a UniformsGroup; the reference packs a flat
+// `vec4 data[]` array, so we drive the binding by hand on the GL context three owns.
+const UBO_COMPONENT_OFFSET = { x: 0, y: 4, z: 8, w: 12 }
+
+function normalizePackedUniformLayout(layout) {
+  if (Array.isArray(layout)) return layout
+  const out = []
+  for (const [name, spec] of Object.entries(layout || {})) {
+    out.push({ name, slot: spec.slot, components: spec.components })
+  }
+  return out
+}
+
+function getPackedUniformLayoutSize(layout) {
+  let maxSlot = 0
+  for (const e of normalizePackedUniformLayout(layout)) maxSlot = Math.max(maxSlot, e.slot)
+  return (maxSlot + 1) * 16
+}
+
+// Reference _resolveUniformAlias: width/height/channels fall back from resolution.
+function resolveUniformAlias(name, uniforms) {
+  if (uniforms[name] !== undefined) return uniforms[name]
+  if (name === 'width' && uniforms.resolution) return uniforms.resolution[0]
+  if (name === 'height' && uniforms.resolution) return uniforms.resolution[1]
+  if (name === 'channels') return 4.0
+  return undefined
+}
+
 export class ThreeBackend extends Backend {
   constructor(renderer, options = {}) {
     super({})
@@ -58,6 +89,10 @@ export class ThreeBackend extends Backend {
     this.scene.add(this.mesh)
     this.presentMaterial = null
     this.presentedTextureId = null
+    // Reusable std140 packing buffer (grown on demand) — mirrors reference.
+    this._packedUniformBuffer = new ArrayBuffer(512)
+    this._packedUniformView = new DataView(this._packedUniformBuffer)
+    this._packedUniformBytes = new Uint8Array(this._packedUniformBuffer)
   }
 
   async init() {
@@ -201,6 +236,109 @@ export class ThreeBackend extends Backend {
     u.value = toUniformValue(value)
   }
 
+  // --- std140 uniform blocks (UBO) ---
+
+  // Extract the raw GL program three compiled for this material (version-tolerant).
+  getGLProgram(material) {
+    const props = this.renderer.properties.get(material)
+    let wrapper = props?.currentProgram
+    if (!wrapper && props?.programs?.size) wrapper = props.programs.values().next().value
+    return wrapper?.program ?? null
+  }
+
+  // Create + bind a GL buffer for each uniform block (once per program). Mirrors
+  // reference extractUniformBlocks; sizes to max(declared, packed-layout) bytes.
+  extractUniformBlocks(glProgram, spec) {
+    const gl = this.gl
+    const blocks = []
+    const count = gl.getProgramParameter(glProgram, gl.ACTIVE_UNIFORM_BLOCKS)
+    if (!count || !spec.uniformLayout) return blocks
+    const layoutSize = getPackedUniformLayoutSize(spec.uniformLayout)
+    for (let i = 0; i < count; i++) {
+      const name = gl.getActiveUniformBlockName(glProgram, i)
+      if (!name) continue
+      const declaredSize = gl.getActiveUniformBlockParameter(glProgram, i, gl.UNIFORM_BLOCK_DATA_SIZE)
+      const size = Math.max(declaredSize, layoutSize)
+      const bindingPoint = blocks.length // per-program; rebound before each draw
+      const buffer = gl.createBuffer()
+      gl.bindBuffer(gl.UNIFORM_BUFFER, buffer)
+      gl.bufferData(gl.UNIFORM_BUFFER, size, gl.DYNAMIC_DRAW)
+      gl.bindBuffer(gl.UNIFORM_BUFFER, null)
+      gl.uniformBlockBinding(glProgram, i, bindingPoint)
+      blocks.push({ name, index: i, bindingPoint, buffer, size, layout: spec.uniformLayout })
+    }
+    return blocks
+  }
+
+  // Compile the program (so its blocks are queryable) and set up its UBOs once.
+  ensureUniformBlocks(prog, material) {
+    if (prog.uniformBlocks) return // already attempted (may be [])
+    this.mesh.material = material
+    this.renderer.compile(this.scene, this.camera)
+    const glProgram = this.getGLProgram(material)
+    prog.uniformBlocks = glProgram ? this.extractUniformBlocks(glProgram, prog.spec) : []
+  }
+
+  // Pack `merged` into std140 slots and upload + bind each block (every draw).
+  packUniformsWithLayout(uniforms, layout, minSize = 0) {
+    const layoutArray = normalizePackedUniformLayout(layout)
+    let maxSlot = 0
+    for (const e of layoutArray) maxSlot = Math.max(maxSlot, e.slot)
+    const bufferSize = Math.max(minSize, (maxSlot + 1) * 16)
+    if (bufferSize > this._packedUniformBuffer.byteLength) {
+      this._packedUniformBuffer = new ArrayBuffer(bufferSize)
+      this._packedUniformView = new DataView(this._packedUniformBuffer)
+      this._packedUniformBytes = new Uint8Array(this._packedUniformBuffer)
+    }
+    const view = this._packedUniformView
+    this._packedUniformBytes.fill(0, 0, bufferSize)
+    for (const entry of layoutArray) {
+      let value = resolveUniformAlias(entry.name, uniforms)
+      if (value === undefined || value === null) continue
+      value = toUniformValue(value) // hex color -> [r,g,b], bool -> 0/1
+      const slotOffset = entry.slot * 16
+      const comps = entry.components
+      if (comps.length === 1) {
+        const offset = slotOffset + UBO_COMPONENT_OFFSET[comps]
+        if (typeof value === 'number') view.setFloat32(offset, value, true)
+      } else {
+        const base = slotOffset + UBO_COMPONENT_OFFSET[comps[0]]
+        if (Array.isArray(value)) {
+          for (let i = 0; i < Math.min(value.length, comps.length); i++) {
+            view.setFloat32(base + i * 4, value[i], true)
+          }
+        } else if (typeof value === 'number') {
+          view.setFloat32(base, value, true)
+        }
+      }
+    }
+    return this._packedUniformBytes.subarray(0, bufferSize)
+  }
+
+  updateUniformBlocks(prog, merged) {
+    const gl = this.gl
+    for (const block of prog.uniformBlocks) {
+      const data = this.packUniformsWithLayout(merged, block.layout, block.size)
+      gl.bindBuffer(gl.UNIFORM_BUFFER, block.buffer)
+      gl.bufferSubData(gl.UNIFORM_BUFFER, 0, data)
+      gl.bindBufferBase(gl.UNIFORM_BUFFER, block.bindingPoint, block.buffer)
+    }
+    gl.bindBuffer(gl.UNIFORM_BUFFER, null)
+  }
+
+  // For effects with a uniformLayout (remap), set up + upload their std140 UBO.
+  // No-op for the ~180 effects without one. Called after bindMaterial, before draw.
+  syncUniformBlocks(pass, state, material) {
+    const prog = this.programs.get(pass.program)
+    if (!prog?.spec?.uniformLayout) return
+    this.ensureUniformBlocks(prog, material)
+    if (!prog.uniformBlocks.length) return
+    const merged = {}
+    if (state.globalUniforms) Object.assign(merged, state.globalUniforms)
+    if (pass.uniforms) Object.assign(merged, pass.uniforms) // pass overrides global
+    this.updateUniformBlocks(prog, merged)
+  }
+
   // --- frame ---
   beginFrame(_state) {
     this.renderer.autoClear = false
@@ -243,6 +381,7 @@ export class ThreeBackend extends Backend {
     const outputKeys = Object.keys(pass.outputs || {})
     const isMRT = pass.drawBuffers > 1 || outputKeys.length > 1
     const material = this.bindMaterial(pass, state)
+    this.syncUniformBlocks(pass, state, material) // std140 UBO (remap); no-op otherwise
 
     if (isMRT) return this.executeMRT(pass, state, outputKeys, material)
     if (pass.drawMode === 'points' || pass.drawMode === 'billboards') {
