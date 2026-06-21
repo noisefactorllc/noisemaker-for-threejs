@@ -6,10 +6,8 @@
  * effects, runs the reused compileGraph, and builds a Pipeline on ThreeBackend.
  */
 import * as THREE from 'three'
-import { compileGraph } from '../vendor/noisemaker/shaders/src/runtime/compiler.js'
+import { compileGraph, loadEffectsForDsl } from '../engine-browser.js'
 import { createThreePipeline } from '../runtime/create-three-pipeline.js'
-import { extractEffectIds } from '../effects/extract-effects.js'
-import { registerEffectsBrowser } from '../effects/loader-browser.js'
 
 export class NoisemakerCanvas {
   constructor(canvas, opts = {}) {
@@ -30,7 +28,7 @@ export class NoisemakerCanvas {
   }
 
   async compile(dsl) {
-    await registerEffectsBrowser(extractEffectIds(dsl))
+    await loadEffectsForDsl(dsl)
     const graph = compileGraph(dsl)
     this.pipeline = await createThreePipeline(graph, {
       renderer: this.renderer,

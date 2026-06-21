@@ -11,43 +11,36 @@
     <canvas id="c" width="256" height="256"></canvas>
     <script type="module">
       import * as THREE from 'three'
-      import { compileGraph } from '/src/vendor/noisemaker/shaders/src/runtime/compiler.js'
-      import { createPipeline } from '/src/vendor/noisemaker/shaders/src/runtime/pipeline.js'
+      // Engine from the CDN bundle (vendor/fetch.sh). Golden = core's createPipeline (WebGL2Backend),
+      // candidate = core's Pipeline + ThreeBackend (via createThreePipeline). Same engine both sides.
+      import { compileGraph, createPipeline, loadEffectsForDsl } from '/src/engine-browser.js'
       import { createThreePipeline } from '/src/runtime/create-three-pipeline.js'
-      import { extractEffectIds } from '/src/effects/extract-effects.js'
-      import { registerEffectsBrowser } from '/src/effects/loader-browser.js'
-      import { parseOBJ } from '/src/vendor/noisemaker/shaders/src/runtime/obj-parser.js'
 
       THREE.ColorManagement.enabled = false
 
-      // Deterministic OBJ meshes for mesh-effect parity (no live OBJ-URL fetch). CCW-outward unit cube.
-      const MESH_OBJS = {
-        cube: `
-v -0.5 -0.5 0.5
-v 0.5 -0.5 0.5
-v 0.5 0.5 0.5
-v -0.5 0.5 0.5
-v -0.5 -0.5 -0.5
-v 0.5 -0.5 -0.5
-v 0.5 0.5 -0.5
-v -0.5 0.5 -0.5
-f 1 2 3
-f 1 3 4
-f 2 6 7
-f 2 7 3
-f 6 5 8
-f 6 8 7
-f 5 1 4
-f 5 4 8
-f 4 3 7
-f 4 7 8
-f 5 6 2
-f 5 2 1
-`,
-      }
+      // Deterministic mesh for mesh-effect parity (no live OBJ-URL fetch, no parser dependency):
+      // a precomputed CCW-outward unit cube (36 verts = 12 tris) with outward face normals. The
+      // parity test validates the adapter's uploadMeshData + triangle raster, not the engine's
+      // OBJ parser, so injecting vertex data directly is equivalent and self-contained.
+      const CUBE = (() => {
+        const c = [[-0.5,-0.5,0.5],[0.5,-0.5,0.5],[0.5,0.5,0.5],[-0.5,0.5,0.5],[-0.5,-0.5,-0.5],[0.5,-0.5,-0.5],[0.5,0.5,-0.5],[-0.5,0.5,-0.5]]
+        const faces = [ // a,b,c,d (quad -> tris abc, acd) + outward normal
+          [0,1,2,3, 0,0,1], [1,5,6,2, 1,0,0], [5,4,7,6, 0,0,-1],
+          [4,0,3,7, -1,0,0], [3,2,6,7, 0,1,0], [4,5,1,0, 0,-1,0],
+        ]
+        const positions = [], normals = []
+        const push = (vi, n) => { positions.push(c[vi][0], c[vi][1], c[vi][2]); normals.push(n[0], n[1], n[2]) }
+        for (const f of faces) {
+          const n = [f[4], f[5], f[6]]
+          push(f[0], n); push(f[1], n); push(f[2], n)
+          push(f[0], n); push(f[2], n); push(f[3], n)
+        }
+        return { positions, normals, vertexCount: positions.length / 3 }
+      })()
+      const MESH_SHAPES = { cube: CUBE }
 
-      // Read a reference (vendored WebGL2 backend) render surface as linear float,
-      // matching export-golden.mjs (FBO on the surface texture, RGBA/FLOAT).
+      // Read the golden (the CDN engine's own WebGL2Backend) render surface as linear float
+      // (FBO on the surface texture, RGBA/FLOAT) — same readback the candidate uses.
       function readGolden(pipeline, size) {
         const backend = pipeline.backend
         const gl = backend.gl
@@ -106,11 +99,10 @@ f 5 2 1
           for (const id of ids) pipeline.backend.updateTextureFromSource(id, cv, { flipY: true })
         }
         if (inject.mesh) {
-          // Parse a deterministic OBJ (reference obj-parser), pack vertices into a square
-          // RGBA texture grid (xyz+valid / normal / uv), upload to mesh0 surfaces on BOTH
-          // backends. Identical bytes -> identical raster. count drawn = w*h (padding verts
-          // are zero -> degenerate, no fragments).
-          const { positions, normals, uvs, vertexCount } = parseOBJ(MESH_OBJS[inject.mesh.shape || 'cube'])
+          // Pack the precomputed mesh vertices into a square RGBA texture grid (xyz+valid /
+          // normal / uv) and upload to mesh0 surfaces on BOTH backends. Identical bytes ->
+          // identical raster. count drawn = w*h (padding verts are zero -> degenerate, no frags).
+          const { positions, normals, vertexCount } = MESH_SHAPES[inject.mesh.shape || 'cube']
           const w = Math.max(1, Math.ceil(Math.sqrt(vertexCount)))
           const h = Math.max(1, Math.ceil(vertexCount / w))
           const N = w * h
@@ -120,7 +112,6 @@ f 5 2 1
           for (let i = 0; i < vertexCount; i++) {
             pos[i * 4] = positions[i * 3]; pos[i * 4 + 1] = positions[i * 3 + 1]; pos[i * 4 + 2] = positions[i * 3 + 2]; pos[i * 4 + 3] = 1
             nrm[i * 4] = normals[i * 3]; nrm[i * 4 + 1] = normals[i * 3 + 1]; nrm[i * 4 + 2] = normals[i * 3 + 2]
-            uv[i * 4] = uvs[i * 2] || 0; uv[i * 4 + 1] = uvs[i * 2 + 1] || 0
           }
           pipeline.backend.uploadMeshData('mesh0', pos, nrm, uv, w, h, vertexCount)
         }
@@ -130,7 +121,7 @@ f 5 2 1
         const canvas = document.getElementById('c')
         canvas.width = size
         canvas.height = size
-        await registerEffectsBrowser(extractEffectIds(dsl))
+        await loadEffectsForDsl(dsl)
         const graph = compileGraph(dsl)
 
         let pipeline

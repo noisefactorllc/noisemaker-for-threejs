@@ -5,7 +5,8 @@ parity/.venv/
 *.log
 .DS_Store
 
-# Confidential reference — NEVER commit. The entire src/vendor/ tree is generated
-# from the external reference by `npm run sync` (NM_REFERENCE_ROOT). It is the
-# noisemaker reference platform, not work authored here; populate it locally.
+# Vendored engine — NEVER commit. Fetched from the production CDN (shaders.noisedeck.app)
+# by `bash vendor/fetch.sh` into vendor/noisemaker/ (node_modules posture: commit the
+# fetch script + loader, never the bytes). src/vendor/ is the older local-mirror layout.
+vendor/noisemaker/
 src/vendor/

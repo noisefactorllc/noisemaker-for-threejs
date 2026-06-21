@@ -14,10 +14,8 @@
  * The program runs offscreen (presentToScreen:false) and its result is blitted into the
  * composer's writeBuffer (or the screen when `renderToScreen`).
  */
-import { compileGraph } from '../vendor/noisemaker/shaders/src/runtime/compiler.js'
+import { compileGraph, loadEffectsForDsl } from '../engine-browser.js'
 import { createThreePipeline } from '../runtime/create-three-pipeline.js'
-import { extractEffectIds } from '../effects/extract-effects.js'
-import { registerEffectsBrowser } from '../effects/loader-browser.js'
 
 // Implements three's Pass interface by duck-typing (EffectComposer reads
 // enabled/needsSwap/clear/renderToScreen and calls setSize/render/dispose — it never
@@ -45,7 +43,7 @@ export class NoisemakerPass {
   }
 
   async compile(dsl) {
-    await registerEffectsBrowser(extractEffectIds(dsl))
+    await loadEffectsForDsl(dsl)
     this.graph = compileGraph(dsl)
     if (!this.sourceIds) this.sourceIds = NoisemakerPass.detectSourceIds(this.graph)
     this.pipeline = await createThreePipeline(this.graph, {

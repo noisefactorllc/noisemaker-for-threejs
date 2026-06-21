@@ -10,6 +10,6 @@ export { NoisemakerTexture } from './integration/texture.js'
 export { NoisemakerPass } from './integration/pass.js'
 export { ThreeBackend } from './backend/three-backend.js'
 export { createThreePipeline } from './runtime/create-three-pipeline.js'
-export { compileGraph } from './vendor/noisemaker/shaders/src/runtime/compiler.js'
+export { compileGraph } from './engine-browser.js'
 
 export const VERSION = '0.0.1'

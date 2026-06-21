@@ -17,8 +17,10 @@ re-implement or re-port:
 **The reference engine is never committed here.** At runtime it loads from the noisemaker CDN —
 `https://shaders.noisedeck.app/1/noisemaker-shaders-core.esm.js` (the engine bundle, which exports
 `Backend`/`Pipeline`/`compileGraph`/… so `ThreeBackend` can be injected) plus `…/1/effects`
-(effect bundles, fetched on demand) — the same source the production apps consume. For offline
-parity work, a local mirror is synced into the **git-ignored** `src/vendor/` via `npm run sync`.
+(effect bundles, fetched on demand) — the same source the production apps consume. `npm run vendor`
+(`vendor/fetch.sh`) mirrors that published engine into the **git-ignored** `vendor/` (node_modules
+posture: the fetch script + a small loader are committed, never the engine bytes); the adapter
+imports the engine from there (`src/engine-browser.js` for the browser, `vendor/engine.mjs` for Node).
 
 The result: the 182 effects are not units of *porting* work — they are units of *parity
 verification* that pass when the adapter is faithful (byte-identical, since it's the same shaders
@@ -26,31 +28,29 @@ on the same WebGL2 driver the reference itself uses).
 
 ## Status
 
-Candidate output is byte-identical to the reference WebGL2 golden.
+Candidate output is byte-identical to the golden — and the golden is the **same CDN engine's own
+`WebGL2Backend`**, so parity is a true backend-vs-backend diff (same shaders, same ANGLE/Metal driver).
 
 - **Hero integration test: pixel-perfect over a full 30s run.** `parity/integration/hero.dsl` —
   a complex emergent program (3D perlin → 1M-agent flow field [emit/flow/pointsRender/billboards]
   → blur → o0; `navierStokes(read o0)` → palette/lighting/adjust → bloom/lens/vignette → o1) —
-  matches the reference at `max-abs-diff=0.000` at every 5s sample across 1800 frames.
-- **Stateless breadth: 162 PASS** (`parity/sweep-three.sh`), every one at `max-abs-diff=0.000` —
-  synth, filter, mixer, classicNoisedeck, points (`wormhole`), MIDI data (`roll`), the full 3D
-  namespace (synth3d/filter3d + render3d/renderLit3d/renderCubemap3d/renderCubemapSurface); Tier-1 included.
-- **Stateful/continuous: 9/9 bit-exact** (`parity/sweep-stateful.sh`) — 2D: `navierStokes`,
+  matches at `max-abs-diff=0.000` at every 5s sample across 1800 frames.
+- **Live corpus: 81/88 byte-identical** (`npm run parity`, `worst max-abs-diff=0`) — the public
+  noisedeck gallery fetched program-for-program (`parity/fetch-corpus.mjs`) and run through the
+  time-series harness. Real emergent/stateful programs (kaleido, reaction-diffusion, 3D lit
+  volumes, attractors, particle→navier-Stokes chains). The remaining 7 use **custom community
+  effects not in the published CDN catalog** (`Unknown effect`) — out of scope, not a parity miss.
+- **Stateful/continuous: bit-exact** (`parity/sweep-stateful.sh`) — 2D `navierStokes`,
   `convolutionFeedback`, `temporalAberration`, `reactionDiffusion`, `cellularAutomata`, `feedback`;
-  3D: `cellularAutomata3d`, `reactionDiffusion3d`, `flow3d` (agent sim).
-- **Live corpus: every real composition bit-exact** (`parity/sweep-corpus.sh`) — the full
-  public noisedeck gallery, fetched program-for-program (`parity/fetch-corpus.mjs`) and run
-  through the dual-backend time-series harness, `worst max-abs-diff=0`. These are real,
-  emergent, frequently-stateful user programs (kaleido, reaction-diffusion, 3D lit volumes,
-  attractors, particle→navier-Stokes chains).
+  3D `cellularAutomata3d`, `reactionDiffusion3d`, `flow3d`.
+- **External-input effects** (`scope`, `spectrum`, `media`, `meshLoader`/`meshRender`):
+  byte-identical with deterministic injected inputs (see below).
 
-Three parity harnesses: `sweep-three.sh` (snapshot, for stateless effects), `timeseries.mjs`/
-`sweep-stateful.sh` (drives golden [vendored reference WebGL2] + candidate [ThreeBackend] with the
-**identical** deterministic time sequence — the fair test for stateful effects), and
-`sweep-corpus.sh` (the same time-series test over fetched real programs). The snapshot
-harness renders the golden at a fixed paused time, so it under-reports stateful parity; the
-time-series harness shows those are bit-exact (incl. `reactionDiffusion`, which the sibling
-Metal-vs-Vulkan ports skip — on our shared ANGLE/Metal driver it matches exactly).
+The parity harness (`parity/timeseries.mjs`) drives the GOLDEN (the CDN engine's own `WebGL2Backend`)
+and the CANDIDATE (`ThreeBackend`) from the **same** engine with an identical deterministic time
+sequence, then diffs each captured frame — the fair test for stateful effects (it confirms even
+`reactionDiffusion` is bit-exact on our ANGLE/Metal driver, which the sibling Metal-vs-Vulkan ports
+skip).
 
 Parity criterion: `max-abs-diff ≤ 2/255` AND `SSIM ≥ 0.98` (all PASSes hit 0.000).
 
@@ -137,42 +137,46 @@ nmTex.update((performance.now() / 6000) % 1)
 
 ## Develop
 
-The repo contains only the adapter; the reference engine is **not committed** (it loads from the
-CDN at runtime — see Provenance). For local development and parity, mirror the reference into the
-git-ignored `src/vendor/` once:
+The repo contains only the adapter; the reference engine is **not committed**. Fetch the published
+engine from the CDN once (into the git-ignored `vendor/`), then test:
 
 ```bash
-npm install                                            # three (pinned) + dev tooling
-NM_REFERENCE_ROOT=/path/to/noisemaker npm run sync     # populate the git-ignored src/vendor/ mirror
-npm test                                               # capability gate, vendor integrity, compiler, resources
+npm install            # three (pinned) + dev tooling
+npm run vendor         # fetch engine + effect mini-bundles from shaders.noisedeck.app -> vendor/ (git-ignored)
+npm test               # capability gate, compiler-on-CDN-engine, three resources
 ```
 
-`npm test` and the parity harness require that synced mirror (the adapter has nothing to drive
-without the engine). Golden parity for one program:
+`npm test` and the parity harness need that fetched engine (the adapter has nothing to drive
+without it). Parity uses a dual-backend **time-series** harness — it drives the GOLDEN (the engine's
+own `WebGL2Backend`) and the CANDIDATE (`ThreeBackend`) from the **same** CDN engine with an
+identical deterministic time sequence, then diffs each captured frame.
 
 ```bash
-NM_REFERENCE_ROOT=/path/to/noisemaker bash parity/run.sh noise   # golden + candidate, compare pixels
+python3 -m venv parity/.venv && parity/.venv/bin/pip install -r parity/requirements.txt   # numpy+Pillow
+node parity/timeseries.mjs parity/programs/scope.dsl --frames 4 --capture 2 --loop 4      # one program
+npm run parity                                                                            # full live corpus
+bash parity/sweep-stateful.sh                                                             # continuous sims
 ```
 
-`parity/compare.py` needs numpy + Pillow (self-contained venv):
-
-```bash
-python3 -m venv parity/.venv && parity/.venv/bin/pip install -r parity/requirements.txt
-bash parity/sweep-three.sh        # full breadth sweep (override python via NM_PY)
-```
+External-input effects (scope/spectrum/media/mesh) get a deterministic synthetic input via a
+`<name>.inject.json` sidecar, applied identically to both backends (see `parity/page-timeseries.html`).
 
 ## Layout
 
 ```
 src/
   index.js                      public API
+  engine-browser.js             loads the CDN engine bundle + effect mini-bundles (browser)
   backend/three-backend.js      ThreeBackend extends Backend  (the work)
   backend/three-resources.js    RT/format/geometry helpers
   runtime/create-three-pipeline.js
-  integration/canvas.js         NoisemakerCanvas
-  effects/                      loader (node + browser) + DSL effect extraction
-  vendor/**                     git-ignored local mirror of the reference (npm run sync; NEVER committed)
-parity/                         golden renderer, candidate renderer, compare.py, programs
+  integration/canvas.js         NoisemakerCanvas (+ texture.js / pass.js)
+  effects/register-effect.js    shared effect registration (Node + browser)
+vendor/
+  fetch.sh                      fetch the engine from the CDN          (committed)
+  engine.mjs                    Node loader: DOM shim + boot + register (committed)
+  noisemaker/**                 fetched engine bytes                   (GIT-IGNORED, never committed)
+parity/                         time-series harness, compare.py, programs, live corpus
 docs/                           design spec + implementation plan
 reference/                      engine-agnostic specs (shared with sibling ports)
 ```
@@ -185,11 +189,15 @@ compiler + pipeline + every effect + GLSL). The 182/182 byte-identical result fo
 is the same `#version 300 es` shaders on the same WebGL2 driver the reference uses; the real work
 was making the `ThreeBackend` shim faithful.
 
-**The reference engine is never committed to this repo.** At runtime it loads from the noisemaker
-CDN — `https://shaders.noisedeck.app/1/noisemaker-shaders-core.esm.js` (the engine bundle; exports
-`Backend`, `Pipeline`, `compileGraph`, `registerEffect`, … so `ThreeBackend` is injected into the
-reference `Pipeline`) plus `…/1/effects` (effect bundles, on demand) — the same source the
-production apps use. For offline dev/parity, `npm run sync` (with `NM_REFERENCE_ROOT`) mirrors the
-reference into the **git-ignored** `src/vendor/`. Nothing under `src/vendor/` is ever committed
-(enforced by `.gitignore`); `test/vendor-integrity.test.mjs` verifies the local mirror against a
-synced sha256 manifest and skips cleanly when the mirror is absent.
+**The reference engine is never committed to this repo** (node_modules posture). `npm run vendor`
+(`vendor/fetch.sh`) fetches the published engine from the noisemaker CDN —
+`https://shaders.noisedeck.app/1/noisemaker-shaders-core.esm.js` (the engine bundle; exports
+`Backend`, `Pipeline`, `compileGraph`, `WebGL2Backend`, … so `ThreeBackend` is injected into the
+reference `Pipeline`) plus `…/1/effects/<ns>/<effect>.js` (per-effect mini-bundles, GLSL inline) —
+into the **git-ignored** `vendor/noisemaker/`. Only the fetch script + the loaders
+(`vendor/engine.mjs` for Node behind a DOM shim, `src/engine-browser.js` for the browser) are
+committed; never the engine bytes. The version is pinned in `vendor/fetch.sh` (`VERSION=1`).
+
+Param **aliases** (alt arg names like `backgroundColor`→`bgColor`) are the one capability the
+published bundle doesn't expose (`registerParamAliases` is not an export); the adapter accepts the
+canonical names the noisedeck UI emits (the live corpus is unaffected).

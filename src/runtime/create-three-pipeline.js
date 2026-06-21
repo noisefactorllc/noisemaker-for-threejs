@@ -6,7 +6,7 @@
  * does the rest (program compilation, texture/surface allocation) via the backend
  * interface — see runtime/pipeline.js init().
  */
-import { Pipeline } from '../vendor/noisemaker/shaders/src/runtime/pipeline.js'
+import { Pipeline } from '../engine-browser.js'
 import { ThreeBackend } from '../backend/three-backend.js'
 
 export async function createThreePipeline(graph, { renderer, width = 800, height = 600, presentToScreen = true }) {

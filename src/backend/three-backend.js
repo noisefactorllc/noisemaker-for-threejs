@@ -12,7 +12,7 @@
  * 3D/cube, and external media are staged (clearly marked) for later phases.
  */
 import * as THREE from 'three'
-import { Backend } from '../vendor/noisemaker/shaders/src/runtime/backend.js'
+import { Backend } from '../engine-browser.js'
 import { formatToType, fullscreenTriangle, stripVersion, parseUniformSizes, DEFAULT_VERTEX_SHADER } from './three-resources.js'
 
 // Parity + integration require pure-linear pixels everywhere: no sRGB decode on
@@ -550,7 +550,7 @@ export class ThreeBackend extends Backend {
 
   /**
    * Read back a render-surface texture as LINEAR FLOAT, matching the golden's
-   * gl.readPixels(RGBA, FLOAT) on the o0 surface (export-golden.mjs). Returns a
+   * gl.readPixels(RGBA, FLOAT) on the o0 surface (parity/timeseries.mjs). Returns a
    * bottom-up Float32Array; the harness quantizes round(v*255) and flips to top-down,
    * identical to the golden encoder.
    */

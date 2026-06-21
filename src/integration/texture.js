@@ -8,10 +8,8 @@
  * `material.map = nmTex.texture` once and it stays valid across ping-pong frames.
  */
 import * as THREE from 'three'
-import { compileGraph } from '../vendor/noisemaker/shaders/src/runtime/compiler.js'
+import { compileGraph, loadEffectsForDsl } from '../engine-browser.js'
 import { createThreePipeline } from '../runtime/create-three-pipeline.js'
-import { extractEffectIds } from '../effects/extract-effects.js'
-import { registerEffectsBrowser } from '../effects/loader-browser.js'
 
 export class NoisemakerTexture {
   constructor(renderer, opts = {}) {
@@ -35,7 +33,7 @@ export class NoisemakerTexture {
   }
 
   async compile(dsl) {
-    await registerEffectsBrowser(extractEffectIds(dsl))
+    await loadEffectsForDsl(dsl)
     const graph = compileGraph(dsl)
     this.pipeline = await createThreePipeline(graph, {
       renderer: this.renderer,

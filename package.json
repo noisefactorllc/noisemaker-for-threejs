@@ -16,10 +16,10 @@
     "eslint": "^10.5.0"
   },
   "scripts": {
-    "sync": "node tools/sync-upstream.mjs",
+    "vendor": "bash vendor/fetch.sh",
     "test": "node --test test/*.test.mjs",
-    "lint": "eslint src/ tools/ test/",
+    "lint": "eslint src/ test/",
     "build": "node tools/build.mjs",
-    "parity": "bash parity/run.sh"
+    "parity": "bash parity/sweep-corpus.sh"
   }
 }
