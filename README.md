@@ -23,17 +23,19 @@ verification* that pass for free when the backend is faithful.
 
 ## Status
 
-Foundational architecture **proven end-to-end**: candidate output is byte-identical to the
-reference WebGL2 golden.
+Candidate output is byte-identical to the reference WebGL2 golden.
 
-- **Tier-1: 8/8 pixel-perfect** — `solid, gradient, noise, cell, shape, osc2d, blur, blendMode`
-  (single-pass, Y-orientation, compile-time defines, multi-pass, two-input).
-- **+16 more verified pixel-perfect** across synth/filter/mixer: `perlin, sine, invert, hs,
-  tint, posterize, sharpen, edge, vignette, polar, bloom, palette, dither, pixels,
-  chromaticAberration, applyMode`.
-- **24/24 verified so far at `max-abs-diff=0.000, ssim=1.00000`.**
+- **Full breadth sweep: 86 PASS / 0 FAIL / 1 SKIP** (`parity/sweep-three.sh`), every PASS at
+  `max-abs-diff=0.000, ssim=1.00000` — across synth, filter, mixer, classicNoisedeck
+  (single-pass, multi-pass, two-input, feedback, ping-pong state sims). Includes Tier-1
+  (`solid, gradient, noise, cell, shape, osc2d, blur, blendMode`) and discrete state sims
+  (`cellularAutomata` bit-exact, `feedback`).
+- **1 documented skip:** `reactionDiffusion` — a continuous Gray-Scott solver at the stability
+  limit; seed is bit-exact (verified at `speed:0`), but per-frame evolution amplifies sub-ULP
+  shader-compilation fp differences. Same skip as the same-driver Babylon port and Godot.
 
 Parity criterion (inherited from the sibling ports): `max-abs-diff ≤ 2/255` AND `SSIM ≥ 0.98`.
+Run the sweep: `bash parity/sweep-three.sh`.
 
 ### Remaining (see `docs/IMPLEMENTATION-PLAN.md`)
 - Phase 3 backend features for effects that need them: MRT, `drawMode:"points"`/billboards,
