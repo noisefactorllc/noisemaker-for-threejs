@@ -208,37 +208,145 @@ export class ThreeBackend extends Backend {
 
   endFrame() {}
 
-  executePass(pass, state) {
-    const outputKeys = Object.keys(pass.outputs || {})
-    const isMRT = pass.drawBuffers > 1 || outputKeys.length > 1
-    if (isMRT) throw new Error(`ThreeBackend: MRT not yet implemented (pass ${pass.id})`)
-    if (pass.drawMode === 'points' || pass.drawMode === 'billboards') {
-      throw new Error(`ThreeBackend: drawMode '${pass.drawMode}' not yet implemented (pass ${pass.id})`)
-    }
-
+  // Bind globals, pass uniforms (override), input textures, and blend state onto a
+  // pass's material. Shared by all draw paths (single / MRT / points).
+  bindMaterial(pass, state) {
     const prog = this.programs.get(pass.program)
     if (!prog) throw new Error(`ThreeBackend: program not found: ${pass.program} (pass ${pass.id})`)
     const material = prog.material
-
-    // Uniforms: globals first, then pass uniforms (pass overrides).
     if (state.globalUniforms) {
       for (const [k, v] of Object.entries(state.globalUniforms)) this.setUniform(material, k, v)
     }
     if (pass.uniforms) {
       for (const [k, v] of Object.entries(pass.uniforms)) this.setUniform(material, k, v)
     }
-    // Input textures.
     if (pass.inputs) {
       for (const [samplerName, texId] of Object.entries(pass.inputs)) {
         this.setUniform(material, samplerName, this.resolveInputTexture(texId, state))
       }
     }
+    // Additive blend (reference uses gl.blendFunc(ONE,ONE)) for deposit/accumulation passes.
+    if (pass.blend) {
+      material.blending = THREE.CustomBlending
+      material.blendEquation = THREE.AddEquation
+      material.blendSrc = THREE.OneFactor
+      material.blendDst = THREE.OneFactor
+      material.transparent = true
+    } else if (material.blending !== THREE.NoBlending) {
+      material.blending = THREE.NoBlending
+      material.transparent = false
+    }
+    return material
+  }
 
-    const target = this.resolveOutputTarget(pass, state)
+  executePass(pass, state) {
+    const outputKeys = Object.keys(pass.outputs || {})
+    const isMRT = pass.drawBuffers > 1 || outputKeys.length > 1
+    const material = this.bindMaterial(pass, state)
+
+    if (isMRT) return this.executeMRT(pass, state, outputKeys, material)
+    if (pass.drawMode === 'points' || pass.drawMode === 'billboards') {
+      return this.executePoints(pass, state, material)
+    }
+
     this.mesh.material = material
-    this.renderer.setRenderTarget(target)
+    this.renderer.setRenderTarget(this.resolveOutputTarget(pass, state))
     this.renderer.render(this.scene, this.camera)
     this.renderer.setRenderTarget(null)
+  }
+
+  // Resolve an output id (handling global-surface write resolution) to its texture info.
+  resolveOutputInfo(outputId, state) {
+    const globalName = this.parseGlobalName(outputId)
+    if (globalName && state.writeSurfaces && state.writeSurfaces[globalName]) {
+      outputId = state.writeSurfaces[globalName]
+    }
+    return this.textures.get(outputId)
+  }
+
+  // Cached host count:N WebGLRenderTarget (three owns its FBO + sets drawBuffers[0..N-1]).
+  getMRTHost(n, w, h) {
+    const key = `${n}_${w}_${h}`
+    let host = this._mrtHosts?.get(key)
+    if (!host) {
+      host = new THREE.WebGLRenderTarget(w, h, { count: n, depthBuffer: false, stencilBuffer: false })
+      ;(this._mrtHosts ||= new Map()).set(key, host)
+    }
+    return host
+  }
+
+  /**
+   * Mixed-format MRT: three.js WebGLRenderTarget{count:N} forces one format for all
+   * attachments, but agent state mixes formats (rgba32f xyz/vel + rgba8 rgba). So we
+   * drive a host count:N RT (for three's FBO + drawBuffers[0..N-1] + viewport), then
+   * re-attach OUR separate per-format textures to that FBO before rendering.
+   */
+  executeMRT(pass, state, outputKeys, material) {
+    const gl = this.gl
+    const outInfos = outputKeys.map((k) => this.resolveOutputInfo(pass.outputs[k], state))
+    if (outInfos.some((i) => !i)) throw new Error(`ThreeBackend MRT: missing output texture (pass ${pass.id})`)
+    const n = outInfos.length
+    const { width: w, height: h } = outInfos[0]
+    const host = this.getMRTHost(n, w, h)
+
+    this.mesh.material = material
+    this.renderer.setRenderTarget(host) // sets up FBO + drawBuffers[0..n-1] + viewport
+    const fbo = this.renderer.properties.get(host).__webglFramebuffer
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo)
+    for (let i = 0; i < n; i++) {
+      const glTex = this.renderer.properties.get(outInfos[i].texture).__webglTexture
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0 + i, gl.TEXTURE_2D, glTex, 0)
+    }
+    this.renderer.render(this.scene, this.camera) // writes to our re-attached textures
+    this.renderer.setRenderTarget(null)
+  }
+
+  // Points / billboards draw: agents scatter to an accumulation target. The VS reads
+  // agent-state textures by gl_VertexID and sets gl_Position + gl_PointSize.
+  executePoints(pass, state, material) {
+    const count = this.resolvePointCount(pass, state)
+    const verts = pass.drawMode === 'billboards' ? count * 6 : count
+    let geo = this._pointGeoCache?.get(verts)
+    if (!geo) {
+      geo = new THREE.BufferGeometry()
+      geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(verts * 3), 3))
+      geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 1e6)
+      ;(this._pointGeoCache ||= new Map()).set(verts, geo)
+    }
+    const drawObj =
+      pass.drawMode === 'billboards'
+        ? (this._billboardMesh ||= new THREE.Mesh(geo, material))
+        : (this._points ||= new THREE.Points(geo, material))
+    drawObj.geometry = geo
+    drawObj.material = material
+    drawObj.frustumCulled = false
+    const scene = (this._drawScene ||= new THREE.Scene())
+    scene.clear()
+    scene.add(drawObj)
+    this.renderer.setRenderTarget(this.resolveOutputTarget(pass, state))
+    this.renderer.render(scene, this.camera)
+    this.renderer.setRenderTarget(null)
+  }
+
+  resolvePointCount(pass, state) {
+    let count = pass.count ?? 1000
+    if (count === 'auto' || count === 'screen' || count === 'input') {
+      let refTex = null
+      if (count === 'input' && pass.inputs) {
+        const stateInputId = pass.inputs.xyzTex || pass.inputs.inputTex
+        if (stateInputId) {
+          const g = this.parseGlobalName(stateInputId)
+          refTex = g ? state.surfaces?.[g] : this.textures.get(stateInputId)
+        }
+      } else {
+        const outId = pass.outputs?.color ?? Object.values(pass.outputs || {})[0]
+        refTex = this.resolveOutputInfo(outId, state)
+      }
+      const sw = state.screenWidth || this.renderer.getContext().drawingBufferWidth
+      const sh = state.screenHeight || this.renderer.getContext().drawingBufferHeight
+      count = refTex?.width && refTex?.height ? refTex.width * refTex.height : sw * sh
+    }
+    return count | 0
   }
 
   present(textureId) {
