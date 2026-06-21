@@ -232,6 +232,14 @@ export class ThreeBackend extends Backend {
     if (globalName) {
       const scoped = this.textures.get(texId)
       if (scoped) return scoped.texture
+      // Externally-uploaded surfaces (mesh data) register under the UNSCOPED id, but the
+      // expander hands passes chain-scoped ids (e.g. global_mesh0_positions_chain_0). Strip
+      // the scope suffix to find them (mirrors the reference webgl2 mesh-input lookup).
+      const unscoped = texId.replace(/_chain_\d+$/, '')
+      if (unscoped !== texId) {
+        const u = this.textures.get(unscoped)
+        if (u) return u.texture
+      }
       const surf = state.surfaces?.[globalName]
       if (surf) return surf.texture
       return null
@@ -408,6 +416,9 @@ export class ThreeBackend extends Backend {
     if (isMRT) return this.executeMRT(pass, state, outputKeys, material)
     if (pass.drawMode === 'points' || pass.drawMode === 'billboards') {
       return this.executePoints(pass, state, material)
+    }
+    if (pass.drawMode === 'triangles') {
+      return this.executeTriangles(pass, state, material)
     }
 
     this.mesh.material = material
@@ -641,6 +652,129 @@ export class ThreeBackend extends Backend {
     tex.wrapT = THREE.ClampToEdgeWrapping
     tex.needsUpdate = true
     this.textures.set(id, { texture: tex, dataTexture: tex, width, height, format: 'rgba32f' })
+  }
+
+  // --- mesh (OBJ) upload + triangle rasterization (meshLoader / meshRender) ---
+
+  // Upload one mesh-surface texture as a raw-GL RGBA float texture (NEAREST/CLAMP), wrapped
+  // in a THREE.Texture by injecting the GL handle — mirrors the reference webgl2
+  // _uploadMeshTexture so the VS's texelFetch sampling is byte-identical.
+  _uploadMeshTexture(texId, data, width, height, internalFormat, formatName) {
+    const gl = this.gl
+    let info = this.textures.get(texId)
+    if (!info?.externalGL || info.width !== width || info.height !== height) {
+      if (info?.externalGL) gl.deleteTexture(info.externalGL)
+      const handle = gl.createTexture()
+      const tex = new THREE.Texture()
+      const props = this.renderer.properties.get(tex)
+      props.__webglTexture = handle
+      props.__webglInit = true
+      info = { texture: tex, external: true, externalGL: handle, width, height, format: formatName }
+      this.textures.set(texId, info)
+    }
+    gl.bindTexture(gl.TEXTURE_2D, info.externalGL)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+    gl.texImage2D(gl.TEXTURE_2D, 0, internalFormat, width, height, 0, gl.RGBA, gl.FLOAT, data)
+    gl.bindTexture(gl.TEXTURE_2D, null)
+    this.renderer.resetState()
+    const props = this.renderer.properties.get(info.texture)
+    props.__webglTexture = info.externalGL
+    props.__webglInit = true
+  }
+
+  // Populate global_<meshId>_{positions,normals,uvs} from parsed OBJ data (positions/normals
+  // RGBA32F, uvs RGBA16F) — mirrors the reference webgl2 uploadMeshData.
+  uploadMeshData(meshId, positionData, normalData, uvData, width, height, vertexCount) {
+    const gl = this.gl
+    this._uploadMeshTexture(`global_${meshId}_positions`, positionData, width, height, gl.RGBA32F, 'rgba32f')
+    this._uploadMeshTexture(`global_${meshId}_normals`, normalData, width, height, gl.RGBA32F, 'rgba32f')
+    this._uploadMeshTexture(`global_${meshId}_uvs`, uvData, width, height, gl.RGBA16F, 'rgba16f')
+    return { success: true, vertexCount }
+  }
+
+  // Look up a (possibly chain-scoped / externally-uploaded) texture's info for sizing.
+  resolveMeshTexInfo(texId, state) {
+    let info = this.textures.get(texId)
+    if (info) return info
+    const unscoped = texId.replace(/_chain_\d+$/, '')
+    if (unscoped !== texId && (info = this.textures.get(unscoped))) return info
+    const g = this.parseGlobalName(texId)
+    if (g && state.surfaces?.[g]) return state.surfaces[g]
+    return null
+  }
+
+  // Triangle count = mesh position texture w*h (reference: meshPositions || inputTex).
+  resolveTriangleCount(pass, state) {
+    const id = pass.inputs?.meshPositions || pass.inputs?.inputTex
+    const tex = id ? this.resolveMeshTexInfo(id, state) : null
+    if (tex?.width && tex?.height) return (tex.width * tex.height) | 0
+    return (Number(pass.count) | 0) || 0
+  }
+
+  // Attach a cached DEPTH_COMPONENT24 renderbuffer to three's FBO for `rt` (three RTs are
+  // created depthBuffer:false). Mirrors the reference webgl2 ensureDepthBuffer.
+  ensureMeshDepth(rt) {
+    const gl = this.gl
+    const fbo = this.renderer.properties.get(rt).__webglFramebuffer
+    let rec = this._meshDepth?.get(fbo)
+    if (!rec) {
+      rec = { buffer: gl.createRenderbuffer(), width: 0, height: 0 }
+      ;(this._meshDepth ||= new Map()).set(fbo, rec)
+    }
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo)
+    if (rec.width !== rt.width || rec.height !== rt.height) {
+      gl.bindRenderbuffer(gl.RENDERBUFFER, rec.buffer)
+      gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT24, rt.width, rt.height)
+      gl.bindRenderbuffer(gl.RENDERBUFFER, null)
+      rec.width = rt.width
+      rec.height = rt.height
+    }
+    gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, rec.buffer)
+    return fbo
+  }
+
+  // meshRender 'render' pass: rasterize triangles whose vertices the VS (render.vert) fetches
+  // from the mesh textures by gl_VertexID. 3D state mirrors the reference webgl2 triangles
+  // path — depth test LESS, back-face cull (CCW front), depth cleared per pass; color was
+  // already written by the preceding 'clear' pass (so we clear depth only).
+  executeTriangles(pass, state, material) {
+    const gl = this.gl
+    const count = this.resolveTriangleCount(pass, state)
+    if (!count) return
+    const target = this.resolveOutputTarget(pass, state)
+    let geo = this._triGeoCache?.get(count)
+    if (!geo) {
+      geo = new THREE.BufferGeometry()
+      geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(count * 3), 3))
+      geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 1e6)
+      ;(this._triGeoCache ||= new Map()).set(count, geo)
+    }
+    material.depthTest = true
+    material.depthWrite = true
+    material.depthFunc = THREE.LessDepth // gl.LESS
+    material.side = THREE.FrontSide // cull BACK (three frontFace is CCW)
+    const mesh = (this._triMesh ||= new THREE.Mesh(geo, material))
+    mesh.geometry = geo
+    mesh.material = material
+    mesh.frustumCulled = false
+    const scene = (this._triScene ||= new THREE.Scene())
+    scene.clear()
+    scene.add(mesh)
+    this.renderer.setRenderTarget(target)
+    if (target) this.ensureMeshDepth(target)
+    gl.depthMask(true)
+    gl.clear(gl.DEPTH_BUFFER_BIT)
+    this.renderer.render(scene, this.camera)
+    if (target) {
+      const fbo = this.renderer.properties.get(target).__webglFramebuffer
+      gl.bindFramebuffer(gl.FRAMEBUFFER, fbo)
+      gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, null)
+    }
+    this.renderer.setRenderTarget(null)
+    this.renderer.resetState()
   }
 
   destroy() {

@@ -1,0 +1,4 @@
+{
+  "_comment": "Deterministic cube OBJ for meshLoader/meshRender parity (no live OBJ-URL fetch). Parsed by the reference obj-parser, packed + uploaded to mesh0 surfaces identically on both backends by parity/page-timeseries.html applyInject().",
+  "mesh": { "shape": "cube" }
+}

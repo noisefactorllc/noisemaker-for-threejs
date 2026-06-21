@@ -81,11 +81,15 @@ async function runMode(browser, port, mode) {
   await page.goto(`http://127.0.0.1:${port}/parity/page-timeseries.html`)
   await page.waitForFunction(() => window.__nm_ts_ready === true, { timeout: 30000 })
   const res = await page.evaluate(
-    async (a) => { try { return await window.__nm_timeseries(a) } catch (e) { return { error: e?.message, stack: e?.stack } } },
+    async (a) => { try { return await window.__nm_timeseries(a) } catch (e) { return { error: (e && e.message) || JSON.stringify(e) || String(e), stack: e && e.stack } } },
     { dsl, mode, size, frames, captureEvery: capture, loopFrames, inject }
   )
   await page.close()
-  if (res?.error) { process.stderr.write(`[${mode}] ERROR: ${res.error}\n${res.stack||''}\n${msgs.slice(-5).join('\n')}\n`); throw new Error(res.error) }
+  if (res?.error || !Array.isArray(res)) {
+    const why = res?.error || `${mode}: no captures returned`
+    process.stderr.write(`[${mode}] ERROR: ${why}\n${res?.stack || ''}\n${msgs.slice(-8).join('\n')}\n`)
+    throw new Error(why)
+  }
   return res
 }
 

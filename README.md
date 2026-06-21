@@ -63,14 +63,18 @@ shader path the same way the rest of the catalog is validated.
   (`uniform float audioWaveform[128]` via `setAudioState`). `max-abs-diff=0.000`.
 - **`media`** (video/image): byte-identical with an injected 1024² canvas bound to the external
   `imageTex` (`updateTextureFromSource`). `max-abs-diff=0.000`.
-- **`meshLoader`/`meshRender`** (OBJ): in progress — needs the `triangles` draw path + mesh-surface
-  upload in `ThreeBackend`.
+- **`meshLoader`/`meshRender`** (OBJ): byte-identical with an injected cube OBJ — `uploadMeshData`
+  (mesh-surface textures) + a `triangles` draw path (depth test + back-face cull; the VS fetches
+  vertices from the mesh textures by `gl_VertexID`). `max-abs-diff=0.000`.
+
+**All 182/182 funcs are byte-identical** — the whole catalog, with the 5 external-input effects fed
+deterministic synthetic inputs.
 
 The external-input *binding/upload* infrastructure exists (`setExternalTexture`,
 `updateTextureFromSource`, `uploadDataTexture`, pipeline `setAudioState`) — only the live
 data acquisition is out of scope.
 
-### Done since first cut — **180/182 funcs bit-exact**
+### Done since first cut — **182/182 funcs bit-exact**
 - **Full 3D namespace** (`max-abs-diff=0.000`): `synth3d` (×7), `filter3d` (×2), and the
   3D renderers `render3d`/`renderLit3d`/`renderCubemap3d`/`renderCubemapSurface`. Volumes are
   2D-flattened atlases raymarched in-shader (no `createTexture3D`/GL-cubemaps needed); cubemap

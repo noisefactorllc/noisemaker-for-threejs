@@ -16,8 +16,35 @@
       import { createThreePipeline } from '/src/runtime/create-three-pipeline.js'
       import { extractEffectIds } from '/src/effects/extract-effects.js'
       import { registerEffectsBrowser } from '/src/effects/loader-browser.js'
+      import { parseOBJ } from '/src/vendor/noisemaker/shaders/src/runtime/obj-parser.js'
 
       THREE.ColorManagement.enabled = false
+
+      // Deterministic OBJ meshes for mesh-effect parity (no live OBJ-URL fetch). CCW-outward unit cube.
+      const MESH_OBJS = {
+        cube: `
+v -0.5 -0.5 0.5
+v 0.5 -0.5 0.5
+v 0.5 0.5 0.5
+v -0.5 0.5 0.5
+v -0.5 -0.5 -0.5
+v 0.5 -0.5 -0.5
+v 0.5 0.5 -0.5
+v -0.5 0.5 -0.5
+f 1 2 3
+f 1 3 4
+f 2 6 7
+f 2 7 3
+f 6 5 8
+f 6 8 7
+f 5 1 4
+f 5 4 8
+f 4 3 7
+f 4 7 8
+f 5 6 2
+f 5 2 1
+`,
+      }
 
       // Read a reference (vendored WebGL2 backend) render surface as linear float,
       // matching export-golden.mjs (FBO on the surface texture, RGBA/FLOAT).
@@ -77,6 +104,25 @@
             for (const v of Object.values(pass.inputs || {}))
               if (typeof v === 'string' && /_step_\d+$/.test(v)) ids.add(v)
           for (const id of ids) pipeline.backend.updateTextureFromSource(id, cv, { flipY: true })
+        }
+        if (inject.mesh) {
+          // Parse a deterministic OBJ (reference obj-parser), pack vertices into a square
+          // RGBA texture grid (xyz+valid / normal / uv), upload to mesh0 surfaces on BOTH
+          // backends. Identical bytes -> identical raster. count drawn = w*h (padding verts
+          // are zero -> degenerate, no fragments).
+          const { positions, normals, uvs, vertexCount } = parseOBJ(MESH_OBJS[inject.mesh.shape || 'cube'])
+          const w = Math.max(1, Math.ceil(Math.sqrt(vertexCount)))
+          const h = Math.max(1, Math.ceil(vertexCount / w))
+          const N = w * h
+          const pos = new Float32Array(N * 4)
+          const nrm = new Float32Array(N * 4)
+          const uv = new Float32Array(N * 4)
+          for (let i = 0; i < vertexCount; i++) {
+            pos[i * 4] = positions[i * 3]; pos[i * 4 + 1] = positions[i * 3 + 1]; pos[i * 4 + 2] = positions[i * 3 + 2]; pos[i * 4 + 3] = 1
+            nrm[i * 4] = normals[i * 3]; nrm[i * 4 + 1] = normals[i * 3 + 1]; nrm[i * 4 + 2] = normals[i * 3 + 2]
+            uv[i * 4] = uvs[i * 2] || 0; uv[i * 4 + 1] = uvs[i * 2 + 1] || 0
+          }
+          pipeline.backend.uploadMeshData('mesh0', pos, nrm, uv, w, h, vertexCount)
         }
       }
 
