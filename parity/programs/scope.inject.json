@@ -1,0 +1,4 @@
+{
+  "_comment": "Deterministic audio waveform for scope parity (no live mic feed). Applied identically to golden + candidate by parity/page-timeseries.html applyInject().",
+  "audio": { "cycles": 3 }
+}

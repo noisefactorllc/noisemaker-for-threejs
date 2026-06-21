@@ -33,6 +33,15 @@ const pyIdx = argv.indexOf('--py')
 const PY = pyIdx >= 0 ? argv[pyIdx + 1] : join(repoRoot, 'parity', '.venv', 'bin', 'python')
 const name = basename(dslPath).replace(/\.dsl$/, '')
 const dsl = readFileSync(dslPath, 'utf8')
+
+// Optional DETERMINISTIC external-input spec for long-tail effects (scope/spectrum/
+// media/mesh). Either `--inject <file.json>` or an auto-detected `<name>.inject.json`
+// sidecar next to the .dsl. Applied identically to golden + candidate (see page harness).
+const injectIdx = argv.indexOf('--inject')
+const injectSidecar = dslPath.replace(/\.dsl$/, '.inject.json')
+let inject = null
+if (injectIdx >= 0) inject = JSON.parse(readFileSync(argv[injectIdx + 1], 'utf8'))
+else if (existsSync(injectSidecar)) inject = JSON.parse(readFileSync(injectSidecar, 'utf8'))
 const outDir = join(repoRoot, 'parity', 'out', `ts_${name}`)
 mkdirSync(outDir, { recursive: true })
 
@@ -73,7 +82,7 @@ async function runMode(browser, port, mode) {
   await page.waitForFunction(() => window.__nm_ts_ready === true, { timeout: 30000 })
   const res = await page.evaluate(
     async (a) => { try { return await window.__nm_timeseries(a) } catch (e) { return { error: e?.message, stack: e?.stack } } },
-    { dsl, mode, size, frames, captureEvery: capture, loopFrames }
+    { dsl, mode, size, frames, captureEvery: capture, loopFrames, inject }
   )
   await page.close()
   if (res?.error) { process.stderr.write(`[${mode}] ERROR: ${res.error}\n${res.stack||''}\n${msgs.slice(-5).join('\n')}\n`); throw new Error(res.error) }

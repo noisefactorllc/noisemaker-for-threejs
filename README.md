@@ -54,17 +54,23 @@ Metal-vs-Vulkan ports skip — on our shared ANGLE/Metal driver it matches exact
 
 Parity criterion: `max-abs-diff ≤ 2/255` AND `SSIM ≥ 0.98` (all PASSes hit 0.000).
 
-### Genuinely not yet covered — 5 of 182 funcs (see `docs/IMPLEMENTATION-PLAN.md`)
-Only effects that need a **live external-input feed**:
-- **Audio-driven** (`scope`, `spectrum`): need an audio waveform/FFT.
-- **`media`** decode (video/image) and **mesh** (`meshLoader`/`meshRender`, OBJ via
-  `canvas.loadOBJFromURL`): need decoded external assets.
+### External-input effects — parity via DETERMINISTIC injected inputs
+A live feed (mic, camera, OBJ URL) is nondeterministic, so these are parity-tested by injecting a
+fixed synthetic input identically into golden + candidate (`parity/page-timeseries.html`
+`applyInject()`, driven by a `<name>.inject.json` sidecar). This exercises the real binding/upload +
+shader path the same way the rest of the catalog is validated.
+- **`scope`, `spectrum`** (audio): byte-identical with an injected 128-sample waveform/spectrum
+  (`uniform float audioWaveform[128]` via `setAudioState`). `max-abs-diff=0.000`.
+- **`media`** (video/image): byte-identical with an injected 1024² canvas bound to the external
+  `imageTex` (`updateTextureFromSource`). `max-abs-diff=0.000`.
+- **`meshLoader`/`meshRender`** (OBJ): in progress — needs the `triangles` draw path + mesh-surface
+  upload in `ThreeBackend`.
 
 The external-input *binding/upload* infrastructure exists (`setExternalTexture`,
 `updateTextureFromSource`, `uploadDataTexture`, pipeline `setAudioState`) — only the live
 data acquisition is out of scope.
 
-### Done since first cut — **177/182 funcs bit-exact**
+### Done since first cut — **180/182 funcs bit-exact**
 - **Full 3D namespace** (`max-abs-diff=0.000`): `synth3d` (×7), `filter3d` (×2), and the
   3D renderers `render3d`/`renderLit3d`/`renderCubemap3d`/`renderCubemapSurface`. Volumes are
   2D-flattened atlases raymarched in-shader (no `createTexture3D`/GL-cubemaps needed); cubemap

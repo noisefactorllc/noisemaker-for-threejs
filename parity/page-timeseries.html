@@ -37,7 +37,50 @@
         return buf
       }
 
-      window.__nm_timeseries = async ({ dsl, mode, size, frames, captureEvery, loopFrames }) => {
+      // Apply a DETERMINISTIC external input to the pipeline, identically for golden
+      // (vendored WebGL2) and candidate (ThreeBackend), so the long-tail external-input
+      // effects (scope/spectrum/media/mesh) can be parity-tested without a live —
+      // therefore nondeterministic — feed. The spec is plain data so both modes build
+      // byte-identical inputs.
+      async function applyInject(pipeline, inject, size) {
+        if (inject.audio) {
+          const N = 128
+          const waveform = new Float32Array(N)
+          const spectrum = new Float32Array(N)
+          const cycles = inject.audio.cycles ?? 3
+          const bands = inject.audio.bands ?? 6
+          for (let i = 0; i < N; i++) {
+            const x = i / N
+            waveform[i] = 0.5 + 0.45 * Math.sin(x * Math.PI * 2 * cycles)
+            spectrum[i] = Math.max(0, 1 - x) * (0.5 + 0.5 * Math.cos(x * Math.PI * 2 * bands))
+          }
+          pipeline.setAudioState({ waveform, spectrum, low: 0, mid: 0, high: 0, vol: 0, fft: new Float32Array(16) })
+        }
+        if (inject.image) {
+          // Deterministic, opaque, full-frame pattern (gradients + geometric shapes only —
+          // no text, to avoid any font nondeterminism). Both modes run in the same Chromium,
+          // so the Canvas2D bytes are identical. media's imageSize default (1024) samples the
+          // centered region, so a 1024² source fills the frame.
+          const S = inject.image.size ?? 1024
+          const cv = document.createElement('canvas')
+          cv.width = cv.height = S
+          const x = cv.getContext('2d')
+          const grad = x.createLinearGradient(0, 0, S, S)
+          grad.addColorStop(0, '#102038'); grad.addColorStop(1, '#e08040')
+          x.fillStyle = grad; x.fillRect(0, 0, S, S)
+          x.fillStyle = '#ff3050'; x.fillRect(S * 0.12, S * 0.12, S * 0.34, S * 0.34)
+          x.fillStyle = '#30c0ff'; x.beginPath(); x.arc(S * 0.68, S * 0.4, S * 0.18, 0, Math.PI * 2); x.fill()
+          x.fillStyle = '#ffe020'; x.fillRect(S * 0.28, S * 0.62, S * 0.5, S * 0.16)
+          x.fillStyle = '#20ff80'; x.beginPath(); x.moveTo(S * 0.2, S * 0.9); x.lineTo(S * 0.5, S * 0.55); x.lineTo(S * 0.8, S * 0.9); x.closePath(); x.fill()
+          const ids = new Set()
+          for (const pass of pipeline.graph?.passes || [])
+            for (const v of Object.values(pass.inputs || {}))
+              if (typeof v === 'string' && /_step_\d+$/.test(v)) ids.add(v)
+          for (const id of ids) pipeline.backend.updateTextureFromSource(id, cv, { flipY: true })
+        }
+      }
+
+      window.__nm_timeseries = async ({ dsl, mode, size, frames, captureEvery, loopFrames, inject }) => {
         const canvas = document.getElementById('c')
         canvas.width = size
         canvas.height = size
@@ -57,6 +100,8 @@
           pipeline = await createPipeline(graph, { canvas, width: size, height: size, preferWebGPU: false })
           readback = () => readGolden(pipeline, size)
         }
+
+        if (inject) await applyInject(pipeline, inject, size)
 
         const captures = []
         for (let i = 0; i < frames; i++) {

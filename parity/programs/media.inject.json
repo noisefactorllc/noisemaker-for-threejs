@@ -1,0 +1,4 @@
+{
+  "_comment": "Deterministic 1024x1024 image (gradients + shapes, no fonts) for media parity (no live video/camera feed). Drawn identically in both modes by parity/page-timeseries.html applyInject(), bound to media's external imageTex_step_N. media's default imageSize=1024 samples the centered region.",
+  "image": { "size": 1024 }
+}

@@ -1,0 +1,4 @@
+{
+  "_comment": "Deterministic audio spectrum for spectrum parity (no live mic feed). Applied identically to golden + candidate by parity/page-timeseries.html applyInject().",
+  "audio": { "bands": 6 }
+}
