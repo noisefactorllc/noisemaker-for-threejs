@@ -1,0 +1,6 @@
+node_modules/
+dist/
+parity/out/
+parity/.venv/
+*.log
+.DS_Store
