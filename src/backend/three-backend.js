@@ -171,9 +171,9 @@ export class ThreeBackend extends Backend {
   destroyTexture(id) {
     const info = this.textures.get(id)
     if (info?.target) info.target.dispose()
-    // Dispose a wrapper WE created for an HTML source; never the caller's bound GPU
-    // texture (external, no sourceTexture) — that belongs to the EffectComposer/scene.
-    if (info?.sourceTexture) info.sourceTexture.dispose()
+    // Free a raw GL handle WE created for an HTML/canvas source (updateTextureFromSource);
+    // never the caller's bound GPU texture (setExternalTexture) — that's owned elsewhere.
+    if (info?.externalGL) this.gl.deleteTexture(info.externalGL)
     this.textures.delete(id)
   }
 
@@ -582,26 +582,44 @@ export class ThreeBackend extends Backend {
     })
   }
 
-  // Wrap an HTML video/image/canvas/ImageBitmap as a sampleable input (media effects,
-  // NoisemakerPass non-RT sources). Matches the reference backend contract; returns dims.
+  // Upload an HTML video/image/canvas/ImageBitmap as a sampleable input (Canvas2D
+  // overlays like fibers/scratches/strayHair, media effects, NoisemakerPass non-RT
+  // sources). We do the raw-GL upload OURSELVES — byte-identical to the reference
+  // webgl2 backend (LINEAR/CLAMP, UNPACK_FLIP_Y, and crucially the DEFAULT
+  // UNPACK_COLORSPACE_CONVERSION = BROWSER_DEFAULT) — instead of letting three upload
+  // it, because three forces UNPACK_COLORSPACE_CONVERSION = NONE for NoColorSpace
+  // textures, which shifts canvas pixels and breaks parity on the overlay effects. The
+  // raw handle is injected into a THREE.Texture (version 0 ⇒ three never re-uploads,
+  // just binds our handle).
   updateTextureFromSource(id, source, opts = {}) {
-    const info = this.textures.get(id)
-    if (info?.sourceTexture && info.sourceEl === source) {
-      info.sourceTexture.needsUpdate = true // same element, new frame
-      return { width: info.width, height: info.height }
-    }
-    if (info?.sourceTexture) info.sourceTexture.dispose()
-    const tex = new THREE.Texture(source)
-    tex.colorSpace = THREE.NoColorSpace
-    tex.magFilter = THREE.LinearFilter
-    tex.minFilter = THREE.LinearFilter
-    tex.wrapS = THREE.ClampToEdgeWrapping
-    tex.wrapT = THREE.ClampToEdgeWrapping
-    tex.flipY = opts.flipY !== false
-    tex.needsUpdate = true
+    const gl = this.gl
+    const flipY = opts.flipY !== false
     const width = source.videoWidth || source.naturalWidth || source.width || 1
     const height = source.videoHeight || source.naturalHeight || source.height || 1
-    this.textures.set(id, { texture: tex, external: true, sourceTexture: tex, sourceEl: source, width, height })
+    let info = this.textures.get(id)
+    if (!info?.externalGL || info.width !== width || info.height !== height) {
+      if (info?.externalGL) gl.deleteTexture(info.externalGL)
+      const handle = gl.createTexture()
+      const tex = new THREE.Texture() // version stays 0 → three binds our handle, never uploads
+      const props = this.renderer.properties.get(tex)
+      props.__webglTexture = handle
+      props.__webglInit = true
+      info = { texture: tex, external: true, externalGL: handle, width, height }
+      this.textures.set(id, info)
+    }
+    gl.bindTexture(gl.TEXTURE_2D, info.externalGL)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, flipY)
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source)
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false)
+    gl.bindTexture(gl.TEXTURE_2D, null)
+    this.renderer.resetState() // re-sync three's texture-unit cache after our raw binds
+    const props = this.renderer.properties.get(info.texture)
+    props.__webglTexture = info.externalGL
+    props.__webglInit = true
     return { width, height }
   }
 
