@@ -27,20 +27,25 @@
 // Writes  <outDir>/<programName>.golden.png  and  <outDir>/<programName>.graph.json
 //
 // Prereqs: Node, Playwright + a system Chrome (the harness launches chromium),
-// and the reference repo present as the sibling tree (../../shaders, ../../demo).
-// See parity/README.md.
+// and the EXTERNAL reference repo (its shaders/ + demo/), located via
+// NM_REFERENCE_ROOT. See parity/README.md.
 
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { dirname, resolve, basename, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-// Reference (golden) engine lives in the sibling `noisemaker` repo. Override
-// with NM_REFERENCE_ROOT if it's elsewhere. (This repo was split out of
-// noisemaker/noisemaker-hlsl/, where the default was just `../..`.)
+// The reference (golden) engine lives in an EXTERNAL repo that a clone of THIS
+// repo will not have. Provide its path via NM_REFERENCE_ROOT. (Maintainer-only
+// golden renderer; not on the npm test / build / library path.)
 const REFERENCE_ROOT = process.env.NM_REFERENCE_ROOT
   ? resolve(process.env.NM_REFERENCE_ROOT)
-  : resolve(__dirname, '..', '..', 'noisemaker')
+  : (() => {
+      process.stderr.write(
+        '[parity] ERROR: set NM_REFERENCE_ROOT to the external reference repo path (golden rendering needs it).\n'
+      )
+      process.exit(2)
+    })()
 
 const HARNESS = join(REFERENCE_ROOT, 'vendor', 'shade-mcp', 'harness', 'index.js')
 const EXPORT_GRAPH = join(__dirname, '..', 'tools', 'export-graph.mjs')

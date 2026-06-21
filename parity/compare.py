@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
-"""Compare two PNGs for the noisemaker-hlsl parity harness.
+"""Compare two PNGs for the noisemaker-three parity harness.
 
-Loads a GOLDEN reference PNG (from parity/export-and-render.mjs) and a CANDIDATE
-PNG (from the Unity NMParityRunner), computes max-abs-diff and a simple global
-SSIM, and fails if either exceeds a per-program tolerance. Mirrors the style and
-tolerance conventions of ../../scripts/image_regression.py (argparse CLI, numpy,
-PIL, max-abs-diff gate) and emits a small JSON report.
+Loads a GOLDEN reference PNG (from parity/export-golden.mjs) and a CANDIDATE PNG
+(from parity/render-candidate.mjs), computes max-abs-diff and a simple global
+SSIM, and fails if either exceeds a per-program tolerance (argparse CLI, numpy,
+PIL, max-abs-diff gate), and emits a small JSON report.
 
 Both PNGs are expected to be the SAME size and the SAME orientation (top-down)
 and SAME encoding (linear 8-bit, NOT sRGB) — the renderers are responsible for

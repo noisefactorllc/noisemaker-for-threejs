@@ -1,12 +1,10 @@
 # noisemaker-three
 
-The [noisemaker](../noisemaker) shader-effect platform for **three.js**.
+The noisemaker shader-effect platform for **three.js**.
 
-Unlike the sibling ports ([godot](../noisemaker-godot), [TouchDesigner](../noisemaker-td),
-[Unity/HLSL](../noisemaker-hlsl)) — which each cross a language boundary and therefore
-re-implement the executor and re-port every shader — three.js **is JavaScript**, the same
-language as the reference. So noisemaker-three takes a fundamentally smaller, higher-fidelity
-approach:
+Because three.js **is JavaScript** — the same language as the reference platform — noisemaker-three
+takes a fundamentally smaller, higher-fidelity approach than a port that must cross a language
+boundary (and therefore re-implement the executor and re-port every shader):
 
 - **The entire DSL compiler is reused verbatim** (`lang/` lexer→parser→validator +
   `runtime/` expander/resources/compiler), vendored byte-for-byte and never hand-edited.
@@ -126,9 +124,11 @@ nmTex.update((performance.now() / 6000) % 1)
 
 ```bash
 npm install            # installs three (pinned) + dev tooling
-npm run sync           # vendor the reference core + effects (byte-identical, provenance-tracked)
-npm test               # capability gate, vendor integrity, compiler-in-repo, resources
-bash parity/run.sh noise   # render reference golden + three.js candidate, compare pixels
+npm test               # capability gate, vendor integrity (vs committed manifest), compiler-in-repo, resources
+
+# Maintainer-only — these need an EXTERNAL reference checkout (NOT required to build or use this repo):
+npm run sync -- --ref /path/to/noisemaker     # re-vendor; or: NM_REFERENCE_ROOT=/path/to/noisemaker npm run sync
+NM_REFERENCE_ROOT=/path/to/noisemaker bash parity/run.sh noise   # golden + candidate, compare pixels
 ```
 
 `parity/compare.py` needs numpy + Pillow (self-contained venv):
@@ -156,6 +156,13 @@ reference/                      engine-agnostic specs (shared with sibling ports
 
 ## Provenance / status
 
-Local, greenfield, self-contained. Not published; do not push without explicit instruction.
-Vendored core is pinned to a reference commit (`src/vendor/UPSTREAM.json`) and enforced
-byte-identical by `test/vendor-integrity.test.mjs`.
+Greenfield and **fully self-contained**: this repo has no dependency on any sibling checkout — it
+builds, tests, and runs entirely from its own vendored copy of the reference under
+`src/vendor/noisemaker/`. The vendored core is pinned to a reference commit
+(`src/vendor/UPSTREAM.json`) and enforced byte-identical by `test/vendor-integrity.test.mjs`, which
+verifies every vendored file against a committed sha256 manifest (`src/vendor/vendor-manifest.json`)
+— so the integrity check needs no reference checkout and passes on any clone.
+
+Re-vendoring (`npm run sync`) and golden rendering (`parity/export-golden.mjs`) are the only
+operations that touch the external reference, and it is supplied explicitly via `NM_REFERENCE_ROOT`
+(or `--ref`) — never assumed to sit at a fixed relative path.

@@ -8,13 +8,10 @@
 
 ## 1. Context & Motivation
 
-`noisemaker` (sibling dir `../noisemaker`) is a browser-based procedural-shader platform: a
-live-coding **DSL** compiles to a render graph that runs on **WebGL2 (GLSL)** and **WebGPU (WGSL)**
-backends. Three ports already exist:
-
-- `../noisemaker-godot` — Godot 4.7 / GDScript / RenderingDevice (74/74 parity, most complete)
-- `../noisemaker-td` — TouchDesigner / GLSL (71/71 single-pass parity)
-- `../noisemaker-hlsl` — Unity / HLSL (179/180)
+`noisemaker` is a browser-based procedural-shader platform (an EXTERNAL reference repo, located at
+build time via `NM_REFERENCE_ROOT` — never a fixed relative path): a live-coding **DSL** compiles to
+a render graph that runs on **WebGL2 (GLSL)** and **WebGPU (WGSL)** backends. Ports to other engines
+already exist.
 
 This spec defines **`noisemaker-three`**: a port targeting **three.js**.
 
@@ -166,10 +163,11 @@ These are the known three.js footguns; each is a parity-gate checkpoint.
 
 ## 5. Reuse Mechanism (vendoring)
 
-Like each sibling "ships its own reference copy," noisemaker-three vendors the reference modules so it
-is self-contained and publishable. **`tools/sync-upstream.mjs`**:
+noisemaker-three vendors the reference modules so it is self-contained and publishable (no sibling
+checkout required to build, test, or use it). **`tools/sync-upstream.mjs`** (run by a maintainer with
+the external reference located via `--ref`/`NM_REFERENCE_ROOT`):
 
-1. Copies the pure modules from `../noisemaker/shaders/src/` into `src/vendor/noisemaker-core/`:
+1. Copies the pure modules from `$NM_REFERENCE_ROOT/shaders/src/` into `src/vendor/noisemaker-core/`:
    `lang/**`, `runtime/{compiler,expander,resources,pipeline,registry,effect,backend,tags,
    palette-expansion,effect-validator,external-input,obj-parser,default-shaders}.js`, `palettes.js`.
    **Excludes** `runtime/backends/**` and `renderer/canvas.js` (we supply our own).
@@ -310,6 +308,5 @@ DSL is free (reused), so there is **no "Phase 6 live compiler"** — it works fr
 
 ## 12. Provenance / housekeeping
 
-- Local, greenfield, self-contained `../noisemaker-three`. Git initialized.
-- **Do not push** without explicit instruction; **no Claude attribution** on commits (per standing
-  user preferences). Awaiting review before any push, as with the sibling ports.
+- Greenfield, self-contained `noisemaker-three` (no dependency on any sibling checkout). Git initialized.
+- **No Claude attribution** on commits (per standing user preferences).

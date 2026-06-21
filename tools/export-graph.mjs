@@ -16,25 +16,26 @@
 //   node export-graph.mjs "<dsl>"            # prints JSON to stdout
 //
 // Env:
-//   NM_REFERENCE_ROOT   override the reference repo root (default: ../.. of this file)
+//   NM_REFERENCE_ROOT   path to the external reference repo (REQUIRED)
 //
-// Requires the sibling reference engine at <root>/shaders/src/index.js. No build
-// step — the reference is plain ESM. See tools/package.json.
+// Requires the external reference engine at $NM_REFERENCE_ROOT/shaders/src/index.js.
+// No build step — the reference is plain ESM. See tools/package.json.
 
 import { readFileSync, writeFileSync, readdirSync, statSync } from 'node:fs'
-import { join, dirname, resolve, basename } from 'node:path'
-import { fileURLToPath, pathToFileURL } from 'node:url'
+import { join, resolve, basename } from 'node:path'
+import { pathToFileURL } from 'node:url'
 
-const __dirname = dirname(fileURLToPath(import.meta.url))
-
-// Reference engine lives in the sibling `noisemaker` repo (this repo was split
-// out of noisemaker/noisemaker-hlsl/). Override with NM_REFERENCE_ROOT.
-const REFERENCE_ROOT = process.env.NM_REFERENCE_ROOT
-  ? resolve(process.env.NM_REFERENCE_ROOT)
-  : resolve(__dirname, '..', '..', 'noisemaker')
-
-const SRC_INDEX = join(REFERENCE_ROOT, 'shaders', 'src', 'index.js')
-const EFFECTS_DIR = join(REFERENCE_ROOT, 'shaders', 'effects')
+// The reference engine lives in an EXTERNAL repo that a clone of THIS repo will
+// not have. Provide its path via NM_REFERENCE_ROOT. (Maintainer-only golden tool;
+// not on the npm test / build / library path.)
+function referenceRoot () {
+  const root = process.env.NM_REFERENCE_ROOT
+  if (!root) {
+    process.stderr.write('[export-graph] ERROR: set NM_REFERENCE_ROOT to the external reference repo path.\n')
+    process.exit(2)
+  }
+  return resolve(root)
+}
 
 // ---------------------------------------------------------------------------
 // Reference engine bootstrap.
@@ -46,6 +47,9 @@ const EFFECTS_DIR = join(REFERENCE_ROOT, 'shaders', 'effects')
 // (See shaders/tests/test_canvas_apply_step_params.js loadEffect helper.)
 // ---------------------------------------------------------------------------
 async function bootstrapReference () {
+  const REFERENCE_ROOT = referenceRoot()
+  const SRC_INDEX = join(REFERENCE_ROOT, 'shaders', 'src', 'index.js')
+  const EFFECTS_DIR = join(REFERENCE_ROOT, 'shaders', 'effects')
   const mod = await import(pathToFileURL(SRC_INDEX).href)
   const {
     compileGraph, registerEffect, registerOp, registerStarterOps,

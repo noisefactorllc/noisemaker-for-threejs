@@ -4,7 +4,7 @@
 
 **Goal:** Port the noisemaker shader platform to three.js by reusing the reference JS compiler + pipeline verbatim and implementing a single `ThreeBackend`, plus a three.js integration surface.
 
-**Architecture:** The reference (`../noisemaker`) is pure-JS ESM: a backend-agnostic compiler (`lang/` + `runtime/{compiler,expander,resources}`) emits a RenderGraph that a reused `runtime/pipeline.js` executes against an abstract `Backend`. Because three.js is also JS, we **vendor the reference `shaders/src` tree byte-for-byte** and implement one `ThreeBackend extends Backend` on three.js primitives. All 182 effects and the full live DSL come for free; parity verification is the work.
+**Architecture:** The reference (an EXTERNAL repo, located at build time via `NM_REFERENCE_ROOT` — never a fixed relative path) is pure-JS ESM: a backend-agnostic compiler (`lang/` + `runtime/{compiler,expander,resources}`) emits a RenderGraph that a reused `runtime/pipeline.js` executes against an abstract `Backend`. Because three.js is also JS, we **vendor the reference `shaders/src` tree byte-for-byte** and implement one `ThreeBackend extends Backend` on three.js primitives. All 182 effects and the full live DSL come for free; parity verification is the work.
 
 **Tech Stack:** JavaScript (ESM, vanilla browser), three.js (peer dep, WebGL2 renderer, `RawShaderMaterial` + `GLSL3`), esbuild, Playwright (headless parity capture), Python (`compare.py`, NumPy/Pillow) for parity comparison.
 
@@ -102,11 +102,11 @@ test('WebGLRenderTarget supports MRT count option (constructor accepts {count})'
 - Create (synced): `src/vendor/noisemaker-core/**`, `assets/effects/**`
 
 **Interfaces:**
-- Consumes: `../noisemaker/shaders/src/**`, `../noisemaker/shaders/effects/**`.
+- Consumes: the EXTERNAL reference repo (`$NM_REFERENCE_ROOT`), trees `shaders/src/**` + `shaders/effects/**`. No sibling checkout is assumed.
 - Produces: vendored core importable as `src/vendor/noisemaker-core/runtime/compiler.js` etc.; `assets/effects/<ns>/<name>/{definition.js,glsl/*}`; `assets/effects/manifest.json`.
 
 - [ ] **Step 1:** Write `tools/sync-upstream.mjs` that:
-  1. Resolves `REF=../noisemaker`. Reads `git -C $REF rev-parse HEAD`.
+  1. Resolves `REF` from `--ref <path>` / `NM_REFERENCE_ROOT` (no sibling path assumed; errors if absent). Reads `git -C $REF rev-parse HEAD`.
   2. Recursively copies `$REF/shaders/src/**` → `src/vendor/noisemaker-core/**` **verbatim** (full tree — needed because `runtime/pipeline.js` eagerly imports `backends/webgl2.js`, `backends/webgpu.js`, `renderer/cubeCamera.js`).
   3. Recursively copies `$REF/shaders/effects/**` → `assets/effects/**`.
   4. Runs the reference manifest generator (`node $REF/shaders/scripts/generate-shader-manifest.mjs`) or re-implements its directory walk to emit `assets/effects/manifest.json` (`{ namespaces: {<ns>: [<name>...]} }`).
@@ -115,27 +115,29 @@ test('WebGLRenderTarget supports MRT count option (constructor accepts {count})'
 
 - [ ] **Step 2:** Run: `npm run sync`. Expected: prints synced file count, the upstream commit, and "closure OK (canvas.js/index.js externals ignored)".
 
-- [ ] **Step 3:** Add a byte-identity guard `test/vendor-integrity.test.mjs`:
+- [ ] **Step 3:** Add a byte-identity guard `test/vendor-integrity.test.mjs` that is
+  **self-contained** — it must NOT reach for the external reference repo, so it runs on any clone /
+  CI. `sync` writes a committed sha256 manifest of every vendored file
+  (`src/vendor/vendor-manifest.json`, via `tools/vendor-manifest.mjs`); the test recomputes the
+  hashes and asserts they match (and that no file was added or removed). A divergence means a
+  vendored file was hand-edited (forbidden) or the manifest is stale (re-run `npm run sync`).
 
 ```js
 import { test } from 'node:test'
 import assert from 'node:assert'
-import { execSync } from 'node:child_process'
 import fs from 'node:fs'
+import { buildManifest, MANIFEST_PATH } from '../tools/vendor-manifest.mjs'
 
-test('vendored core is byte-identical to upstream', () => {
-  const { commit } = JSON.parse(fs.readFileSync('src/vendor/UPSTREAM.json', 'utf8'))
-  const diff = execSync(
-    `git -C ../noisemaker archive ${commit} shaders/src | tar -xO | sha256sum; ` +
-    `find src/vendor/noisemaker-core -type f | sort | xargs cat | sha256sum`,
-    { shell: '/bin/bash', encoding: 'utf8' }
-  )
-  // Compare via a per-file loop in the real impl; this asserts the script ran.
-  assert.ok(commit, 'UPSTREAM.json records a commit')
+test('vendored core matches the committed integrity manifest (sha256)', () => {
+  const { files: recorded } = JSON.parse(fs.readFileSync(MANIFEST_PATH, 'utf8'))
+  const actual = buildManifest()
+  const mismatches = Object.keys(recorded).filter((rel) => actual[rel] !== recorded[rel])
+  assert.equal(mismatches.length, 0, `vendored files diverge:\n  ${mismatches.slice(0, 15).join('\n  ')}`)
 })
 ```
 
-(Implementer note: the real guard diffs each vendored file against `git -C ../noisemaker show <commit>:shaders/src/<rel>`; fail on first mismatch.)
+(Implementer note: also assert the file SET matches — no untracked additions, no deletions — so a
+removed/added vendored file is caught, not just a content change.)
 
 - [ ] **Step 4:** Run `npm test`. Expected: PASS.
 
@@ -181,9 +183,9 @@ test('compileGraph produces a GLSL render graph for solid', async () => {
 - Create: `tools/export-graph.mjs` (copied/retargeted), `parity/export-golden.mjs` (adapted from sibling `export-and-render.mjs`)
 - Create (copied): `reference/01..10-*.md`
 
-- [ ] **Step 1:** Copy `../noisemaker-godot/parity/{compare.py,programs}` and `../noisemaker-godot/reference/*.md` into this repo verbatim.
-- [ ] **Step 2:** Copy `../noisemaker-godot/tools/export-graph.mjs` → `tools/export-graph.mjs`; retarget its reference path to `../noisemaker` (it runs the **unchanged reference** `compileGraph`).
-- [ ] **Step 3:** Adapt `../noisemaker-godot/parity/export-and-render.mjs` → `parity/export-golden.mjs`: emits `parity/out/<name>.golden.png` via the reference's own headless WebGL2 render at `--size 256`.
+- [ ] **Step 1:** Copy a sibling reference port's `parity/{compare.py,programs}` and `reference/*.md` into this repo verbatim.
+- [ ] **Step 2:** Copy that port's `tools/export-graph.mjs` → `tools/export-graph.mjs`; point its reference path at `$NM_REFERENCE_ROOT` (it runs the **unchanged reference** `compileGraph`).
+- [ ] **Step 3:** Adapt that port's `parity/export-and-render.mjs` → `parity/export-golden.mjs`: emits `parity/out/<name>.golden.png` via the reference's own headless WebGL2 render at `--size 256`.
 - [ ] **Step 4:** Run: `node tools/export-graph.mjs --file parity/programs/solid.dsl parity/out/solid.graph.json`. Expected: valid JSON written.
 - [ ] **Step 5:** Run: `node parity/export-golden.mjs solid parity/out --size 256 --backend webgl2`. Expected: `parity/out/solid.golden.png` exists (256×256).
 - [ ] **Step 6:** Commit. `git add -A && git commit -m "chore: import parity harness + reference specs from sibling port"`

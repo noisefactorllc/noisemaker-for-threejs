@@ -20,19 +20,36 @@
  *   src/vendor/effects-manifest.json             (generated: {namespaces:{ns:[name...]}})
  *   src/vendor/UPSTREAM.json                     (provenance: upstream git commit)
  *
- * Usage: node tools/sync-upstream.mjs [--ref ../noisemaker]
+ * The reference repo is EXTERNAL and is NOT assumed to live at any particular
+ * path — a clone of this repo won't have a sibling checkout. Pass it explicitly:
+ *
+ *   node tools/sync-upstream.mjs --ref <path-to-noisemaker>
+ *   NM_REFERENCE_ROOT=<path> node tools/sync-upstream.mjs
+ *
+ * This is a maintainer-only tool; it is not on the `npm test` / build / library
+ * path, which all run against the already-vendored copy under src/vendor/.
  */
 
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { execSync } from 'node:child_process'
+import { writeManifest } from './vendor-manifest.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(__dirname, '..')
 
 const refArgIdx = process.argv.indexOf('--ref')
-const REF = path.resolve(repoRoot, refArgIdx >= 0 ? process.argv[refArgIdx + 1] : '../noisemaker')
+const refArg = refArgIdx >= 0 ? process.argv[refArgIdx + 1] : process.env.NM_REFERENCE_ROOT
+if (!refArg) {
+  console.error(
+    '[sync] ERROR: path to the external reference repo is required.\n' +
+      '        Pass --ref <path> or set NM_REFERENCE_ROOT. (This repo does not\n' +
+      '        depend on a sibling checkout; the vendored copy lives in src/vendor/.)'
+  )
+  process.exit(1)
+}
+const REF = path.resolve(repoRoot, refArg)
 
 const SRC_SHADERS = path.join(REF, 'shaders')
 const DST_VENDOR = path.join(repoRoot, 'src', 'vendor')
@@ -175,6 +192,12 @@ fs.writeFileSync(
 
 console.log(`[sync] manifest: ${Object.keys(namespaces).length} namespaces, ${effectCount} effects`)
 console.log(`[sync] upstream commit: ${commit}`)
+
+// Self-contained integrity manifest (sha256 of every vendored file). This is what
+// `npm test` verifies against — NOT the external reference — so the byte-identity
+// guard works on any clone without a reference checkout.
+const integrity = writeManifest({ commit })
+console.log(`[sync] integrity manifest: ${integrity.fileCount} files (sha256)`)
 
 const escapes = checkClosure()
 if (escapes.length) {
