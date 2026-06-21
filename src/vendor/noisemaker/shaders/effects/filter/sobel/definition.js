@@ -1,0 +1,53 @@
+import { Effect } from '../../../src/runtime/effect.js'
+
+/**
+ * nu/sobel - Sobel edge detection effect
+ * Classic Sobel operator for edge detection
+ */
+export default new Effect({
+  name: "Sobel",
+  namespace: "filter",
+  func: "sobel",
+  tags: ["edges"],
+
+  description: "Classic Sobel edge detection",
+  globals: {
+    amount: {
+      type: "float",
+      default: 1.0,
+      uniform: "amount",
+      min: 0.1,
+      max: 5,
+      zero: 0,
+      randMin: 0.5,
+      ui: {
+        label: "amount",
+        control: "slider"
+      }
+    },
+    alpha: {
+      type: "float",
+      default: 1.0,
+      min: 0,
+      max: 1,
+      step: 0.01,
+      uniform: "alpha",
+      ui: {
+        label: "alpha",
+        control: "slider"
+      }
+    }
+  },
+  passes: [
+    {
+      name: "render",
+      program: "sobel",
+      inputs: {
+        inputTex: "inputTex"
+      },
+      outputs: {
+        fragColor: "outputTex"
+      }
+    }
+  ]
+})
