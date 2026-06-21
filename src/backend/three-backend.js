@@ -1,0 +1,270 @@
+/**
+ * ThreeBackend — implements the reference `Backend` interface on three.js.
+ *
+ * This is the ONLY substantial new code in the port. The reused, vendored
+ * `Pipeline` drives it: it calls createTexture/compileProgram during init, then
+ * per frame beginFrame → executePass×N (with ping-pong surface resolution via
+ * `state`) → endFrame → present. We mirror the behavior of the reference
+ * runtime/backends/webgl2.js exactly so pixel-parity is automatic.
+ *
+ * Scope (MVP→Phase3): single-output + blit passes, global-surface ping-pong,
+ * uniform/texture binding, float readback. MRT, points/billboards, blend, repeat,
+ * 3D/cube, and external media are staged (clearly marked) for later phases.
+ */
+import * as THREE from 'three'
+import { Backend } from '../vendor/noisemaker/shaders/src/runtime/backend.js'
+import { formatToType, fullscreenTriangle, stripVersion, DEFAULT_VERTEX_SHADER } from './three-resources.js'
+
+const PRESENT_FRAGMENT = `precision highp float;
+in vec2 v_texCoord;
+uniform sampler2D tex;
+out vec4 fragColor;
+void main() { fragColor = texture(tex, v_texCoord); }
+`
+
+function toUniformValue(v) {
+  if (typeof v === 'boolean') return v ? 1 : 0
+  return v // numbers, arrays (three handles vecN/array), THREE.Texture
+}
+
+export class ThreeBackend extends Backend {
+  constructor(renderer) {
+    super({})
+    this.renderer = renderer
+    this.gl = renderer.getContext()
+    this.scene = new THREE.Scene()
+    this.camera = new THREE.Camera()
+    this.geometry = fullscreenTriangle()
+    this.mesh = new THREE.Mesh(this.geometry, new THREE.RawShaderMaterial())
+    this.mesh.frustumCulled = false // VS writes gl_Position directly; no bounds
+    this.scene.add(this.mesh)
+    this.presentMaterial = null
+    this.presentedTextureId = null
+  }
+
+  async init() {
+    this.renderer.autoClear = false
+    this.presentMaterial = new THREE.RawShaderMaterial({
+      glslVersion: THREE.GLSL3,
+      vertexShader: DEFAULT_VERTEX_SHADER,
+      fragmentShader: PRESENT_FRAGMENT,
+      uniforms: { tex: { value: null } },
+      depthTest: false,
+      depthWrite: false,
+    })
+  }
+
+  getName() {
+    return 'three'
+  }
+
+  static isAvailable() {
+    return true
+  }
+
+  // --- texture management ---
+  createTexture(id, spec) {
+    const width = spec.width | 0
+    const height = spec.height | 0
+    const rt = new THREE.WebGLRenderTarget(width, height, {
+      type: formatToType(spec.format),
+      format: THREE.RGBAFormat,
+      depthBuffer: false,
+      stencilBuffer: false,
+      // Reference 2D textures are NEAREST + CLAMP_TO_EDGE (webgl2.js). Parity-critical.
+      magFilter: THREE.NearestFilter,
+      minFilter: THREE.NearestFilter,
+      wrapS: THREE.ClampToEdgeWrapping,
+      wrapT: THREE.ClampToEdgeWrapping,
+      generateMipmaps: false,
+    })
+    rt.texture.colorSpace = THREE.NoColorSpace
+    const info = { target: rt, texture: rt.texture, width, height, format: spec.format, handle: rt }
+    this.textures.set(id, info)
+    return info
+  }
+
+  createTexture3D(id, _spec) {
+    // Staged: synth3d/filter3d (Phase 5.5). Throw loudly so it is never silently wrong.
+    throw new Error(`ThreeBackend.createTexture3D not yet implemented (${id})`)
+  }
+
+  destroyTexture(id) {
+    const info = this.textures.get(id)
+    if (info?.target) info.target.dispose()
+    this.textures.delete(id)
+  }
+
+  clearTexture(id) {
+    const info = this.textures.get(id)
+    if (!info) return
+    const prevTarget = this.renderer.getRenderTarget()
+    this.renderer.setRenderTarget(info.target)
+    this.renderer.setClearColor(0x000000, 0)
+    this.renderer.clear(true, false, false)
+    this.renderer.setRenderTarget(prevTarget)
+  }
+
+  // --- shader compilation ---
+  async compileProgram(id, spec) {
+    const source = spec.glsl || spec.source || spec.fragment
+    if (!source) throw new Error(`compileProgram: no GLSL source for ${id}`)
+    const fragmentShader = stripVersion(source)
+    const vertexShader = spec.vertex ? stripVersion(spec.vertex) : DEFAULT_VERTEX_SHADER
+    const defines = {}
+    for (const [k, v] of Object.entries(spec.defines || {})) {
+      defines[k] = typeof v === 'boolean' ? (v ? 1 : 0) : v
+    }
+    const material = new THREE.RawShaderMaterial({
+      glslVersion: THREE.GLSL3,
+      vertexShader,
+      fragmentShader,
+      uniforms: {},
+      defines,
+      depthTest: false,
+      depthWrite: false,
+      blending: THREE.NoBlending,
+    })
+    this.programs.set(id, { material, spec })
+    return { material }
+  }
+
+  // --- surface name resolution (mirrors webgl2.parseGlobalName) ---
+  parseGlobalName(texId) {
+    if (typeof texId !== 'string') return null
+    if (texId.startsWith('global_')) return texId.replace('global_', '')
+    if (texId.startsWith('global') && texId.length > 6) {
+      const suffix = texId.slice(6)
+      if (/^[A-Z0-9]/.test(suffix)) return suffix.charAt(0).toLowerCase() + suffix.slice(1)
+    }
+    return null
+  }
+
+  resolveInputTexture(texId, state) {
+    const globalName = this.parseGlobalName(texId)
+    if (globalName) {
+      const scoped = this.textures.get(texId)
+      if (scoped) return scoped.texture
+      const surf = state.surfaces?.[globalName]
+      if (surf) return surf.texture
+      return null
+    }
+    return this.textures.get(texId)?.texture ?? null
+  }
+
+  resolveOutputTarget(pass, state) {
+    let outputId = pass.outputs?.color ?? Object.values(pass.outputs || {})[0]
+    const globalName = this.parseGlobalName(outputId)
+    if (globalName && state.writeSurfaces && state.writeSurfaces[globalName]) {
+      outputId = state.writeSurfaces[globalName]
+    }
+    return this.textures.get(outputId)?.target ?? null
+  }
+
+  setUniform(material, name, value) {
+    let u = material.uniforms[name]
+    if (!u) {
+      u = { value: null }
+      material.uniforms[name] = u
+    }
+    u.value = toUniformValue(value)
+  }
+
+  // --- frame ---
+  beginFrame(_state) {
+    this.renderer.autoClear = false
+  }
+
+  endFrame() {}
+
+  executePass(pass, state) {
+    const outputKeys = Object.keys(pass.outputs || {})
+    const isMRT = pass.drawBuffers > 1 || outputKeys.length > 1
+    if (isMRT) throw new Error(`ThreeBackend: MRT not yet implemented (pass ${pass.id})`)
+    if (pass.drawMode === 'points' || pass.drawMode === 'billboards') {
+      throw new Error(`ThreeBackend: drawMode '${pass.drawMode}' not yet implemented (pass ${pass.id})`)
+    }
+
+    const prog = this.programs.get(pass.program)
+    if (!prog) throw new Error(`ThreeBackend: program not found: ${pass.program} (pass ${pass.id})`)
+    const material = prog.material
+
+    // Uniforms: globals first, then pass uniforms (pass overrides).
+    if (state.globalUniforms) {
+      for (const [k, v] of Object.entries(state.globalUniforms)) this.setUniform(material, k, v)
+    }
+    if (pass.uniforms) {
+      for (const [k, v] of Object.entries(pass.uniforms)) this.setUniform(material, k, v)
+    }
+    // Input textures.
+    if (pass.inputs) {
+      for (const [samplerName, texId] of Object.entries(pass.inputs)) {
+        this.setUniform(material, samplerName, this.resolveInputTexture(texId, state))
+      }
+    }
+
+    const target = this.resolveOutputTarget(pass, state)
+    this.mesh.material = material
+    this.renderer.setRenderTarget(target)
+    this.renderer.render(this.scene, this.camera)
+    this.renderer.setRenderTarget(null)
+  }
+
+  present(textureId) {
+    this.presentedTextureId = textureId
+    const info = this.textures.get(textureId)
+    if (!info || !this.presentMaterial) return
+    // On-screen blit for live use (NOT on the parity path; readback reads the RT).
+    this.presentMaterial.uniforms.tex.value = info.texture
+    this.mesh.material = this.presentMaterial
+    this.renderer.setRenderTarget(null)
+    this.renderer.render(this.scene, this.camera)
+  }
+
+  /**
+   * Read back a render-surface texture as LINEAR FLOAT, matching the golden's
+   * gl.readPixels(RGBA, FLOAT) on the o0 surface (export-golden.mjs). Returns a
+   * bottom-up Float32Array; the harness quantizes round(v*255) and flips to top-down,
+   * identical to the golden encoder.
+   */
+  readPixels(textureId) {
+    const id = textureId ?? this.presentedTextureId
+    const info = this.textures.get(id)
+    if (!info) throw new Error(`readPixels: no texture ${id}`)
+    const { target, width, height } = info
+    const gl = this.gl
+    this.renderer.setRenderTarget(target) // binds target's framebuffer
+    const buf = new Float32Array(width * height * 4)
+    gl.readPixels(0, 0, width, height, gl.RGBA, gl.FLOAT, buf)
+    this.renderer.setRenderTarget(null)
+    return { width, height, data: buf }
+  }
+
+  // --- staged (later phases) ---
+  copyTexture(srcId, dstId) {
+    const src = this.textures.get(srcId)
+    const dst = this.textures.get(dstId)
+    if (!src || !dst || !this.presentMaterial) return
+    this.presentMaterial.uniforms.tex.value = src.texture
+    this.mesh.material = this.presentMaterial
+    this.renderer.setRenderTarget(dst.target)
+    this.renderer.render(this.scene, this.camera)
+    this.renderer.setRenderTarget(null)
+  }
+
+  updateTextureFromSource(_id, _source, _opts) {
+    throw new Error('ThreeBackend.updateTextureFromSource not yet implemented')
+  }
+
+  uploadDataTexture(_id, _data, _width, _height) {
+    throw new Error('ThreeBackend.uploadDataTexture not yet implemented')
+  }
+
+  destroy() {
+    for (const id of Array.from(this.textures.keys())) this.destroyTexture(id)
+    for (const { material } of this.programs.values()) material?.dispose?.()
+    this.programs.clear()
+    this.geometry?.dispose?.()
+    this.presentMaterial?.dispose?.()
+  }
+}
