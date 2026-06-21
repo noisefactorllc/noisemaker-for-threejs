@@ -70,3 +70,38 @@ void main() {
 export function stripVersion(src) {
   return src.replace(/^[ \t]*#version[^\n]*\r?\n/m, '')
 }
+
+// Component count per GLSL scalar/vector type — for coercing array uniform values to
+// the exact length the uniform expects (see parseUniformSizes).
+const GLSL_UNIFORM_COMPONENTS = {
+  float: 1, int: 1, uint: 1, bool: 1,
+  vec2: 2, vec3: 3, vec4: 4,
+  ivec2: 2, ivec3: 3, ivec4: 4,
+  uvec2: 2, uvec3: 3, uvec4: 4,
+  bvec2: 2, bvec3: 3, bvec4: 4,
+}
+
+/**
+ * Parse `uniform vecN <name>;` declarations from GLSL source into {name: components}.
+ *
+ * Load-bearing for color params: the graph resolves `type: color` to a 4-element RGBA
+ * array `[r,g,b,1]`, but most color uniforms are `vec3`. `gl.uniform3fv` requires the
+ * array length to be a multiple of 3, so a length-4 array raises INVALID_VALUE and the
+ * uniform silently stays 0 (black) — the reference avoids this by copying into a fixed
+ * vec3 buffer. We coerce array values to this declared length to match (see fitVec).
+ *
+ * Skips samplers (not in the map), array uniforms (`vec3 k[9]` — legitimately multi-),
+ * and UBO block members (matched only at file scope by the leading `uniform`).
+ */
+export function parseUniformSizes(source) {
+  const sizes = {}
+  const re = /\buniform\s+(?:highp\s+|mediump\s+|lowp\s+)?(\w+)\s+(\w+)\s*(\[[^\]]*\])?\s*;/g
+  let m
+  while ((m = re.exec(source))) {
+    const [, type, name, isArray] = m
+    if (isArray) continue
+    const c = GLSL_UNIFORM_COMPONENTS[type]
+    if (c) sizes[name] = c
+  }
+  return sizes
+}

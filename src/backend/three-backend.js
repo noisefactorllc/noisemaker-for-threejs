@@ -13,7 +13,7 @@
  */
 import * as THREE from 'three'
 import { Backend } from '../vendor/noisemaker/shaders/src/runtime/backend.js'
-import { formatToType, fullscreenTriangle, stripVersion, DEFAULT_VERTEX_SHADER } from './three-resources.js'
+import { formatToType, fullscreenTriangle, stripVersion, parseUniformSizes, DEFAULT_VERTEX_SHADER } from './three-resources.js'
 
 // Parity + integration require pure-linear pixels everywhere: no sRGB decode on
 // textures, no encode on output. Disabling ColorManagement globally is the simplest
@@ -40,6 +40,24 @@ function toUniformValue(v) {
   // an [r,g,b] array. (The reference's raw uniform3fv coerces hex->NaN; we resolve correctly.)
   if (typeof v === 'string' && v[0] === '#') return hexToRgb(v)
   return v // numbers, arrays (three handles vecN/array), THREE.Texture
+}
+
+// Coerce a uniform value to the shader's declared component count (comps in 2..4),
+// mirroring the reference _setUniform: an array is truncated/zero-padded to length comps,
+// a scalar is broadcast to [v,v,...]. This is what makes a `vec3` uniform fed a 4-element
+// RGBA color array (`[r,g,b,1]`) upload correctly instead of failing gl.uniform3fv's
+// multiple-of-3 length check (→ INVALID_VALUE → uniform stuck at 0/black). No-op for
+// correct-length arrays, textures, and scalar→float (comps undefined or 1).
+function fitVec(value, comps) {
+  if (!comps || comps < 2) return value
+  if (Array.isArray(value)) {
+    if (value.length === comps) return value
+    const out = new Array(comps)
+    for (let i = 0; i < comps; i++) out[i] = value[i] ?? 0
+    return out
+  }
+  if (typeof value === 'number') return new Array(comps).fill(value)
+  return value
 }
 
 // --- std140 uniform-block (UBO) packing — mirrors reference webgl2.js exactly ---
@@ -194,7 +212,7 @@ export class ThreeBackend extends Backend {
       depthWrite: false,
       blending: THREE.NoBlending,
     })
-    this.programs.set(id, { material, spec })
+    this.programs.set(id, { material, spec, uniformSizes: parseUniformSizes(source) })
     return { material }
   }
 
@@ -230,13 +248,13 @@ export class ThreeBackend extends Backend {
     return this.textures.get(outputId)?.target ?? null
   }
 
-  setUniform(material, name, value) {
+  setUniform(material, name, value, sizes) {
     let u = material.uniforms[name]
     if (!u) {
       u = { value: null }
       material.uniforms[name] = u
     }
-    u.value = toUniformValue(value)
+    u.value = fitVec(toUniformValue(value), sizes?.[name])
   }
 
   // --- std140 uniform blocks (UBO) ---
@@ -355,11 +373,12 @@ export class ThreeBackend extends Backend {
     const prog = this.programs.get(pass.program)
     if (!prog) throw new Error(`ThreeBackend: program not found: ${pass.program} (pass ${pass.id})`)
     const material = prog.material
+    const sizes = prog.uniformSizes
     if (state.globalUniforms) {
-      for (const [k, v] of Object.entries(state.globalUniforms)) this.setUniform(material, k, v)
+      for (const [k, v] of Object.entries(state.globalUniforms)) this.setUniform(material, k, v, sizes)
     }
     if (pass.uniforms) {
-      for (const [k, v] of Object.entries(pass.uniforms)) this.setUniform(material, k, v)
+      for (const [k, v] of Object.entries(pass.uniforms)) this.setUniform(material, k, v, sizes)
     }
     if (pass.inputs) {
       for (const [samplerName, texId] of Object.entries(pass.inputs)) {
