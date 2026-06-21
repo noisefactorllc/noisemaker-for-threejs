@@ -6,9 +6,6 @@
  * effects, runs the reused compileGraph, and builds a Pipeline on ThreeBackend.
  */
 import * as THREE from 'three'
-// Parity requires pure-linear pixels everywhere: no sRGB decode on textures, no
-// encode on output. Disabling ColorManagement globally is the simplest guarantee.
-THREE.ColorManagement.enabled = false
 import { compileGraph } from '../vendor/noisemaker/shaders/src/runtime/compiler.js'
 import { createThreePipeline } from '../runtime/create-three-pipeline.js'
 import { extractEffectIds } from '../effects/extract-effects.js'

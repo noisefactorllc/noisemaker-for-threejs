@@ -10,7 +10,8 @@
   <body>
     <canvas id="c" width="256" height="256"></canvas>
     <script type="module">
-      import { NoisemakerCanvas } from '/src/index.js'
+      import { NoisemakerCanvas, NoisemakerTexture } from '/src/index.js'
+      import * as THREE from 'three'
 
       // Render a DSL program deterministically and return linear-float pixels
       // (bottom-up, as gl.readPixels yields). The Node harness quantizes + flips
@@ -23,6 +24,22 @@
         await nm.compile(dsl)
         nm.renderFrames(time, frames)
         const { width, height, data } = nm.readPixels()
+        return { width, height, data: Array.from(data) }
+      }
+
+      // Render via NoisemakerTexture (offscreen) sharing a renderer — verifies the
+      // texture integration path produces the same pixels as the canvas path.
+      window.__nm_render_texture = async (dsl, size, time, frames) => {
+        const canvas = document.getElementById('c')
+        canvas.width = size
+        canvas.height = size
+        const renderer = new THREE.WebGLRenderer({ canvas, preserveDrawingBuffer: true, alpha: true })
+        renderer.setPixelRatio(1)
+        renderer.setSize(size, size, false)
+        const nmTex = new NoisemakerTexture(renderer, { width: size, height: size })
+        await nmTex.compile(dsl)
+        for (let i = 0; i < frames; i++) nmTex.update(time)
+        const { width, height, data } = nmTex.readPixels()
         return { width, height, data: Array.from(data) }
       }
       window.__nm_ready = true

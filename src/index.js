@@ -6,6 +6,7 @@
  * advanced/offline use.
  */
 export { NoisemakerCanvas } from './integration/canvas.js'
+export { NoisemakerTexture } from './integration/texture.js'
 export { ThreeBackend } from './backend/three-backend.js'
 export { createThreePipeline } from './runtime/create-three-pipeline.js'
 export { compileGraph } from './vendor/noisemaker/shaders/src/runtime/compiler.js'

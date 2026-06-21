@@ -15,6 +15,11 @@ import * as THREE from 'three'
 import { Backend } from '../vendor/noisemaker/shaders/src/runtime/backend.js'
 import { formatToType, fullscreenTriangle, stripVersion, DEFAULT_VERTEX_SHADER } from './three-resources.js'
 
+// Parity + integration require pure-linear pixels everywhere: no sRGB decode on
+// textures, no encode on output. Disabling ColorManagement globally is the simplest
+// guarantee (covers NoisemakerCanvas, NoisemakerTexture, NoisemakerPass).
+THREE.ColorManagement.enabled = false
+
 const PRESENT_FRAGMENT = `precision highp float;
 in vec2 v_texCoord;
 uniform sampler2D tex;
@@ -28,9 +33,12 @@ function toUniformValue(v) {
 }
 
 export class ThreeBackend extends Backend {
-  constructor(renderer) {
+  constructor(renderer, options = {}) {
     super({})
     this.renderer = renderer
+    // Canvas presents the render surface to the screen; Texture/Pass keep it offscreen
+    // (presenting would clobber the caller's framebuffer).
+    this.presentToScreen = options.presentToScreen !== false
     this.gl = renderer.getContext()
     this.scene = new THREE.Scene()
     this.camera = new THREE.Camera()
@@ -225,6 +233,7 @@ export class ThreeBackend extends Backend {
 
   present(textureId) {
     this.presentedTextureId = textureId
+    if (!this.presentToScreen) return // offscreen mode (Texture/Pass): expose RT, don't blit
     const info = this.textures.get(textureId)
     if (!info || !this.presentMaterial) return
     // On-screen blit for live use (NOT on the parity path; readback reads the RT).
@@ -232,6 +241,21 @@ export class ThreeBackend extends Backend {
     this.mesh.material = this.presentMaterial
     this.renderer.setRenderTarget(null)
     this.renderer.render(this.scene, this.camera)
+  }
+
+  /** The texture last presented by the pipeline (current render-surface read buffer). */
+  getPresentedTexture() {
+    return this.textures.get(this.presentedTextureId)?.texture ?? null
+  }
+
+  /** Copy a source texture into an arbitrary render target (for NoisemakerTexture's stable output). */
+  blitToTarget(srcTexture, dstTarget) {
+    if (!srcTexture || !this.presentMaterial) return
+    this.presentMaterial.uniforms.tex.value = srcTexture
+    this.mesh.material = this.presentMaterial
+    this.renderer.setRenderTarget(dstTarget)
+    this.renderer.render(this.scene, this.camera)
+    this.renderer.setRenderTarget(null)
   }
 
   /**

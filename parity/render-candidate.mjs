@@ -35,6 +35,8 @@ const getOpt = (flag, def) => {
 const size = getOpt('--size', 256)
 const time = getOpt('--time', 0.25)
 const frames = getOpt('--frames', 8)
+const useTexture = argv.includes('--texture') // verify NoisemakerTexture path instead of Canvas
+const outSuffix = useTexture ? 'texture' : 'candidate'
 const programName = basename(dslPath).replace(/\.dsl$/, '')
 const dsl = readFileSync(dslPath, 'utf8')
 
@@ -119,14 +121,15 @@ async function main() {
     await page.waitForFunction(() => window.__nm_ready === true, { timeout: 30000 })
 
     const result = await page.evaluate(
-      async ({ dsl, size, time, frames }) => {
+      async ({ dsl, size, time, frames, useTexture }) => {
         try {
-          return await window.__nm_render(dsl, size, time, frames)
+          const fn = useTexture ? window.__nm_render_texture : window.__nm_render
+          return await fn(dsl, size, time, frames)
         } catch (e) {
           return { error: e?.message || String(e), stack: e?.stack }
         }
       },
-      { dsl, size, time, frames }
+      { dsl, size, time, frames, useTexture }
     )
 
     if (result?.error) {
@@ -153,9 +156,9 @@ async function main() {
       }
     }
     const png = encodePng(width, height, topDown)
-    const outPath = join(outDir, `${programName}.candidate.png`)
+    const outPath = join(outDir, `${programName}.${outSuffix}.png`)
     writeFileSync(outPath, png)
-    process.stderr.write(`[candidate] wrote ${outPath} (${width}x${height}, time=${time}, frames=${frames})\n`)
+    process.stderr.write(`[${outSuffix}] wrote ${outPath} (${width}x${height}, time=${time}, frames=${frames})\n`)
     if (messages.length) process.stderr.write('[candidate] console:\n  ' + messages.join('\n  ') + '\n')
   } finally {
     await browser.close()

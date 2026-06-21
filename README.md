@@ -37,13 +37,21 @@ Candidate output is byte-identical to the reference WebGL2 golden.
 Parity criterion (inherited from the sibling ports): `max-abs-diff ≤ 2/255` AND `SSIM ≥ 0.98`.
 Run the sweep: `bash parity/sweep-three.sh`.
 
+### Integration surface
+- **`NoisemakerCanvas`** — standalone full-screen renderer (the parity workhorse). ✅
+- **`NoisemakerTexture`** — run a DSL program offscreen, exposed as a stable `THREE.Texture` for
+  materials / scene backgrounds, sharing the caller's renderer. ✅ verified pixel-perfect
+  (`max-abs-diff=0.000`); see `examples/texture-on-mesh.html`.
+- **`NoisemakerPass`** — EffectComposer post-processing pass. ⏳ next.
+
 ### Remaining (see `docs/IMPLEMENTATION-PLAN.md`)
-- Phase 3 backend features for effects that need them: MRT, `drawMode:"points"`/billboards,
-  additive blend, per-pass viewport (currently throw "not yet implemented").
+- Phase 3 backend features: MRT (mixed-format → raw-GL FBO), `drawMode:"points"`/billboards,
+  additive blend — unlocks the `points`/`render` agent effects (currently throw "not yet
+  implemented"). Goldens are obtainable; agent sims are chaotic (verify seed bit-exactness).
 - Phase 5.5: 3D volumes (`createTexture3D`) and cubemaps for `synth3d`/`filter3d`.
-- Phase 5: full-catalog parity sweep (182 effects) with per-effect tolerance table; document
-  cross-device-divergent continuous solvers (e.g. `reactionDiffusion`).
-- Phase 6: `NoisemakerTexture` (effect → `THREE.Texture`) and `NoisemakerPass` (EffectComposer).
+- Phase 5: full-catalog sweep with per-effect tolerance table (`media` excluded — needs external
+  input; cross-device-divergent continuous solvers like `reactionDiffusion` documented as skips).
+- `NoisemakerPass` (EffectComposer).
 
 ## Quickstart
 
@@ -58,6 +66,18 @@ await nm.compile(`
 `)
 function frame(t) { nm.renderFrame((t / 4000) % 1); requestAnimationFrame(frame) }
 requestAnimationFrame(frame)
+```
+
+As a texture in your own three.js scene (shares your renderer):
+
+```js
+import { NoisemakerTexture } from 'noisemaker-three'
+
+const nmTex = new NoisemakerTexture(renderer, { width: 512, height: 512 })
+await nmTex.compile('search synth\nnoise(octaves: 4, speed: 1).write(o0)\nrender(o0)')
+material.map = nmTex.texture            // stable texture; set once
+// in your render loop:
+nmTex.update((performance.now() / 6000) % 1)
 ```
 
 ## Develop

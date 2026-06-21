@@ -9,8 +9,8 @@
 import { Pipeline } from '../vendor/noisemaker/shaders/src/runtime/pipeline.js'
 import { ThreeBackend } from '../backend/three-backend.js'
 
-export async function createThreePipeline(graph, { renderer, width = 800, height = 600 }) {
-  const backend = new ThreeBackend(renderer)
+export async function createThreePipeline(graph, { renderer, width = 800, height = 600, presentToScreen = true }) {
+  const backend = new ThreeBackend(renderer, { presentToScreen })
   const pipeline = new Pipeline(graph, backend)
   await pipeline.init(width, height)
   return pipeline

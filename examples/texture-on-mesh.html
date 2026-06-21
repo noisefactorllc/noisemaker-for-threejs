@@ -1,0 +1,66 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>noisemaker-three — effect as a texture on a 3D mesh</title>
+    <style>
+      body { margin: 0; background: #111; overflow: hidden; }
+      #hint { position: fixed; left: 12px; bottom: 10px; color: #888;
+              font: 12px ui-monospace, monospace; }
+    </style>
+    <script type="importmap">
+      { "imports": { "three": "/node_modules/three/build/three.module.js" } }
+    </script>
+  </head>
+  <body>
+    <div id="hint">noisemaker DSL rendered to a THREE.Texture, mapped onto a rotating box. Serve the repo root and open this file.</div>
+    <script type="module">
+      import * as THREE from 'three'
+      import { NoisemakerTexture } from '/src/index.js'
+
+      const renderer = new THREE.WebGLRenderer({ antialias: true })
+      renderer.setPixelRatio(devicePixelRatio)
+      renderer.setSize(innerWidth, innerHeight)
+      document.body.appendChild(renderer.domElement)
+
+      const scene = new THREE.Scene()
+      const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.1, 100)
+      camera.position.set(0, 0, 3)
+      scene.add(new THREE.AmbientLight(0xffffff, 1.2))
+      const key = new THREE.DirectionalLight(0xffffff, 1.5)
+      key.position.set(2, 3, 4)
+      scene.add(key)
+
+      // A noisemaker effect, rendered offscreen to a texture sharing this renderer.
+      const nmTex = new NoisemakerTexture(renderer, { width: 512, height: 512 })
+      await nmTex.compile(`
+        search synth, filter
+        noise(scaleX: 18, scaleY: 18, octaves: 4, speed: 1).hs(rotation: 90).bloom().write(o0)
+        render(o0)
+      `)
+
+      const box = new THREE.Mesh(
+        new THREE.BoxGeometry(1.3, 1.3, 1.3),
+        new THREE.MeshStandardMaterial({ map: nmTex.texture, roughness: 0.5, metalness: 0.1 })
+      )
+      scene.add(box)
+
+      addEventListener('resize', () => {
+        camera.aspect = innerWidth / innerHeight
+        camera.updateProjectionMatrix()
+        renderer.setSize(innerWidth, innerHeight)
+      })
+
+      const t0 = performance.now()
+      function frame() {
+        const t = ((performance.now() - t0) / 6000) % 1 // 6s loop, normalized 0..1
+        nmTex.update(t) // advance the effect, refresh nmTex.texture
+        box.rotation.x += 0.005
+        box.rotation.y += 0.008
+        renderer.render(scene, camera)
+        requestAnimationFrame(frame)
+      }
+      frame()
+    </script>
+  </body>
+</html>
