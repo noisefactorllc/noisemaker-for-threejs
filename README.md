@@ -51,22 +51,26 @@ Metal-vs-Vulkan ports skip — on our shared ANGLE/Metal driver it matches exact
 
 Parity criterion: `max-abs-diff ≤ 2/255` AND `SSIM ≥ 0.98` (all PASSes hit 0.000).
 
-### Genuinely not yet covered (see `docs/IMPLEMENTATION-PLAN.md`)
-- **Audio-driven** (`scope`, `spectrum`), `media` decode, and **mesh** (`meshLoader`/`meshRender`,
-  OBJ via `canvas.loadOBJFromURL`): need external input/decoding — deferred. (The external-texture
-  *binding* exists — `setExternalTexture`/`updateTextureFromSource` — so `media`'s shader works once
-  fed a source; see `NoisemakerPass`.)
-- **`loopBegin`/`loopEnd`** accumulator-feedback primitives: shaders compile, but the loop-accumulator
-  parity path is not yet exercised.
-- Broader corpus validation against **blaster.noisedeck.app**.
+### Genuinely not yet covered — 5 of 182 funcs (see `docs/IMPLEMENTATION-PLAN.md`)
+Only effects that need a **live external-input feed**:
+- **Audio-driven** (`scope`, `spectrum`): need an audio waveform/FFT.
+- **`media`** decode (video/image) and **mesh** (`meshLoader`/`meshRender`, OBJ via
+  `canvas.loadOBJFromURL`): need decoded external assets.
 
-### Done since first cut
-- **Full 3D namespace bit-exact** (`max-abs-diff=0.000`): `synth3d` (×7), `filter3d` (×2), and the
+The external-input *binding/upload* infrastructure exists (`setExternalTexture`,
+`updateTextureFromSource`, `uploadDataTexture`, pipeline `setAudioState`) — only the live
+data acquisition is out of scope.
+
+### Done since first cut — **177/182 funcs bit-exact**
+- **Full 3D namespace** (`max-abs-diff=0.000`): `synth3d` (×7), `filter3d` (×2), and the
   3D renderers `render3d`/`renderLit3d`/`renderCubemap3d`/`renderCubemapSurface`. Volumes are
   2D-flattened atlases raymarched in-shader (no `createTexture3D`/GL-cubemaps needed); cubemap
   faces render to a 2D `rgba16f` target via the `cubeBasis` uniform.
-- **`remap` bit-exact** — std140 UBO support (`RemapUniforms`/`uniformLayout`), verified trivial +
-  zoned (`max-abs-diff=0.000`).
+- **`remap` + `mashup`** — std140 UBO support (`uniformLayout`), verified trivial + zoned.
+- **`loopBegin`/`loopEnd`** accumulator-feedback primitives — corpus-validated (10 corpus
+  programs use them, all bit-exact).
+- **Canvas2D-overlay effects** (`fibers`, `scratches`, `strayHair`) — bit-exact via a raw-GL
+  upload matching the reference's `BROWSER_DEFAULT` colorspace (three forces `NONE`).
 - **classicNoisedeck meta/param effects** (`composite`, `effects`, `colorLab`, `kaleido`,
   `refract`, …): pass as filters with hand-authored DSL.
 - **points/agent effects** (attractor, buddhabrot, dla, flock, flow, hydraulic, lenia, life,
