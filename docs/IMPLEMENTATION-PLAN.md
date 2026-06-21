@@ -309,7 +309,21 @@ Each task adds one capability and is gated by an effect that exercises it. Behav
 - [ ] **Gate:** `bash parity/run.sh blendMode` → PASS. Commit.
 
 ### Task 3.4: MRT + points/billboards draw modes (gates: a points effect)
-- [ ] MRT: when `pass.outputs` has >1 key or `pass.drawBuffers>1`, allocate a `WebGLRenderTarget(w,h,{count:N})` and render once; map outputs to `rt.textures[i]` (declare `layout(location=i) out` already in effect GLSL).
+- [ ] MRT: when `pass.outputs` has >1 key or `pass.drawBuffers>1`, render to N attachments.
+  - **DESIGN CONSTRAINT (verified 2026-06-20):** MRT attachments can have MIXED formats —
+    e.g. `pointsEmit` writes `global_xyz`/`global_vel` (`rgba32f`) + `global_rgba` (`rgba8`)
+    in one pass. three.js `WebGLRenderTarget({count:N})` uses ONE format for all attachments,
+    so it CANNOT represent this. Options: (a) raw-GL FBO attaching the N separate surface
+    write-textures' underlying `__webglTexture`s with `gl.drawBuffers` (faithful, like the
+    reference `createMRTFBO`) + render the three.js material to it (needs overriding the
+    RT framebuffer via `renderer.properties` internals, or a custom RT subclass); (b) widen
+    all attachments to `rgba32f` and quantize the rgba8 one on read (risks parity at the
+    8-bit boundary). (a) is correct; prototype it on `pointsEmit`.
+  - **Parity risk:** agent sims (physarum/flow/dla/lenia/life) are chaotic like reactionDiffusion
+    — verify seed/early-frame bit-exactness before trusting multi-frame output.
+  - **Goldens ARE obtainable** for points effects via the reference harness (verified:
+    `noise().pointsEmit().flow().pointsRender().write(o0)` goldens fine). So Phase 3 is
+    parity-verifiable, not blocked.
 - [ ] `drawMode:"points"`: `THREE.Points` with a `count`-sized empty geometry; `gl_PointSize` from the effect VS; `count` resolution (`auto`/`input`/`screen`) mirrors webgl2.
 - [ ] `drawMode:"billboards"`: 6 verts/particle triangle list.
 - [ ] **Gate:** `bash parity/run.sh <points effect, e.g. pointsRender>` → PASS or documented-divergence. Commit.
