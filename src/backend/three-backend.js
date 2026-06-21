@@ -27,8 +27,18 @@ out vec4 fragColor;
 void main() { fragColor = texture(tex, v_texCoord); }
 `
 
+function hexToRgb(hex) {
+  let h = hex.slice(1)
+  if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2]
+  const n = parseInt(h, 16)
+  return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255]
+}
+
 function toUniformValue(v) {
   if (typeof v === 'boolean') return v ? 1 : 0
+  // Color params may default to hex strings (e.g. matteColor "#000000"); three.js needs
+  // an [r,g,b] array. (The reference's raw uniform3fv coerces hex->NaN; we resolve correctly.)
+  if (typeof v === 'string' && v[0] === '#') return hexToRgb(v)
   return v // numbers, arrays (three handles vecN/array), THREE.Texture
 }
 
