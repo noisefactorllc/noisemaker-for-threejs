@@ -25,10 +25,14 @@ verification* that pass for free when the backend is faithful.
 
 Candidate output is byte-identical to the reference WebGL2 golden.
 
-- **Breadth sweep: 137 PASS / 1 SKIP pixel-perfect** (`parity/sweep-three.sh`), every PASS at
+- **Breadth sweep: 140 PASS / 1 SKIP pixel-perfect** (`parity/sweep-three.sh`), every PASS at
   `max-abs-diff=0.000, ssim=1.00000` — across synth, filter, mixer, classicNoisedeck:
-  single-pass, multi-pass, two-input, feedback, and ping-pong state sims (`cellularAutomata`
-  bit-exact). Includes Tier-1 (`solid, gradient, noise, cell, shape, osc2d, blur, blendMode`).
+  single-pass, multi-pass, two-input, feedback, ping-pong state sims (`cellularAutomata`
+  bit-exact), points (`wormhole`), and MIDI data textures (`roll`). Includes Tier-1
+  (`solid, gradient, noise, cell, shape, osc2d, blur, blendMode`).
+- **Agents subsystem implemented** (MRT mixed-format, points/billboards, additive blend,
+  `uploadDataTexture`): deterministic point effects pass; chaotic agent *behavior* sims
+  (`flow`, `physarum`, …) run end-to-end but diverge over frames like `reactionDiffusion`.
 - **1 documented skip:** `reactionDiffusion` — continuous Gray-Scott solver; seed bit-exact at
   `speed:0`, evolution fp-divergent (same skip as the same-driver Babylon port and Godot).
 
@@ -39,12 +43,14 @@ Run the sweep: `bash parity/sweep-three.sh`.
 - **Stateful continuous solvers** (`navierStokes`, `convolutionFeedback`): need run-to-settle
   multi-sample verification (~30s, sample every 5s), not the 8-frame snapshot.
 - **Audio-driven** (`scope`, `spectrum`): need audio input (like `media`, deferred).
-- **Backend features**: `wormhole` (points), `roll` (`uploadDataTexture`) → Phase 3; `text`
-  (`uniform3fv` array-uniform binding) → bug to fix.
+- **Chaotic agent behavior sims** (`flow`, `physarum`, `dla`, `lenia`, …): the agents subsystem
+  runs them end-to-end, but they diverge over frames (document like `reactionDiffusion`; verify
+  with the 30s/5s multi-sample regime).
 - **Need hand-authored DSL** (11 classicNoisedeck meta/param effects: `composite`, `effects`,
   `colorLab`, `kaleido`, `refract`, …) — auto-generated default programs are invalid for them.
 - **`remap`**: RGB pixel-perfect (ssim 1.0) but alpha channel diverges (new upstream UBO path).
-- **Deferred**: `points`/`render`/`synth3d`/`filter3d` (Phase 3/5.5), `media` (external input).
+- **3D**: `synth3d`/`filter3d` (`createTexture3D`/cubemaps, Phase 5.5). **Audio/external**:
+  `scope`/`spectrum` (audio), `media` (external input) — deferred.
 
 ### Integration surface
 - **`NoisemakerCanvas`** — standalone full-screen renderer (the parity workhorse). ✅
@@ -54,13 +60,12 @@ Run the sweep: `bash parity/sweep-three.sh`.
 - **`NoisemakerPass`** — EffectComposer post-processing pass. ⏳ next.
 
 ### Remaining (see `docs/IMPLEMENTATION-PLAN.md`)
-- Phase 3 backend features: MRT (mixed-format → raw-GL FBO), `drawMode:"points"`/billboards,
-  additive blend — unlocks the `points`/`render` agent effects (currently throw "not yet
-  implemented"). Goldens are obtainable; agent sims are chaotic (verify seed bit-exactness).
+- Phase 3 backend features (MRT mixed-format, points/billboards, additive blend,
+  `uploadDataTexture`): **done.** ✅
 - Phase 5.5: 3D volumes (`createTexture3D`) and cubemaps for `synth3d`/`filter3d`.
-- Phase 5: full-catalog sweep with per-effect tolerance table (`media` excluded — needs external
-  input; cross-device-divergent continuous solvers like `reactionDiffusion` documented as skips).
-- `NoisemakerPass` (EffectComposer).
+- Hand-authored DSL for 11 classicNoisedeck meta/param effects; stateful-sim multi-sample
+  verification (30s/5s) for chaotic agent + continuous solvers; `remap` alpha.
+- `NoisemakerPass` (EffectComposer) — needs source-surface input binding.
 
 ## Quickstart
 
