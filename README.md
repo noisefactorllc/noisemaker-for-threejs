@@ -7,7 +7,7 @@ engine. Because the reference already runs on JavaScript + WebGL2, there is noth
 re-implement or re-port:
 
 - **The DSL compiler, expander, and executor (`runtime/pipeline.js`) are the reference, unchanged.**
-- **All 182 effects' GLSL (`#version 300 es`) runs directly** via `RawShaderMaterial` +
+- **All 184 effects' GLSL (`#version 300 es`) runs directly** via `RawShaderMaterial` +
   `glslVersion: THREE.GLSL3`. No shader re-porting.
 - **The only authored code of substance is one `ThreeBackend`** (~760 LOC) implementing the
   reference's abstract `Backend` interface on three.js primitives (`WebGLRenderTarget`,
@@ -22,7 +22,7 @@ re-implement or re-port:
 posture: the fetch script + a small loader are committed, never the engine bytes); the adapter
 imports the engine from there (`src/engine-browser.js` for the browser, `vendor/engine.mjs` for Node).
 
-The result: the 182 effects are not units of *porting* work — they are units of *parity
+The result: the 184 effects are not units of *porting* work — they are units of *parity
 verification* that pass when the adapter is faithful (byte-identical, since it's the same shaders
 on the same WebGL2 driver the reference itself uses).
 
@@ -67,14 +67,57 @@ shader path the same way the rest of the catalog is validated.
   (mesh-surface textures) + a `triangles` draw path (depth test + back-face cull; the VS fetches
   vertices from the mesh textures by `gl_VertexID`). `max-abs-diff=0.000`.
 
-**All 182/182 funcs are byte-identical** — the whole catalog, with the 5 external-input effects fed
-deterministic synthetic inputs.
+**183/184 of the published catalog are byte-identical** — 178 via live parity (corpus + sweeps +
+per-effect programs) plus the 5 external-input effects above fed deterministic synthetic inputs. The
+one effect *not* covered is **`filter/text`** (see [Not included in this pass](#not-included-in-this-pass)).
 
 The external-input *binding/upload* infrastructure exists (`setExternalTexture`,
 `updateTextureFromSource`, `uploadDataTexture`, pipeline `setAudioState`) — only the live
 data acquisition is out of scope.
 
-### Done since first cut — **182/182 funcs bit-exact**
+### Not included in this pass
+
+Coverage is measured against the **published 184-effect catalog**
+(`vendor/noisemaker/effects/manifest.json`). The following are **not** in the
+byte-identical-via-live-parity set:
+
+**1 effect with no parity coverage:**
+- **`filter/text`** — rasterizes a string through Canvas2D fonts. Unlike the host-input effects
+  below, no deterministic-injection fixture was built for it, glyph rendering is OS/font-dependent,
+  and **no corpus program calls `text()`** — so it is neither corpus-exercised nor injected here.
+  **Untested.** (The sibling Babylon port also drops `text`.)
+
+**5 effects verified ONLY with deterministic injected inputs** (the live host-data path is not
+exercised — these confirm the binding/upload + shader path, not data acquisition):
+- **`synth/scope`, `synth/spectrum`** (audio) — fed a synthetic 128-sample waveform/spectrum via
+  `setAudioState`; no live `AnalyserNode`/mic decode.
+- **`synth/media`** (image/video) — fed a synthetic 1024² canvas via `updateTextureFromSource`; no
+  live `<video>`/camera/image-URL decode.
+- **`render/meshLoader`, `render/meshRender`** (OBJ) — fed a precomputed cube via `uploadMeshData`;
+  the engine's `parseOBJ` is **internal-only in the published bundle (not exported)**, so loading a
+  real `.obj` URL is not reachable through the adapter.
+
+**Corpus programs using effects outside the catalog** (the 81/88 → 7 misses): 7 gallery programs
+fail to compile (`Unknown effect`) because they use **custom community effects not published to the
+CDN catalog** — `chromeicosahedroninterior` (5 programs) and `vaporwaveflyover` (2). Out of scope,
+not a parity miss. (`osc`, `vec3`, `from`, … are DSL ops / expression builtins and compile fine.)
+
+**Capability limitation — param aliases:** `registerParamAliases` is internal-only in the published
+bundle (not exported), so the adapter accepts the **canonical** argument names the noisedeck UI
+emits, not alternate aliases (e.g. `backgroundColor`→`bgColor`). The live corpus is unaffected.
+
+### Follow-up work
+- **`text` parity** — build a deterministic fixture (fixed glyphs / pre-rasterized atlas), or gate
+  it with SSIM instead of byte-equality to absorb font-raster variance across machines.
+- **Live host inputs** — wire real feeds for `scope`/`spectrum` (`AnalyserNode`), `media`
+  (`<video>`/image element), and `meshLoader` (fetch + parse OBJ — needs `parseOBJ` exported
+  upstream, or a small local OBJ parser).
+- **Param aliases** — add a local alias map (or consume `registerParamAliases` if a future CDN
+  bundle exports it) so alternate arg names resolve.
+- **Corpus 88/88** — reached automatically if `chromeicosahedroninterior` + `vaporwaveflyover` are
+  ever published to the CDN catalog.
+
+### Done since first cut — **183/184 funcs bit-exact**
 - **Full 3D namespace** (`max-abs-diff=0.000`): `synth3d` (×7), `filter3d` (×2), and the
   3D renderers `render3d`/`renderLit3d`/`renderCubemap3d`/`renderCubemapSurface`. Volumes are
   2D-flattened atlases raymarched in-shader (no `createTexture3D`/GL-cubemaps needed); cubemap
@@ -99,14 +142,17 @@ data acquisition is out of scope.
   (`max-abs-diff=0.000`) + scene→source binding (`parity/pass-test.mjs`); see
   `examples/effect-composer-pass.html`.
 
-### Remaining (see `docs/IMPLEMENTATION-PLAN.md`)
+### Infrastructure status (see `docs/IMPLEMENTATION-PLAN.md`)
 - Backend features (MRT mixed-format, points/billboards, additive blend, `uploadDataTexture`,
   std140 UBO): **done.** ✅
 - 3D volumes + cubemaps for `synth3d`/`filter3d`/`render`: **done** (2D-flattened atlases
   raymarched in-shader; no real `createTexture3D`/GL-cubemaps needed). ✅
 - Integration trio (`NoisemakerCanvas`/`NoisemakerTexture`/`NoisemakerPass`): **done.** ✅
-- External-input *decoding* (audio `scope`/`spectrum`, `media`, mesh OBJ); `loopBegin`/`loopEnd`
-  accumulator parity; broader **blaster.noisedeck.app** corpus validation.
+- `loopBegin`/`loopEnd` accumulator parity: **done** (corpus-validated, 10 programs). ✅
+- **blaster.noisedeck.app** corpus validation: **done** (81/88; the 7 misses are out-of-catalog
+  custom effects). ✅
+- Open items (live external-input decoding, `text`, param aliases) are tracked in
+  [Follow-up work](#follow-up-work) above.
 
 ## Quickstart
 
@@ -185,9 +231,10 @@ reference/                      engine-agnostic specs (shared with sibling ports
 
 **This is a thin adapter, not a port.** ~2,900 lines of authored code (`ThreeBackend` ~760,
 integration wrappers, parity harness) drive the unmodified noisemaker reference engine (~124k LOC:
-compiler + pipeline + every effect + GLSL). The 182/182 byte-identical result follows because it
+compiler + pipeline + every effect + GLSL). The 183/184 byte-identical result follows because it
 is the same `#version 300 es` shaders on the same WebGL2 driver the reference uses; the real work
-was making the `ThreeBackend` shim faithful.
+was making the `ThreeBackend` shim faithful. (`filter/text` is the lone uncovered effect — see
+[Not included in this pass](#not-included-in-this-pass).)
 
 **The reference engine is never committed to this repo** (node_modules posture). `npm run vendor`
 (`vendor/fetch.sh`) fetches the published engine from the noisemaker CDN —
