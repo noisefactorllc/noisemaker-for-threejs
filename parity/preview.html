@@ -1,0 +1,57 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>noisemaker-three preview</title>
+    <script type="importmap">
+      { "imports": { "three": "/node_modules/three/build/three.module.js" } }
+    </script>
+    <style>
+      body { margin: 0; background: #07070c; color: #cdd3e0; font-family: ui-monospace, Menlo, Consolas, monospace; }
+      .wrap { display: flex; gap: 20px; padding: 20px; align-items: flex-start; }
+      h1 { font: 600 13px ui-monospace, monospace; margin: 0 0 10px; color: #7fd1ff; letter-spacing: .4px; }
+      pre { margin: 0; font-size: 11px; line-height: 1.34; white-space: pre; color: #aeb6c8;
+            background: #0e1119; border: 1px solid #222838; border-radius: 9px; padding: 16px 18px; }
+      .panel { display: flex; flex-direction: column; }
+      canvas { border: 1px solid #222838; border-radius: 9px; background: #000; display: block; }
+      .status { font-size: 11px; color: #6b7488; margin-top: 10px; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="panel">
+        <h1>DSL program</h1>
+        <pre id="dsl"></pre>
+      </div>
+      <div class="panel">
+        <h1>three.js &middot; ThreeBackend &middot; engine from shaders.noisedeck.app/1</h1>
+        <canvas id="c" width="512" height="512"></canvas>
+        <div class="status" id="status">compiling&hellip;</div>
+      </div>
+    </div>
+    <script type="module">
+      import { NoisemakerCanvas } from '/src/index.js'
+
+      window.__run = async ({ dsl, frames, loop, size }) => {
+        document.getElementById('dsl').textContent = dsl
+        const canvas = document.getElementById('c')
+        canvas.width = size
+        canvas.height = size
+        const status = document.getElementById('status')
+        const nm = new NoisemakerCanvas(canvas, { width: size, height: size })
+        await nm.compile(dsl)
+        for (let i = 0; i < frames; i++) {
+          nm.renderFrame((i % loop) / loop)
+          if (i % 120 === 0) {
+            status.textContent = `rendering… frame ${i} / ${frames}`
+            await new Promise((r) => requestAnimationFrame(r))
+          }
+        }
+        status.textContent = `rendered ${frames} frames (≈ ${Math.round(frames / 60)}s @ 60fps) · stateful sim evolved`
+        window.__done = true
+        return true
+      }
+      window.__ready = true
+    </script>
+  </body>
+</html>
