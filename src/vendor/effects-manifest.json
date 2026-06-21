@@ -115,7 +115,8 @@
       "zoomBlur"
     ],
     "filter3d": [
-      "flow3d"
+      "flow3d",
+      "palette3d"
     ],
     "mixer": [
       "alphaMask",
@@ -126,6 +127,7 @@
       "channelCombine",
       "distortion",
       "focusBlur",
+      "mashup",
       "patternMix",
       "shadow",
       "shapeMask",
@@ -154,7 +156,7 @@
       "pointsEmit",
       "pointsRender",
       "render3d",
-      "renderCubemap3D",
+      "renderCubemap3d",
       "renderCubemapSurface",
       "renderLit3d"
     ],
