@@ -7,7 +7,7 @@
 # machine-readable tally to parity/out/SWEEP.txt.
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-PY="${NM_PY:-$ROOT/../noisemaker-godot/parity/.venv/bin/python}"
+PY="${NM_PY:-$ROOT/parity/.venv/bin/python}"
 TOL="${1:-2.001}"; SSIM="${2:-0.98}"; SIZE=256; TIME=0.25; FRAMES=8
 OUT="$ROOT/parity/out/SWEEP.txt"
 : > "$OUT"
@@ -17,7 +17,6 @@ for prog in "$ROOT"/parity/programs/*.dsl; do
   name=$(basename "$prog" .dsl)
   gold="$ROOT/parity/out/$name.golden.png"
   cand="$ROOT/parity/out/$name.candidate.png"
-  [ -f "$gold" ] || continue
 
   # Documented divergences: faithful ports that cannot be bit-reproduced because a
   # chaotic continuous solver at the stability limit amplifies sub-ULP shader-compilation
@@ -28,6 +27,15 @@ for prog in "$ROOT"/parity/programs/*.dsl; do
       echo "SKIP $name | continuous Gray-Scott solver; seed bit-exact at speed:0, evolution fp-divergent" | tee -a "$OUT"
       skip=$((skip+1)); continue ;;
   esac
+
+  # Generate the reference golden on demand (new effects without one yet).
+  if [ ! -f "$gold" ]; then
+    if ! node "$ROOT/parity/export-golden.mjs" "$prog" "$ROOT/parity/out" --size "$SIZE" --time "$TIME" --backend webgl2 >/dev/null 2>&1; then
+      echo "ERR  $name | golden generation failed (likely needs special input/params)" | tee -a "$OUT"
+      err=$((err+1)); continue
+    fi
+  fi
+
   rout=$(node "$ROOT/parity/render-candidate.mjs" "$prog" "$ROOT/parity/out" --size $SIZE --time $TIME --frames $FRAMES 2>&1)
   if ! echo "$rout" | grep -q "wrote"; then
     err=$((err+1))

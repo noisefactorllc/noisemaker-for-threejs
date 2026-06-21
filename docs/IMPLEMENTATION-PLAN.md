@@ -376,7 +376,17 @@ For each namespace:
 - [ ] Test: render two frames headless, assert `.texture` is a non-null `THREE.Texture` and pixels change. Commit.
 
 ### Task 6.2: NoisemakerPass (EffectComposer)
-- [ ] Implement `class NoisemakerPass extends Pass` — `setSize`, `render(renderer, writeBuffer, readBuffer)` feeding `readBuffer.texture` as `inputTex` and outputting to `writeBuffer`. Respect `renderToScreen`.
+- **DESIGN NOTE (2026-06-20):** the filter *logic* is already parity-verified (the 86-pass set
+  includes many `noise().<filter>()` chains), so the Pass's only new concern is **binding the
+  composer's `readBuffer` (a GPU RT) as the chain input.** External textures normally bind via
+  `updateTextureFromSource(id, domSource)` (DOM only) — a Pass needs a GPU-texture path. The DSL
+  would be `read(s0).<filter>().render(o0)` with `s0` bound to `readBuffer.texture`. But the
+  pipeline's `createSurfaces` (pipeline.js:547) only auto-allocates `o0..o7` + globals referenced
+  in passes — source-surface (`s0`) external binding is NOT a turnkey path; trace the expander's
+  `kind:'source'` handling and add a `ThreeBackend.bindExternalSurface(name, threeTexture)`.
+  Verification: self-consistency — render `noise().write(o0)` to a texture, feed it to a Pass
+  running `read(s0).blur()`, compare to the canvas `noise().blur()` golden (already passing).
+- [ ] Implement `class NoisemakerPass extends Pass` — `setSize`, `render(renderer, writeBuffer, readBuffer)` feeding `readBuffer.texture` as the chain input (`s0`) and outputting to `writeBuffer`. Respect `renderToScreen`.
 - [ ] Example `examples/composer-pass.html`: a three.js scene with a noisemaker post chain.
 - [ ] Test: insert into a minimal `EffectComposer`, render headless, assert output differs from input. Commit.
 

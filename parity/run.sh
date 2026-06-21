@@ -17,7 +17,7 @@ SSIM="${3:-0.98}"
 SIZE="${4:-256}"
 TIME="${5:-0.25}"
 FRAMES="${6:-8}"
-PY="${NM_PY:-$ROOT/../noisemaker-godot/parity/.venv/bin/python}"
+PY="${NM_PY:-$ROOT/parity/.venv/bin/python}"
 
 PROG="$ROOT/parity/programs/$NAME.dsl"
 GOLD="$ROOT/parity/out/$NAME.golden.png"

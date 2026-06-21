@@ -25,17 +25,26 @@ verification* that pass for free when the backend is faithful.
 
 Candidate output is byte-identical to the reference WebGL2 golden.
 
-- **Full breadth sweep: 86 PASS / 0 FAIL / 1 SKIP** (`parity/sweep-three.sh`), every PASS at
-  `max-abs-diff=0.000, ssim=1.00000` — across synth, filter, mixer, classicNoisedeck
-  (single-pass, multi-pass, two-input, feedback, ping-pong state sims). Includes Tier-1
-  (`solid, gradient, noise, cell, shape, osc2d, blur, blendMode`) and discrete state sims
-  (`cellularAutomata` bit-exact, `feedback`).
-- **1 documented skip:** `reactionDiffusion` — a continuous Gray-Scott solver at the stability
-  limit; seed is bit-exact (verified at `speed:0`), but per-frame evolution amplifies sub-ULP
-  shader-compilation fp differences. Same skip as the same-driver Babylon port and Godot.
+- **Breadth sweep: 137 PASS / 1 SKIP pixel-perfect** (`parity/sweep-three.sh`), every PASS at
+  `max-abs-diff=0.000, ssim=1.00000` — across synth, filter, mixer, classicNoisedeck:
+  single-pass, multi-pass, two-input, feedback, and ping-pong state sims (`cellularAutomata`
+  bit-exact). Includes Tier-1 (`solid, gradient, noise, cell, shape, osc2d, blur, blendMode`).
+- **1 documented skip:** `reactionDiffusion` — continuous Gray-Scott solver; seed bit-exact at
+  `speed:0`, evolution fp-divergent (same skip as the same-driver Babylon port and Godot).
 
 Parity criterion (inherited from the sibling ports): `max-abs-diff ≤ 2/255` AND `SSIM ≥ 0.98`.
 Run the sweep: `bash parity/sweep-three.sh`.
+
+### Not yet covered (categorized, see `docs/IMPLEMENTATION-PLAN.md`)
+- **Stateful continuous solvers** (`navierStokes`, `convolutionFeedback`): need run-to-settle
+  multi-sample verification (~30s, sample every 5s), not the 8-frame snapshot.
+- **Audio-driven** (`scope`, `spectrum`): need audio input (like `media`, deferred).
+- **Backend features**: `wormhole` (points), `roll` (`uploadDataTexture`) → Phase 3; `text`
+  (`uniform3fv` array-uniform binding) → bug to fix.
+- **Need hand-authored DSL** (11 classicNoisedeck meta/param effects: `composite`, `effects`,
+  `colorLab`, `kaleido`, `refract`, …) — auto-generated default programs are invalid for them.
+- **`remap`**: RGB pixel-perfect (ssim 1.0) but alpha channel diverges (new upstream UBO path).
+- **Deferred**: `points`/`render`/`synth3d`/`filter3d` (Phase 3/5.5), `media` (external input).
 
 ### Integration surface
 - **`NoisemakerCanvas`** — standalone full-screen renderer (the parity workhorse). ✅
@@ -89,8 +98,12 @@ npm test               # capability gate, vendor integrity, compiler-in-repo, re
 bash parity/run.sh noise   # render reference golden + three.js candidate, compare pixels
 ```
 
-`parity/compare.py` needs numpy + Pillow; point `NM_PY` at a venv python (defaults to the
-sibling port's venv).
+`parity/compare.py` needs numpy + Pillow (self-contained venv):
+
+```bash
+python3 -m venv parity/.venv && parity/.venv/bin/pip install -r parity/requirements.txt
+bash parity/sweep-three.sh        # full breadth sweep (override python via NM_PY)
+```
 
 ## Layout
 
