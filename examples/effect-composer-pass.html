@@ -1,0 +1,72 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>noisemaker-three — DSL program as an EffectComposer pass</title>
+    <style>
+      body { margin: 0; background: #111; overflow: hidden; }
+      #hint { position: fixed; left: 12px; bottom: 10px; color: #888;
+              font: 12px ui-monospace, monospace; }
+    </style>
+    <script type="importmap">
+      { "imports": { "three": "/node_modules/three/build/three.module.js" } }
+    </script>
+  </head>
+  <body>
+    <div id="hint">A spinning scene post-processed by a noisemaker DSL program via EffectComposer (the scene feeds media()). Serve the repo root and open this file.</div>
+    <script type="module">
+      import * as THREE from 'three'
+      import { EffectComposer } from '/node_modules/three/examples/jsm/postprocessing/EffectComposer.js'
+      import { RenderPass } from '/node_modules/three/examples/jsm/postprocessing/RenderPass.js'
+      import { NoisemakerPass } from '/src/index.js'
+
+      const renderer = new THREE.WebGLRenderer({ antialias: true })
+      renderer.setPixelRatio(devicePixelRatio)
+      renderer.setSize(innerWidth, innerHeight)
+      document.body.appendChild(renderer.domElement)
+
+      // An ordinary three.js scene.
+      const scene = new THREE.Scene()
+      const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.1, 100)
+      camera.position.set(0, 0, 4)
+      scene.add(new THREE.AmbientLight(0xffffff, 1.0))
+      const key = new THREE.DirectionalLight(0xffffff, 2.0)
+      key.position.set(2, 3, 4)
+      scene.add(key)
+      const torus = new THREE.Mesh(
+        new THREE.TorusKnotGeometry(0.9, 0.3, 160, 24),
+        new THREE.MeshStandardMaterial({ color: 0x3399ff, roughness: 0.35, metalness: 0.4 })
+      )
+      scene.add(torus)
+
+      // Post-process the rendered scene with a noisemaker program. `media()` samples
+      // the incoming scene (NoisemakerPass binds the composer's readBuffer to it);
+      // the rest of the chain is ordinary DSL. Drop `media()` for a generative overlay.
+      const composer = new EffectComposer(renderer)
+      composer.addPass(new RenderPass(scene, camera))
+      const nmPass = new NoisemakerPass(renderer, { width: innerWidth, height: innerHeight, loopDuration: 6 })
+      await nmPass.compile(`
+        search synth, filter
+        media().bloom().hs(rotation: 30).vignette().write(o0)
+        render(o0)
+      `)
+      nmPass.renderToScreen = true
+      composer.addPass(nmPass)
+
+      addEventListener('resize', () => {
+        renderer.setSize(innerWidth, innerHeight)
+        composer.setSize(innerWidth, innerHeight)
+        camera.aspect = innerWidth / innerHeight
+        camera.updateProjectionMatrix()
+      })
+
+      const clock = new THREE.Clock()
+      renderer.setAnimationLoop(() => {
+        const dt = clock.getDelta()
+        torus.rotation.x += dt * 0.6
+        torus.rotation.y += dt * 0.9
+        composer.render(dt)
+      })
+    </script>
+  </body>
+</html>

@@ -153,6 +153,9 @@ export class ThreeBackend extends Backend {
   destroyTexture(id) {
     const info = this.textures.get(id)
     if (info?.target) info.target.dispose()
+    // Dispose a wrapper WE created for an HTML source; never the caller's bound GPU
+    // texture (external, no sourceTexture) — that belongs to the EffectComposer/scene.
+    if (info?.sourceTexture) info.sourceTexture.dispose()
     this.textures.delete(id)
   }
 
@@ -546,8 +549,41 @@ export class ThreeBackend extends Backend {
     this.renderer.setRenderTarget(null)
   }
 
-  updateTextureFromSource(_id, _source, _opts) {
-    throw new Error('ThreeBackend.updateTextureFromSource not yet implemented')
+  // Bind an already-resident GPU texture (e.g. an EffectComposer readBuffer, or a
+  // NoisemakerTexture) under `id` so resolveInputTexture finds it as a pass input.
+  // Marked external so destroyTexture never disposes the caller-owned texture.
+  setExternalTexture(id, texture, width, height) {
+    const existing = this.textures.get(id)
+    if (existing && !existing.external) this.destroyTexture(id) // replace an owned RT
+    this.textures.set(id, {
+      texture,
+      external: true,
+      width: width ?? texture?.image?.width ?? this.width ?? 0,
+      height: height ?? texture?.image?.height ?? this.height ?? 0,
+    })
+  }
+
+  // Wrap an HTML video/image/canvas/ImageBitmap as a sampleable input (media effects,
+  // NoisemakerPass non-RT sources). Matches the reference backend contract; returns dims.
+  updateTextureFromSource(id, source, opts = {}) {
+    const info = this.textures.get(id)
+    if (info?.sourceTexture && info.sourceEl === source) {
+      info.sourceTexture.needsUpdate = true // same element, new frame
+      return { width: info.width, height: info.height }
+    }
+    if (info?.sourceTexture) info.sourceTexture.dispose()
+    const tex = new THREE.Texture(source)
+    tex.colorSpace = THREE.NoColorSpace
+    tex.magFilter = THREE.LinearFilter
+    tex.minFilter = THREE.LinearFilter
+    tex.wrapS = THREE.ClampToEdgeWrapping
+    tex.wrapT = THREE.ClampToEdgeWrapping
+    tex.flipY = opts.flipY !== false
+    tex.needsUpdate = true
+    const width = source.videoWidth || source.naturalWidth || source.width || 1
+    const height = source.videoHeight || source.naturalHeight || source.height || 1
+    this.textures.set(id, { texture: tex, external: true, sourceTexture: tex, sourceEl: source, width, height })
+    return { width, height }
   }
 
   uploadDataTexture(id, data, width, height) {
