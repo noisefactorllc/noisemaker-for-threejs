@@ -1,9 +1,0 @@
-# deriv
-
-Derivative-based edge detection
-
-## Parameters
-
-| Parameter | Type | Default | Range | Description |
-|-----------|------|---------|-------|-------------|
-| amount | float | 2 | 0.1-5 | Amount |

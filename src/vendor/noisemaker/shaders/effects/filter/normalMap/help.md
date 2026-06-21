@@ -1,3 +1,0 @@
-# normalMap
-
-Normal map generation

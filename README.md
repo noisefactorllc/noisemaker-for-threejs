@@ -1,23 +1,28 @@
 # noisemaker-three
 
-The noisemaker shader-effect platform for **three.js**.
+**A thin three.js _adapter_ for the noisemaker shader engine — not a port.**
 
-Because three.js **is JavaScript** — the same language as the reference platform — noisemaker-three
-takes a fundamentally smaller, higher-fidelity approach than a port that must cross a language
-boundary (and therefore re-implement the executor and re-port every shader):
+noisemaker-three is ~2,900 lines of authored code over the **unmodified** noisemaker reference
+engine. Because the reference already runs on JavaScript + WebGL2, there is nothing to
+re-implement or re-port:
 
-- **The entire DSL compiler is reused verbatim** (`lang/` lexer→parser→validator +
-  `runtime/` expander/resources/compiler), vendored byte-for-byte and never hand-edited.
-- **The executor (`runtime/pipeline.js`) is reused verbatim** — it is coupled only to an
-  abstract `Backend` interface (`constructor(graph, backend)`).
+- **The DSL compiler, expander, and executor (`runtime/pipeline.js`) are the reference, unchanged.**
 - **All 182 effects' GLSL (`#version 300 es`) runs directly** via `RawShaderMaterial` +
   `glslVersion: THREE.GLSL3`. No shader re-porting.
-- **The only substantial new code is one `ThreeBackend`** implementing the `Backend` interface
-  on three.js primitives (`WebGLRenderTarget`, `RawShaderMaterial`, a fullscreen triangle,
-  double-buffered surfaces), plus a thin integration surface.
+- **The only authored code of substance is one `ThreeBackend`** (~760 LOC) implementing the
+  reference's abstract `Backend` interface on three.js primitives (`WebGLRenderTarget`,
+  `RawShaderMaterial`, a fullscreen triangle, double-buffered surfaces), plus the
+  `NoisemakerCanvas`/`Texture`/`Pass` wrappers and a parity harness.
+
+**The reference engine is never committed here.** At runtime it loads from the noisemaker CDN —
+`https://shaders.noisedeck.app/1/noisemaker-shaders-core.esm.js` (the engine bundle, which exports
+`Backend`/`Pipeline`/`compileGraph`/… so `ThreeBackend` can be injected) plus `…/1/effects`
+(effect bundles, fetched on demand) — the same source the production apps consume. For offline
+parity work, a local mirror is synced into the **git-ignored** `src/vendor/` via `npm run sync`.
 
 The result: the 182 effects are not units of *porting* work — they are units of *parity
-verification* that pass for free when the backend is faithful.
+verification* that pass when the adapter is faithful (byte-identical, since it's the same shaders
+on the same WebGL2 driver the reference itself uses).
 
 ## Status
 
@@ -122,12 +127,20 @@ nmTex.update((performance.now() / 6000) % 1)
 
 ## Develop
 
-```bash
-npm install            # installs three (pinned) + dev tooling
-npm test               # capability gate, vendor integrity (vs committed manifest), compiler-in-repo, resources
+The repo contains only the adapter; the reference engine is **not committed** (it loads from the
+CDN at runtime — see Provenance). For local development and parity, mirror the reference into the
+git-ignored `src/vendor/` once:
 
-# Maintainer-only — these need an EXTERNAL reference checkout (NOT required to build or use this repo):
-npm run sync -- --ref /path/to/noisemaker     # re-vendor; or: NM_REFERENCE_ROOT=/path/to/noisemaker npm run sync
+```bash
+npm install                                            # three (pinned) + dev tooling
+NM_REFERENCE_ROOT=/path/to/noisemaker npm run sync     # populate the git-ignored src/vendor/ mirror
+npm test                                               # capability gate, vendor integrity, compiler, resources
+```
+
+`npm test` and the parity harness require that synced mirror (the adapter has nothing to drive
+without the engine). Golden parity for one program:
+
+```bash
 NM_REFERENCE_ROOT=/path/to/noisemaker bash parity/run.sh noise   # golden + candidate, compare pixels
 ```
 
@@ -148,7 +161,7 @@ src/
   runtime/create-three-pipeline.js
   integration/canvas.js         NoisemakerCanvas
   effects/                      loader (node + browser) + DSL effect extraction
-  vendor/noisemaker/**          synced reference core + effects (NEVER hand-edited)
+  vendor/**                     git-ignored local mirror of the reference (npm run sync; NEVER committed)
 parity/                         golden renderer, candidate renderer, compare.py, programs
 docs/                           design spec + implementation plan
 reference/                      engine-agnostic specs (shared with sibling ports)
@@ -156,13 +169,17 @@ reference/                      engine-agnostic specs (shared with sibling ports
 
 ## Provenance / status
 
-Greenfield and **fully self-contained**: this repo has no dependency on any sibling checkout — it
-builds, tests, and runs entirely from its own vendored copy of the reference under
-`src/vendor/noisemaker/`. The vendored core is pinned to a reference commit
-(`src/vendor/UPSTREAM.json`) and enforced byte-identical by `test/vendor-integrity.test.mjs`, which
-verifies every vendored file against a committed sha256 manifest (`src/vendor/vendor-manifest.json`)
-— so the integrity check needs no reference checkout and passes on any clone.
+**This is a thin adapter, not a port.** ~2,900 lines of authored code (`ThreeBackend` ~760,
+integration wrappers, parity harness) drive the unmodified noisemaker reference engine (~124k LOC:
+compiler + pipeline + every effect + GLSL). The 182/182 byte-identical result follows because it
+is the same `#version 300 es` shaders on the same WebGL2 driver the reference uses; the real work
+was making the `ThreeBackend` shim faithful.
 
-Re-vendoring (`npm run sync`) and golden rendering (`parity/export-golden.mjs`) are the only
-operations that touch the external reference, and it is supplied explicitly via `NM_REFERENCE_ROOT`
-(or `--ref`) — never assumed to sit at a fixed relative path.
+**The reference engine is never committed to this repo.** At runtime it loads from the noisemaker
+CDN — `https://shaders.noisedeck.app/1/noisemaker-shaders-core.esm.js` (the engine bundle; exports
+`Backend`, `Pipeline`, `compileGraph`, `registerEffect`, … so `ThreeBackend` is injected into the
+reference `Pipeline`) plus `…/1/effects` (effect bundles, on demand) — the same source the
+production apps use. For offline dev/parity, `npm run sync` (with `NM_REFERENCE_ROOT`) mirrors the
+reference into the **git-ignored** `src/vendor/`. Nothing under `src/vendor/` is ever committed
+(enforced by `.gitignore`); `test/vendor-integrity.test.mjs` verifies the local mirror against a
+synced sha256 manifest and skips cleanly when the mirror is absent.

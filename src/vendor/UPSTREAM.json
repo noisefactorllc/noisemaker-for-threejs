@@ -1,9 +1,0 @@
-{
-  "repo": "noisemaker",
-  "commit": "ba7e789f8bad6cfbbda6f23c792c946a4ed51a09",
-  "subtrees": [
-    "shaders/src",
-    "shaders/effects"
-  ],
-  "syncedAt": "2026-06-21T03:52:17.305Z"
-}
