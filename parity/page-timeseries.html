@@ -1,0 +1,74 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>noisemaker-three time-series parity</title>
+    <script type="importmap">
+      { "imports": { "three": "/node_modules/three/build/three.module.js" } }
+    </script>
+  </head>
+  <body>
+    <canvas id="c" width="256" height="256"></canvas>
+    <script type="module">
+      import * as THREE from 'three'
+      import { compileGraph } from '/src/vendor/noisemaker/shaders/src/runtime/compiler.js'
+      import { createPipeline } from '/src/vendor/noisemaker/shaders/src/runtime/pipeline.js'
+      import { createThreePipeline } from '/src/runtime/create-three-pipeline.js'
+      import { extractEffectIds } from '/src/effects/extract-effects.js'
+      import { registerEffectsBrowser } from '/src/effects/loader-browser.js'
+
+      THREE.ColorManagement.enabled = false
+
+      // Read a reference (vendored WebGL2 backend) render surface as linear float,
+      // matching export-golden.mjs (FBO on the surface texture, RGBA/FLOAT).
+      function readGolden(pipeline, size) {
+        const backend = pipeline.backend
+        const gl = backend.gl
+        const surfName = pipeline.graph?.renderSurface || 'o0'
+        const surf = pipeline.surfaces?.get(surfName)
+        const info = backend.textures?.get(pipeline.frameReadTextures?.get(surfName) ?? surf.read)
+        const fbo = gl.createFramebuffer()
+        gl.bindFramebuffer(gl.FRAMEBUFFER, fbo)
+        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, info.handle, 0)
+        const buf = new Float32Array(size * size * 4)
+        gl.readPixels(0, 0, size, size, gl.RGBA, gl.FLOAT, buf)
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null)
+        gl.deleteFramebuffer(fbo)
+        return buf
+      }
+
+      window.__nm_timeseries = async ({ dsl, mode, size, frames, captureEvery, loopFrames }) => {
+        const canvas = document.getElementById('c')
+        canvas.width = size
+        canvas.height = size
+        await registerEffectsBrowser(extractEffectIds(dsl))
+        const graph = compileGraph(dsl)
+
+        let pipeline
+        let readback
+        if (mode === 'candidate') {
+          const renderer = new THREE.WebGLRenderer({ canvas, preserveDrawingBuffer: true, alpha: true })
+          renderer.setPixelRatio(1)
+          renderer.setSize(size, size, false)
+          pipeline = await createThreePipeline(graph, { renderer, width: size, height: size, presentToScreen: false })
+          readback = () => pipeline.backend.readPixels().data
+        } else {
+          // GOLDEN: the vendored reference WebGL2 backend, driven identically.
+          pipeline = await createPipeline(graph, { canvas, width: size, height: size, preferWebGPU: false })
+          readback = () => readGolden(pipeline, size)
+        }
+
+        const captures = []
+        for (let i = 0; i < frames; i++) {
+          const t = (i % loopFrames) / loopFrames
+          pipeline.render(t)
+          if ((i + 1) % captureEvery === 0) {
+            captures.push({ frame: i + 1, data: Array.from(readback()) })
+          }
+        }
+        return captures
+      }
+      window.__nm_ts_ready = true
+    </script>
+  </body>
+</html>

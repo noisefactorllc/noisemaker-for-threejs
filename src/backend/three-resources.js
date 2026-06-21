@@ -7,17 +7,22 @@
  */
 import * as THREE from 'three'
 
-/** Map a noisemaker texture format string to a three.js texture data type. */
+/**
+ * Map a noisemaker texture format string to a three.js texture data type — matching the
+ * reference webgl2 resolveFormat EXACTLY. The reference recognizes ONLY rgba16f/rgba32f
+ * (+rgba8); ALL other strings (rgba8unorm, rgba16float, rgba32float, undefined) fall back
+ * to rgba8 = UnsignedByte. This is load-bearing: bloom declares "rgba16float" intermediates,
+ * which the reference renders as RGBA8 — clamping HDR to [0,1]. Using HalfFloat instead
+ * preserves HDR and diverges from the reference on HDR input (e.g. lighting → bloom).
+ */
 export function formatToType(fmt) {
   switch (fmt) {
-    case 'rgba8unorm':
-    case 'rgba8':
-      return THREE.UnsignedByteType
+    case 'rgba16f':
+      return THREE.HalfFloatType
     case 'rgba32f':
       return THREE.FloatType
-    case 'rgba16f':
     default:
-      return THREE.HalfFloatType
+      return THREE.UnsignedByteType
   }
 }
 

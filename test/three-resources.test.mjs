@@ -10,9 +10,13 @@ import {
 
 test('formatToType maps noisemaker formats to three.js types', () => {
   assert.equal(formatToType('rgba16f'), THREE.HalfFloatType)
-  assert.equal(formatToType('rgba8unorm'), THREE.UnsignedByteType)
   assert.equal(formatToType('rgba32f'), THREE.FloatType)
-  assert.equal(formatToType(undefined), THREE.HalfFloatType) // default
+  // Reference resolveFormat recognizes only rgba16f/rgba32f(+rgba8); everything else
+  // (rgba8unorm, rgba16float, rgba32float, undefined) falls back to rgba8 = UnsignedByte.
+  assert.equal(formatToType('rgba8unorm'), THREE.UnsignedByteType)
+  assert.equal(formatToType('rgba16float'), THREE.UnsignedByteType)
+  assert.equal(formatToType('rgba32float'), THREE.UnsignedByteType)
+  assert.equal(formatToType(undefined), THREE.UnsignedByteType)
 })
 
 test('fullscreenTriangle has 3 verts on position', () => {
