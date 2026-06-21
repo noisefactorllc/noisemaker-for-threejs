@@ -411,8 +411,24 @@ export class ThreeBackend extends Backend {
     throw new Error('ThreeBackend.updateTextureFromSource not yet implemented')
   }
 
-  uploadDataTexture(_id, _data, _width, _height) {
-    throw new Error('ThreeBackend.uploadDataTexture not yet implemented')
+  uploadDataTexture(id, data, width, height) {
+    // Float32 RGBA data texture (e.g. the MIDI note grid 128x16). Sampled as a normal
+    // input via resolveInputTexture(id).
+    let info = this.textures.get(id)
+    if (info?.dataTexture && info.width === width && info.height === height) {
+      info.dataTexture.image.data = data
+      info.dataTexture.needsUpdate = true
+      return
+    }
+    if (info?.dataTexture) info.dataTexture.dispose()
+    const tex = new THREE.DataTexture(data, width, height, THREE.RGBAFormat, THREE.FloatType)
+    tex.colorSpace = THREE.NoColorSpace
+    tex.magFilter = THREE.NearestFilter
+    tex.minFilter = THREE.NearestFilter
+    tex.wrapS = THREE.ClampToEdgeWrapping
+    tex.wrapT = THREE.ClampToEdgeWrapping
+    tex.needsUpdate = true
+    this.textures.set(id, { texture: tex, dataTexture: tex, width, height, format: 'rgba32f' })
   }
 
   destroy() {
