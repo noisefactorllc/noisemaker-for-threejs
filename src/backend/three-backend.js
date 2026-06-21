@@ -81,6 +81,14 @@ export class ThreeBackend extends Backend {
     rt.texture.colorSpace = THREE.NoColorSpace
     const info = { target: rt, texture: rt.texture, width, height, format: spec.format, handle: rt }
     this.textures.set(id, info)
+    // Initialize to transparent black, like the reference webgl2 createTexture/createFBO.
+    // three.js leaves new RTs uninitialized; state sims (e.g. cellularAutomata) would
+    // diverge from garbage initial contents.
+    const prev = this.renderer.getRenderTarget()
+    this.renderer.setRenderTarget(rt)
+    this.renderer.setClearColor(0x000000, 0)
+    this.renderer.clear(true, false, false)
+    this.renderer.setRenderTarget(prev)
     return info
   }
 
