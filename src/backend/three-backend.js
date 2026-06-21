@@ -109,18 +109,23 @@ export class ThreeBackend extends Backend {
   async compileProgram(id, spec) {
     const source = spec.glsl || spec.source || spec.fragment
     if (!source) throw new Error(`compileProgram: no GLSL source for ${id}`)
-    const fragmentShader = stripVersion(source)
-    const vertexShader = spec.vertex ? stripVersion(spec.vertex) : DEFAULT_VERTEX_SHADER
-    const defines = {}
+    // Match the reference webgl2 injectDefines EXACTLY: prepend precision + defines
+    // as `#define KEY value` (stringified, so booleans stay `true`/`false` — GLSL ES
+    // `if (X)` needs a bool, not an int). Do NOT use three.js material.defines: it
+    // coerces/omits values (false is dropped) and would diverge from the reference.
+    // three.js (glslVersion: GLSL3) still prepends `#version 300 es`, giving the
+    // reference order: #version, precision, defines, source.
+    let definesBlock = 'precision highp float;\nprecision highp int;\n'
     for (const [k, v] of Object.entries(spec.defines || {})) {
-      defines[k] = typeof v === 'boolean' ? (v ? 1 : 0) : v
+      definesBlock += `#define ${k} ${v}\n`
     }
+    const fragmentShader = definesBlock + stripVersion(source)
+    const vertexShader = spec.vertex ? stripVersion(spec.vertex) : DEFAULT_VERTEX_SHADER
     const material = new THREE.RawShaderMaterial({
       glslVersion: THREE.GLSL3,
       vertexShader,
       fragmentShader,
       uniforms: {},
-      defines,
       depthTest: false,
       depthWrite: false,
       blending: THREE.NoBlending,
