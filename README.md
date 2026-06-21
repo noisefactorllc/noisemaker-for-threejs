@@ -29,10 +29,12 @@ Candidate output is byte-identical to the reference WebGL2 golden.
   a complex emergent program (3D perlin → 1M-agent flow field [emit/flow/pointsRender/billboards]
   → blur → o0; `navierStokes(read o0)` → palette/lighting/adjust → bloom/lens/vignette → o1) —
   matches the reference at `max-abs-diff=0.000` at every 5s sample across 1800 frames.
-- **Stateless breadth: 142 PASS** (`parity/sweep-three.sh`), every one at `max-abs-diff=0.000` —
-  synth, filter, mixer, classicNoisedeck, points (`wormhole`), MIDI data (`roll`); Tier-1 included.
-- **Stateful/continuous: 6/6 bit-exact** (`parity/sweep-stateful.sh`) — `navierStokes`,
-  `convolutionFeedback`, `temporalAberration`, `reactionDiffusion`, `cellularAutomata`, `feedback`.
+- **Stateless breadth: 162 PASS** (`parity/sweep-three.sh`), every one at `max-abs-diff=0.000` —
+  synth, filter, mixer, classicNoisedeck, points (`wormhole`), MIDI data (`roll`), the full 3D
+  namespace (synth3d/filter3d + render3d/renderLit3d/renderCubemap3d/renderCubemapSurface); Tier-1 included.
+- **Stateful/continuous: 9/9 bit-exact** (`parity/sweep-stateful.sh`) — 2D: `navierStokes`,
+  `convolutionFeedback`, `temporalAberration`, `reactionDiffusion`, `cellularAutomata`, `feedback`;
+  3D: `cellularAutomata3d`, `reactionDiffusion3d`, `flow3d` (agent sim).
 
 Two parity harnesses: `sweep-three.sh` (snapshot, for stateless effects) and `timeseries.mjs`/
 `sweep-stateful.sh` (drives golden [vendored reference WebGL2] + candidate [ThreeBackend] with the
@@ -45,12 +47,21 @@ Parity criterion: `max-abs-diff ≤ 2/255` AND `SSIM ≥ 0.98` (all PASSes hit 0
 
 ### Genuinely not yet covered (see `docs/IMPLEMENTATION-PLAN.md`)
 - **`remap`**: RGB pixel-perfect (ssim 1.0) but the alpha channel diverges (new upstream UBO path).
-- **Audio-driven** (`scope`, `spectrum`) and `media`: need audio / external input — deferred.
-- **3D**: `synth3d`/`filter3d` (`createTexture3D` + cubemaps, Phase 5.5).
-- **`buddhabrot`** and a few other points/agent effects: not yet parity-checked individually.
-- **11 classicNoisedeck meta/param effects** (`composite`, `effects`, `colorLab`, `kaleido`,
-  `refract`, …): need hand-authored DSL (auto-generated default programs are invalid for them).
+- **Audio-driven** (`scope`, `spectrum`), `media`, and **mesh** (`meshLoader`/`meshRender`, OBJ via
+  `canvas.loadOBJFromURL`): need external input — deferred.
+- **`loopBegin`/`loopEnd`** accumulator-feedback primitives: shaders compile, but the loop-accumulator
+  parity path is not yet exercised.
 - Broader corpus validation against **blaster.noisedeck.app**.
+
+### Done since first cut
+- **Full 3D namespace bit-exact** (`max-abs-diff=0.000`): `synth3d` (×7), `filter3d` (×2), and the
+  3D renderers `render3d`/`renderLit3d`/`renderCubemap3d`/`renderCubemapSurface`. Volumes are
+  2D-flattened atlases raymarched in-shader (no `createTexture3D`/GL-cubemaps needed); cubemap
+  faces render to a 2D `rgba16f` target via the `cubeBasis` uniform.
+- **classicNoisedeck meta/param effects** (`composite`, `effects`, `colorLab`, `kaleido`,
+  `refract`, …): pass as filters with hand-authored DSL.
+- **points/agent effects** (attractor, buddhabrot, dla, flock, flow, hydraulic, lenia, life,
+  physarum, physical): bit-exact via time-series.
 
 ### Integration surface
 - **`NoisemakerCanvas`** — standalone full-screen renderer (the parity workhorse). ✅
@@ -62,9 +73,9 @@ Parity criterion: `max-abs-diff ≤ 2/255` AND `SSIM ≥ 0.98` (all PASSes hit 0
 ### Remaining (see `docs/IMPLEMENTATION-PLAN.md`)
 - Phase 3 backend features (MRT mixed-format, points/billboards, additive blend,
   `uploadDataTexture`): **done.** ✅
-- Phase 5.5: 3D volumes (`createTexture3D`) and cubemaps for `synth3d`/`filter3d`.
-- Hand-authored DSL for 11 classicNoisedeck meta/param effects; stateful-sim multi-sample
-  verification (30s/5s) for chaotic agent + continuous solvers; `remap` alpha.
+- Phase 5.5: 3D volumes + cubemaps for `synth3d`/`filter3d`/`render`: **done** (2D-flattened
+  atlases raymarched in-shader; no real `createTexture3D`/GL-cubemaps needed). ✅
+- `remap` alpha (UBO path); external-input effects (audio, media, mesh); `loopBegin`/`loopEnd`.
 - `NoisemakerPass` (EffectComposer) — needs source-surface input binding.
 
 ## Quickstart
