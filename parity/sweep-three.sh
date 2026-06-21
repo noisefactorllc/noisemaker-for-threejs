@@ -24,7 +24,8 @@ for prog in "$ROOT"/parity/programs/*.dsl; do
   # harness — see parity/sweep-stateful.sh. (Note: this includes reactionDiffusion, which the
   # sibling Metal-vs-Vulkan ports skip; on our shared ANGLE/Metal driver it is bit-exact.)
   case "$name" in
-    reactionDiffusion|navierStokes|convolutionFeedback|temporalAberration)
+    reactionDiffusion|navierStokes|convolutionFeedback|temporalAberration|\
+    synth3d_cellularAutomata3d|synth3d_reactionDiffusion3d|filter3d_flow3d)
       echo "SKIP $name | stateful — bit-exact via parity/sweep-stateful.sh (snapshot is fixed-time/unfair)" | tee -a "$OUT"
       skip=$((skip+1)); continue ;;
   esac

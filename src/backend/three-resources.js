@@ -59,7 +59,14 @@ void main() {
 }
 `
 
-/** Remove a leading `#version ...` line so three.js can supply its own for GLSL3. */
+/**
+ * Remove the `#version ...` directive so three.js can supply its own for GLSL3.
+ * GLSL guarantees `#version` is the first non-comment token, but some effects
+ * (e.g. render/render3d) put a doc-comment block ahead of it, so the directive
+ * is not on line 1. The `m` flag matches it at the start of any line; `.replace`
+ * without `g` removes only the first (real) directive. Leaving the preceding
+ * comment in place is harmless — comments are inert after three's prepend.
+ */
 export function stripVersion(src) {
-  return src.replace(/^[ \t]*#version[^\n]*\n/, '')
+  return src.replace(/^[ \t]*#version[^\n]*\r?\n/m, '')
 }
