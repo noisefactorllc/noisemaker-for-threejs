@@ -11,7 +11,7 @@
 # snapshot harness made look divergent.
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-EFFECTS="${*:-navierStokes convolutionFeedback temporalAberration reactionDiffusion cellularAutomata feedback synth3d_cellularAutomata3d synth3d_reactionDiffusion3d filter3d_flow3d}"
+EFFECTS="${*:-navierStokes convolutionFeedback temporalAberration reactionDiffusion cellularAutomata feedback synth3d_cellularAutomata3d synth3d_reactionDiffusion3d filter3d_flow3d agent_buddhabrot agent_dla agent_physarum agent_physical}"
 worst=0
 for name in $EFFECTS; do
   out=$(node "$ROOT/parity/timeseries.mjs" "$ROOT/parity/programs/$name.dsl" --frames 30 --capture 15 --size 128 2>&1)
