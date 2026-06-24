@@ -248,3 +248,9 @@ committed; never the engine bytes. The version is pinned in `vendor/fetch.sh` (`
 Param **aliases** (alt arg names like `backgroundColor`→`bgColor`) are the one capability the
 published bundle doesn't expose (`registerParamAliases` is not an export); the adapter accepts the
 canonical names the noisedeck UI emits (the live corpus is unaffected).
+
+## License
+
+Released under the MIT License (see [LICENSE](LICENSE)). Use of the Noisemaker and Noise Factor names in derivative products is subject to the [Trademark Policy](TRADEMARK.md).
+
+Copyright © 2026 Noise Factor LLC
