@@ -393,18 +393,43 @@ export class ThreeBackend extends Backend {
         this.setUniform(material, samplerName, this.resolveInputTexture(texId, state))
       }
     }
-    // Additive blend (reference uses gl.blendFunc(ONE,ONE)) for deposit/accumulation passes.
+    // Blend state for deposit/accumulation passes. `blend: true` (or any non-array truthy)
+    // is additive gl.blendFunc(ONE,ONE) — the bare deposit. `blend: ['SRC','DST']` is a
+    // per-pass custom blend func (e.g. pointsBillboardRender's alpha deposit_alpha pass uses
+    // ['ONE','ONE_MINUS_SRC_ALPHA']); mirror the reference webgl2 resolveBlendFactor mapping.
     if (pass.blend) {
       material.blending = THREE.CustomBlending
       material.blendEquation = THREE.AddEquation
-      material.blendSrc = THREE.OneFactor
-      material.blendDst = THREE.OneFactor
+      if (Array.isArray(pass.blend)) {
+        material.blendSrc = this._blendFactor(pass.blend[0])
+        material.blendDst = this._blendFactor(pass.blend[1])
+      } else {
+        material.blendSrc = THREE.OneFactor
+        material.blendDst = THREE.OneFactor
+      }
       material.transparent = true
     } else if (material.blending !== THREE.NoBlending) {
       material.blending = THREE.NoBlending
       material.transparent = false
     }
     return material
+  }
+
+  // Map a reference blend-factor name (e.g. 'ONE', 'ONE_MINUS_SRC_ALPHA') to a THREE factor.
+  _blendFactor(name) {
+    switch (String(name).toLowerCase()) {
+      case 'zero': return THREE.ZeroFactor
+      case 'one': return THREE.OneFactor
+      case 'src': case 'src-color': case 'src_color': return THREE.SrcColorFactor
+      case 'one-minus-src': case 'one_minus_src_color': return THREE.OneMinusSrcColorFactor
+      case 'dst': case 'dst-color': case 'dst_color': return THREE.DstColorFactor
+      case 'one-minus-dst': case 'one_minus_dst_color': return THREE.OneMinusDstColorFactor
+      case 'src-alpha': case 'src_alpha': return THREE.SrcAlphaFactor
+      case 'one-minus-src-alpha': case 'one_minus_src_alpha': return THREE.OneMinusSrcAlphaFactor
+      case 'dst-alpha': case 'dst_alpha': return THREE.DstAlphaFactor
+      case 'one-minus-dst-alpha': case 'one_minus_dst_alpha': return THREE.OneMinusDstAlphaFactor
+      default: return THREE.OneFactor
+    }
   }
 
   executePass(pass, state) {
