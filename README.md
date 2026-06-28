@@ -55,23 +55,43 @@ npm run vendor     # fetch the Noisemaker engine from the CDN into vendor/ (git-
 The `vendor` step is required once: it downloads the engine and effect bundles the adapter drives.
 The engine bytes are never committed — only the fetch script is.
 
+Then serve the repo root with any static server and open an example in your browser:
+
+```bash
+npx serve .        # or any static server, e.g. python3 -m http.server
+```
+
+Open `examples/texture-on-mesh.html` (or `examples/effect-composer-pass.html`) from the served
+root. The examples are ES modules, so they must be served over HTTP — opening them via `file://`
+will not work.
+
 ## Your first render
 
-```js
-import { NoisemakerCanvas } from 'noisemaker-three'   // three is a peer dependency
+Serve the repo root (see Install above) and open an HTML page like this one. An import map tells the
+browser where to find `three` (the adapter imports it by name); the adapter itself loads from
+`/src/index.js`:
 
-const nm = new NoisemakerCanvas(document.querySelector('canvas'), { width: 512, height: 512 })
-await nm.compile(`
-  search synth, filter
-  noise(seed: 1, scaleX: 50, scaleY: 50).bloom().write(o0)
-  render(o0)
-`)
+```html
+<script type="importmap">
+  { "imports": { "three": "/node_modules/three/build/three.module.js" } }
+</script>
+<canvas></canvas>
+<script type="module">
+  import { NoisemakerCanvas } from '/src/index.js'
 
-function frame(t) {
-  nm.renderFrame((t / 4000) % 1)
+  const nm = new NoisemakerCanvas(document.querySelector('canvas'), { width: 512, height: 512 })
+  await nm.compile(`
+    search synth, filter
+    noise(seed: 1, scaleX: 50, scaleY: 50).bloom().write(o0)
+    render(o0)
+  `)
+
+  function frame(t) {
+    nm.renderFrame((t / 4000) % 1)
+    requestAnimationFrame(frame)
+  }
   requestAnimationFrame(frame)
-}
-requestAnimationFrame(frame)
+</script>
 ```
 
 **Every DSL program** has the same shape: name the namespaces it uses (`search synth, filter`),
@@ -84,7 +104,7 @@ A `NoisemakerTexture` runs a DSL program offscreen and hands you a normal `THREE
 your renderer, so you can drop it onto any material:
 
 ```js
-import { NoisemakerTexture } from 'noisemaker-three'
+import { NoisemakerTexture } from '/src/index.js'   // served from the repo root (see Install)
 
 const nmTex = new NoisemakerTexture(renderer, { width: 512, height: 512 })
 await nmTex.compile('search synth\nnoise(octaves: 4, speed: 1).write(o0)\nrender(o0)')
@@ -132,12 +152,15 @@ The adapter drives the fetched CDN engine, so `npm run vendor` is the only setup
 
 ```bash
 npm test           # capability + three.js resource checks
-npm run parity     # diff every effect against the reference engine
+npm run parity     # diff every corpus program (the live noisedeck gallery) against the reference engine
 ```
 
 Parity works by running the **same** CDN engine two ways — once through its own WebGL2 backend (the
-"golden") and once through `ThreeBackend` (the candidate) — and comparing the rendered frames.
-Methodology and per-effect results: **[STATUS.md](STATUS.md)**.
+"golden") and once through `ThreeBackend` (the candidate) — and comparing the rendered frames. To
+check a single effect, run the time-series harness directly — `node parity/timeseries.mjs
+parity/programs/<effect>.dsl` — or run `parity/sweep-stateful.sh` for the stateful/continuous
+effects (navier–stokes, reaction-diffusion, agents). Methodology and per-effect results:
+**[STATUS.md](STATUS.md)**.
 
 ## Repo layout
 
