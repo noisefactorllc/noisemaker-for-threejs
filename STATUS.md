@@ -1,6 +1,6 @@
 # noisemaker-three — status & parity
 
-*Last verified 2026-06-21 on Apple Silicon / ANGLE + Metal (WebGL2). The sources of truth are
+*Last verified 2026-07-09 on Apple Silicon / ANGLE + Metal (WebGL2). The sources of truth are
 `parity/sweep-corpus.sh` and `parity/timeseries.mjs`.*
 
 This file holds the detailed coverage and parity numbers. For what the project is and how to use it,
@@ -8,14 +8,15 @@ see the [README](README.md).
 
 ## Coverage
 
-**184 effects** across 8 namespaces — the published catalog (`vendor/noisemaker/effects/manifest.json`).
-**183 of 184 render byte-identical** to the reference engine; the one exception is `filter/text`
+**185 effects** across 8 namespaces — the published catalog (`vendor/noisemaker/effects/manifest.json`;
+`filter/parallax` new since the last sync).
+**184 of 185 render byte-identical** to the reference engine; the one exception is `filter/text`
 (see [Known limits](#known-limits)).
 
 | Namespace | Effects | Parity |
 |---|---|---|
 | `synth` | 29 | byte-identical (`scope` / `spectrum` / `media` via injected input) |
-| `filter` | 90 | byte-identical (89; `text` untested) |
+| `filter` | 91 | byte-identical (90; `text` untested) |
 | `mixer` | 15 | byte-identical |
 | `classicNoisedeck` | 20 | byte-identical (meta/param effects: `composite`, `kaleido`, `refract`, …) |
 | `points` / `render` | 10 / 11 | byte-identical (agents via time-series; `meshLoader` / `meshRender` via injected OBJ) |
@@ -83,7 +84,7 @@ The binding/upload infrastructure exists (`setExternalTexture`, `updateTextureFr
 
 ## Known limits
 
-Coverage is measured against the published 184-effect catalog.
+Coverage is measured against the published 185-effect catalog.
 
 - **`filter/text` — untested (the lone uncovered effect).** It rasterizes a string through Canvas2D
   fonts. No deterministic-injection fixture was built for it, glyph rendering is OS/font-dependent,
@@ -113,3 +114,12 @@ Coverage is measured against the published 184-effect catalog.
   exports it) so alternate arg names resolve.
 - **Corpus 88/88** — reached automatically if `chromeicosahedroninterior` + `vaporwaveflyover` are
   ever published to the CDN catalog.
+- **Upstream has a large unpublished delta.** As of this sync, the Noisemaker engine's own
+  development is well ahead of what `shaders.noisedeck.app/1` actually serves — on the order of
+  twenty more filters (`unsharpMask`, `highPass`, `median`, `morphology`, `directionalBlur`,
+  `spinBlur`, `scatter`, `wind`, `pondRipples`, `extrude`, `halftone`, `stipple`, `oilPaint`,
+  `watercolor`, `plasticWrap`, `relief`, `photocopy`, `stamp`, `chrome`, `hatch`) plus assorted engine
+  fixes, not on the CDN yet. (`filter/parallax` was part of that same batch of work and *did* land on
+  `/1` this sync — see Coverage.) Nothing to do here — this adapter has no acquisition path other than
+  the published CDN (by design — see `vendor/fetch.sh`), so `bash vendor/fetch.sh` picks up the rest
+  automatically whenever a future publish ships them.

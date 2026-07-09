@@ -16,7 +16,7 @@ render(o0)
 That little language is Noisemaker's **DSL** (a domain-specific language for visuals). The original
 engine runs in the browser at [noisedeck.app](https://noisedeck.app).
 
-**noisemaker-three** runs that same engine in **three.js**, so you can use Noisemaker's ~180 effects
+**noisemaker-three** runs that same engine in **three.js**, so you can use Noisemaker's ~185 effects
 as live textures, materials, and backgrounds in any three.js scene.
 
 This is a **thin adapter, not a port** — about 2,900 lines of new code wrapped around the
@@ -120,7 +120,7 @@ Runnable examples: [`examples/texture-on-mesh.html`](examples/texture-on-mesh.ht
 
 ## What works today
 
-- **Essentially the whole published catalog renders** (~180 effects: 2D, 3D, particle/agent sims,
+- **Essentially the whole published catalog renders** (~185 effects: 2D, 3D, particle/agent sims,
   and fluid) and is **pixel-identical to the web reference** — it's the same shaders running on the
   same WebGL2 driver.
 - **Particle/agent sims and fluid (navier–stokes)** match exactly, even frame-by-frame over long
