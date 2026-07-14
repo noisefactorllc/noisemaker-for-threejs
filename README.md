@@ -16,7 +16,7 @@ render(o0)
 That little language is Noisemaker's **DSL** (a domain-specific language for visuals). The original
 engine runs in the browser at [noisedeck.app](https://noisedeck.app).
 
-**noisemaker-three** runs that same engine in **three.js**, so you can use Noisemaker's ~185 effects
+**noisemaker-three** runs that same engine in **three.js**, so you can use Noisemaker's ~210 effects
 as live textures, materials, and backgrounds in any three.js scene.
 
 This is a **thin adapter, not a port** — about 2,900 lines of new code wrapped around the
@@ -120,9 +120,11 @@ Runnable examples: [`examples/texture-on-mesh.html`](examples/texture-on-mesh.ht
 
 ## What works today
 
-- **Essentially the whole published catalog renders** (~185 effects: 2D, 3D, particle/agent sims,
+- **Essentially the whole published catalog renders** (~210 effects: 2D, 3D, particle/agent sims,
   and fluid) and is **pixel-identical to the web reference** — it's the same shaders running on the
-  same WebGL2 driver.
+  same WebGL2 driver. Coverage includes every compile-time `MODE`/`define`-selected variant of every
+  effect that has one (artistic filters like `texture`, `strokes`, `hatch`, `halftone`, …), not just
+  each effect's default.
 - **Particle/agent sims and fluid (navier–stokes)** match exactly, even frame-by-frame over long
   runs.
 - **3D effects work** — volumetric raymarching and cubemaps included.
@@ -159,8 +161,9 @@ Parity works by running the **same** CDN engine two ways — once through its ow
 "golden") and once through `ThreeBackend` (the candidate) — and comparing the rendered frames. To
 check a single effect, run the time-series harness directly — `node parity/timeseries.mjs
 parity/programs/<effect>.dsl` — or run `parity/sweep-stateful.sh` for the stateful/continuous
-effects (navier–stokes, reaction-diffusion, agents). Methodology and per-effect results:
-**[STATUS.md](STATUS.md)**.
+effects (navier–stokes, reaction-diffusion, agents), or `node parity/sweep-programs.mjs` for the
+full roster (one fixture per effect, plus one per compile-time mode variant — 300 fixtures).
+Methodology and per-effect results: **[STATUS.md](STATUS.md)**.
 
 ## Repo layout
 
