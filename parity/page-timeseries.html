@@ -139,6 +139,18 @@
         }
 
         if (inject) await applyInject(pipeline, inject, size)
+        // Mesh data lands via a direct backend upload (uploadMeshData), outside the normal
+        // pass-graph write path. The very first pipeline.render() after that upload is where
+        // meshRender's "count: input" vertex count first gets threaded through the compiled
+        // graph's own per-frame state -- both backends need that one render to settle before
+        // the injected mesh is what a captured frame actually shows. This mirrors the
+        // reference engine's OWN test convention of always rendering twice before asserting
+        // anything (e.g. its test_artistic_effect_release.mjs / test_corrective_mode_variants.mjs
+        // call `renderer.render(t); renderer.render(t)` unconditionally) -- frame index 1 with
+        // zero prior renders is never a moment the engine's own authors consider meaningful to
+        // sample. Scoped to mesh specifically: audio/image injection (setAudioState /
+        // updateTextureFromSource) has no such settle frame and is already bit-exact at frame 1.
+        if (inject?.mesh) pipeline.render(0)
 
         const captures = []
         for (let i = 0; i < frames; i++) {
