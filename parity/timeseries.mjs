@@ -9,6 +9,7 @@
 //
 // Usage: node timeseries.mjs <program.dsl> [--frames 1800] [--capture 300] [--size 256]
 //        [--loop 600] [--py <python>]
+//        node timeseries.mjs --batch-manifest <json> [--py <python>]
 
 import { readFileSync, writeFileSync, createReadStream, existsSync, statSync, mkdirSync } from 'node:fs'
 import { dirname, resolve, basename, join, extname } from 'node:path'
@@ -22,28 +23,46 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const repoRoot = resolve(__dirname, '..')
 
 const argv = process.argv.slice(2)
-const dslPath = argv[0]
-if (!dslPath) { process.stderr.write('usage: node timeseries.mjs <program.dsl> [--frames N] [--capture K] [--size S] [--loop L]\n'); process.exit(2) }
 const opt = (f, d) => { const i = argv.indexOf(f); return i >= 0 ? Number(argv[i + 1]) : d }
-const frames = opt('--frames', 1800)
-const capture = opt('--capture', 300)
-const size = opt('--size', 256)
-const loopFrames = opt('--loop', 600) // 10s loop @ 60fps
 const pyIdx = argv.indexOf('--py')
 const PY = pyIdx >= 0 ? argv[pyIdx + 1] : join(repoRoot, 'parity', '.venv', 'bin', 'python')
-const name = basename(dslPath).replace(/\.dsl$/, '')
-const dsl = readFileSync(dslPath, 'utf8')
+const batchIdx = argv.indexOf('--batch-manifest')
 
-// Optional DETERMINISTIC external-input spec for long-tail effects (scope/spectrum/
-// media/mesh). Either `--inject <file.json>` or an auto-detected `<name>.inject.json`
-// sidecar next to the .dsl. Applied identically to golden + candidate (see page harness).
-const injectIdx = argv.indexOf('--inject')
-const injectSidecar = dslPath.replace(/\.dsl$/, '.inject.json')
-let inject = null
-if (injectIdx >= 0) inject = JSON.parse(readFileSync(argv[injectIdx + 1], 'utf8'))
-else if (existsSync(injectSidecar)) inject = JSON.parse(readFileSync(injectSidecar, 'utf8'))
-const outDir = join(repoRoot, 'parity', 'out', `ts_${name}`)
-mkdirSync(outDir, { recursive: true })
+function loadCase(raw) {
+  const dslPath = resolve(raw.dslPath)
+  const injectSidecar = dslPath.replace(/\.dsl$/, '.inject.json')
+  let inject = raw.inject || null
+  if (!inject && raw.injectPath) inject = JSON.parse(readFileSync(raw.injectPath, 'utf8'))
+  else if (!inject && existsSync(injectSidecar)) inject = JSON.parse(readFileSync(injectSidecar, 'utf8'))
+  return {
+    dslPath,
+    name: basename(dslPath).replace(/\.dsl$/, ''),
+    dsl: readFileSync(dslPath, 'utf8'),
+    frames: Number(raw.frames ?? 1800),
+    capture: Number(raw.capture ?? 300),
+    size: Number(raw.size ?? 256),
+    loopFrames: Number(raw.loopFrames ?? 600),
+    inject
+  }
+}
+
+let cases
+if (batchIdx >= 0) {
+  const manifest = JSON.parse(readFileSync(argv[batchIdx + 1], 'utf8'))
+  cases = manifest.cases.map(loadCase)
+} else {
+  const dslPath = argv[0]
+  if (!dslPath) { process.stderr.write('usage: node timeseries.mjs <program.dsl> [--frames N] [--capture K] [--size S] [--loop L]\n'); process.exit(2) }
+  const injectIdx = argv.indexOf('--inject')
+  cases = [loadCase({
+    dslPath,
+    frames: opt('--frames', 1800),
+    capture: opt('--capture', 300),
+    size: opt('--size', 256),
+    loopFrames: opt('--loop', 600),
+    injectPath: injectIdx >= 0 ? argv[injectIdx + 1] : null
+  })]
+}
 
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.json': 'application/json', '.glsl': 'text/plain', '.vert': 'text/plain', '.frag': 'text/plain', '.wgsl': 'text/plain' }
 function startServer() {
@@ -73,7 +92,8 @@ function toPng(flat, size) {
   return encodePng(size, size, top)
 }
 
-async function runMode(browser, port, mode) {
+async function runMode(browser, port, mode, testCase) {
+  const { dsl, size, frames, capture, loopFrames, inject } = testCase
   const page = await browser.newPage()
   const msgs = []
   page.on('console', (m) => msgs.push(`[${m.type()}] ${m.text()}`))
@@ -93,32 +113,51 @@ async function runMode(browser, port, mode) {
   return res
 }
 
-async function main() {
-  const { server, port } = await startServer()
-  const launchArgs = ['--disable-gpu-sandbox']
-  if (process.platform === 'darwin') launchArgs.push('--use-angle=metal')
-  const browser = await chromium.launch({ headless: true, args: launchArgs })
-  try {
+async function runCase(browser, port, testCase) {
+    const { name, frames, capture, size, loopFrames } = testCase
+    const outDir = join(repoRoot, 'parity', 'out', `ts_${name}`)
+    mkdirSync(outDir, { recursive: true })
     process.stderr.write(`[ts] ${name}: ${frames} frames, capture every ${capture}, size ${size}, loop ${loopFrames}\n`)
-    const golden = await runMode(browser, port, 'golden')
-    process.stderr.write(`[ts] golden: ${golden.length} captures\n`)
-    const candidate = await runMode(browser, port, 'candidate')
-    process.stderr.write(`[ts] candidate: ${candidate.length} captures\n`)
+    const golden = await runMode(browser, port, 'golden', testCase)
+    process.stderr.write(`[ts] ${name} golden: ${golden.length} captures\n`)
+    const candidate = await runMode(browser, port, 'candidate', testCase)
+    process.stderr.write(`[ts] ${name} candidate: ${candidate.length} captures\n`)
 
     let worst = 0
+    let failed = false
     for (let k = 0; k < golden.length; k++) {
       const fr = golden[k].frame
       const gPng = join(outDir, `f${fr}.golden.png`)
       const cPng = join(outDir, `f${fr}.candidate.png`)
       writeFileSync(gPng, toPng(golden[k].data, size))
       writeFileSync(cPng, toPng(candidate[k].data, size))
-      const r = spawnSync(PY, [join(repoRoot, 'parity', 'compare.py'), gPng, cPng, '--name', `${name}@f${fr}`, '--tolerance', '2.001', '--ssim-min', '0.98'], { encoding: 'utf8' })
+      const r = spawnSync(PY, [join(repoRoot, 'parity', 'compare.py'), gPng, cPng, '--name', `${name}@f${fr}`, '--tolerance', '0', '--ssim-min', '1'], { encoding: 'utf8' })
       const line = (r.stdout || r.stderr || '').trim().split('\n').pop()
       process.stdout.write(line + '\n')
+      if (r.status !== 0) failed = true
       const m = /max-abs-diff=([0-9.]+)/.exec(line)
       if (m) worst = Math.max(worst, Number(m[1]))
     }
     process.stdout.write(`[ts] ${name}: worst max-abs-diff across ${golden.length} samples = ${worst}\n`)
+    return !failed
+}
+
+async function main() {
+  const { server, port } = await startServer()
+  const launchArgs = ['--disable-gpu-sandbox']
+  if (process.platform === 'darwin') launchArgs.push('--use-angle=metal')
+  const browser = await chromium.launch({ headless: true, args: launchArgs })
+  try {
+    let failed = 0
+    for (const testCase of cases) {
+      try {
+        if (!await runCase(browser, port, testCase)) failed++
+      } catch (error) {
+        failed++
+        process.stderr.write(`[ts] ${testCase.name}: ERROR ${error?.stack || error}\n`)
+      }
+    }
+    if (failed > 0) process.exitCode = 1
   } finally {
     await browser.close()
     server.close()

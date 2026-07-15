@@ -1,0 +1,4 @@
+{
+  "_comment": "Deterministic 1024x1024 RGBA canvas (gradients + geometric shapes, no fonts) for text external-texture parity. parity/page-timeseries.html draws and uploads identical pixels to textTex_step_N in both backends, testing the text overlay shader without platform font rasterization.",
+  "image": { "size": 1024 }
+}

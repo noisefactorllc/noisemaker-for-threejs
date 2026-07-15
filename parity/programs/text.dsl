@@ -1,3 +1,3 @@
 search synth, filter
-noise().text().write(o0)
+noise().text(matteColor: #000000).write(o0)
 render(o0)

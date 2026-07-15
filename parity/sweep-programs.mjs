@@ -17,14 +17,15 @@
 // checked.
 //
 // Emits a machine-readable ledger keyed by fixture name -> {status, maxAbsDiff, golden,
-// candidate} at parity/out/mode-ledger.json (gitignored scratch, like CORPUS.txt — regenerate
-// any time by re-running this script).
+// candidate} at parity/out/mode-ledger.json. Filtered runs write a separately named partial
+// ledger so they cannot replace the canonical full-sweep evidence.
 //
 // Usage: node parity/sweep-programs.mjs [--frames 1] [--capture 1] [--size 128] [--filter <substr>]
-import { readdirSync, writeFileSync, mkdirSync } from 'node:fs'
+import { readdirSync, writeFileSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs'
 import { join, dirname, basename } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { spawnSync } from 'node:child_process'
+import { tmpdir } from 'node:os'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const repoRoot = join(__dirname, '..')
@@ -38,29 +39,47 @@ const filterSub = opt('--filter', null)
 const progDir = join(repoRoot, 'parity', 'programs')
 let files = readdirSync(progDir).filter((f) => f.endsWith('.dsl')).sort()
 if (filterSub) files = files.filter((f) => f.includes(filterSub))
+if (files.length === 0) {
+  console.error(`ERR  no parity fixtures matched${filterSub ? ` filter ${JSON.stringify(filterSub)}` : ''}`)
+  process.exit(1)
+}
 
 const outDir = join(repoRoot, 'parity', 'out')
 mkdirSync(outDir, { recursive: true })
 
 const ledger = {}
 let pass = 0, fail = 0, err = 0, worst = 0
+let batchOut = ''
+let batchFailure = null
+if (files.length > 0) {
+  const temp = mkdtempSync(join(tmpdir(), 'noisemaker-three-sweep-'))
+  const manifestPath = join(temp, 'manifest.json')
+  writeFileSync(manifestPath, `${JSON.stringify({
+    cases: files.map((f) => ({ dslPath: join(progDir, f), frames: Number(frames), capture: Number(capture), size: Number(size), loopFrames: 600 }))
+  }, null, 2)}\n`)
+  const timeseriesScript = process.env.NM_TIMESERIES_SCRIPT || join(repoRoot, 'parity', 'timeseries.mjs')
+  const r = spawnSync('node', [timeseriesScript, '--batch-manifest', manifestPath], { encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 })
+  batchOut = `${r.stdout || ''}${r.stderr || ''}`
+  if (r.status !== 0) batchFailure = `batched time-series runner exited ${r.status ?? r.signal ?? 'unknown'}`
+  rmSync(temp, { recursive: true, force: true })
+}
+
+const escapeRe = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 for (const f of files) {
   const name = basename(f, '.dsl')
-  const progPath = join(progDir, f)
-  const r = spawnSync('node', [join(repoRoot, 'parity', 'timeseries.mjs'), progPath, '--frames', frames, '--capture', capture, '--size', size], { encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 })
-  const out = `${r.stdout || ''}${r.stderr || ''}`
-  const passLine = /\[(PASS|FAIL)\] (\S+)@f(\d+): max-abs-diff=([0-9.]+) mean-abs-diff=([0-9.]+) ssim=([0-9.]+)/.exec(out)
-  const worstLine = /worst max-abs-diff across \d+ samples = ([0-9.]+)/.exec(out)
-  if (!passLine) {
-    const reasonLine = out.split('\n').filter((l) => /error|not yet|undefined|register/i.test(l))[0] || out.trim().split('\n').pop() || 'no result'
+  const sampleRe = new RegExp(`\\[(PASS|FAIL)\\] ${escapeRe(name)}@f(\\d+): max-abs-diff=([0-9.]+) mean-abs-diff=([0-9.]+) ssim=([0-9.]+)`, 'g')
+  const samples = [...batchOut.matchAll(sampleRe)]
+  const worstLine = new RegExp(`\\[ts\\] ${escapeRe(name)}: worst max-abs-diff across \\d+ samples = ([0-9.]+)`).exec(batchOut)
+  if (samples.length === 0 || !worstLine) {
+    const reasonLine = batchOut.split('\n').find((line) => line.includes(`[ts] ${name}: ERROR`)) || 'no result for fixture in batched time-series run'
     ledger[name] = { status: 'ERR', reason: reasonLine.slice(0, 200) }
     err++
     console.log(`ERR  ${name} | ${reasonLine.slice(0, 100)}`)
     continue
   }
-  const status = passLine[1]
-  const maxDiff = Number(worstLine ? worstLine[1] : passLine[4])
-  const frameNum = passLine[3]
+  const maxDiff = Number(worstLine[1])
+  const status = samples.some((sample) => sample[1] === 'FAIL') || maxDiff !== 0 ? 'FAIL' : 'PASS'
+  const frameNum = samples[0][2]
   const golden = join('parity', 'out', `ts_${name}`, `f${frameNum}.golden.png`)
   const candidate = join('parity', 'out', `ts_${name}`, `f${frameNum}.candidate.png`)
   ledger[name] = { status, maxAbsDiff: maxDiff, golden, candidate }
@@ -70,7 +89,13 @@ for (const f of files) {
   console.log(`${status} ${name} (max-abs-diff=${maxDiff})`)
 }
 
-const ledgerPath = join(outDir, 'mode-ledger.json')
+if (batchFailure) {
+  console.error(`ERR  batch | ${batchFailure}`)
+  err++
+}
+
+const ledgerSuffix = filterSub ? `.${filterSub.replace(/[^a-zA-Z0-9_.-]/g, '_')}` : ''
+const ledgerPath = join(outDir, `mode-ledger${ledgerSuffix}.json`)
 writeFileSync(ledgerPath, `${JSON.stringify(ledger, null, 1)}\n`)
 console.log('')
 console.log(`==== PROGRAMS SWEEP: PASS=${pass} FAIL=${fail} ERR=${err} worst=${worst} (frames=${frames} capture=${capture} size=${size}) ====`)
