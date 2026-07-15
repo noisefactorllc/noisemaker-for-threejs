@@ -13,7 +13,7 @@ build time via `NM_REFERENCE_ROOT` — never a fixed relative path): a live-codi
 a render graph that runs on **WebGL2 (GLSL)** and **WebGPU (WGSL)** backends. Ports to other engines
 already exist.
 
-This spec defines **Noisemaker for Three.js** (`noisemaker-threejs`): a port targeting **three.js**.
+This spec defines **Noisemaker for Three.js** (`noisemaker-for-threejs`): a port targeting **three.js**.
 
 ### What makes this port fundamentally different from its siblings
 
@@ -60,7 +60,7 @@ All three share one core (reused `Pipeline` + new `ThreeBackend`); they differ o
 - **Full live DSL** support from day one (free — the compiler is reused).
 - All 182 effects reachable; parity-verified in tiers, divergences documented.
 - A clean three.js integration surface (`NoisemakerCanvas`, `NoisemakerTexture`, `NoisemakerPass`).
-- Self-contained, publishable as an npm package (`noisemaker-threejs`).
+- Self-contained, publishable as an npm package (`noisemaker-for-threejs`).
 
 ### Non-Goals (v1)
 - **WGSL / WebGPU / three.js `WebGPURenderer` / TSL.** The reference already has a WebGPU backend;
@@ -236,10 +236,10 @@ not the compiler. This is a stronger guarantee than the siblings get.
 - Build with **esbuild** (same as reference) → ESM bundle + minified; per-effect lazy chunks optional.
 
 ```
-noisemaker-threejs/
+noisemaker-for-threejs/
 ├─ package.json            (type:module, peer dep three, esbuild scripts)
 ├─ README.md  ARCHITECTURE.md
-├─ docs/superpowers/specs/2026-06-20-noisemaker-threejs-design.md   (this file)
+├─ docs/superpowers/specs/2026-06-20-noisemaker-for-threejs-design.md   (this file)
 ├─ docs/IMPLEMENTATION-PLAN.md
 ├─ src/
 │  ├─ index.js                       (public exports)
@@ -308,5 +308,5 @@ DSL is free (reused), so there is **no "Phase 6 live compiler"** — it works fr
 
 ## 12. Provenance / housekeeping
 
-- Greenfield, self-contained `noisemaker-threejs` (no dependency on any sibling checkout). Git initialized.
+- Greenfield, self-contained `noisemaker-for-threejs` (no dependency on any sibling checkout). Git initialized.
 - **No Claude attribution** on commits (per standing user preferences).

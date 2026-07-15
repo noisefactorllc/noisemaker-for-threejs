@@ -1,5 +1,5 @@
 {
-  "name": "noisemaker-threejs",
+  "name": "noisemaker-for-threejs",
   "version": "0.0.1",
   "description": "Noisemaker for Three.js — reuses the reference DSL compiler and pipeline verbatim, adding a Three.js backend and integration surface",
   "type": "module",

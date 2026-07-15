@@ -31,7 +31,7 @@ test('a filtered sweep with no matching fixtures fails without writing evidence'
 })
 
 test('a comparator PASS line with a nonzero byte delta fails the sweep', () => {
-  const temp = mkdtempSync(join(tmpdir(), 'noisemaker-threejs-exactness-test-'))
+  const temp = mkdtempSync(join(tmpdir(), 'noisemaker-for-threejs-exactness-test-'))
   const name = `${filter}_nonzero_delta`
   const program = join(root, 'parity', 'programs', `${name}.dsl`)
   const partialLedger = join(root, 'parity', 'out', `mode-ledger.${filter}.json`)
@@ -59,7 +59,7 @@ test('a comparator PASS line with a nonzero byte delta fails the sweep', () => {
 })
 
 test('multiple fixtures use one batched time-series runner invocation', () => {
-  const temp = mkdtempSync(join(tmpdir(), 'noisemaker-threejs-batch-test-'))
+  const temp = mkdtempSync(join(tmpdir(), 'noisemaker-for-threejs-batch-test-'))
   const names = [`${filter}_a`, `${filter}_b`]
   const programs = names.map((name) => join(root, 'parity', 'programs', `${name}.dsl`))
   const partialLedger = join(root, 'parity', 'out', `mode-ledger.${filter}.json`)
@@ -96,7 +96,7 @@ test('multiple fixtures use one batched time-series runner invocation', () => {
 })
 
 test('a nonzero batched time-series exit cannot be reported as a passing sweep', () => {
-  const temp = mkdtempSync(join(tmpdir(), 'noisemaker-threejs-batch-exit-test-'))
+  const temp = mkdtempSync(join(tmpdir(), 'noisemaker-for-threejs-batch-exit-test-'))
   const name = `${filter}_child_exit`
   const program = join(root, 'parity', 'programs', `${name}.dsl`)
   const partialLedger = join(root, 'parity', 'out', `mode-ledger.${filter}.json`)
