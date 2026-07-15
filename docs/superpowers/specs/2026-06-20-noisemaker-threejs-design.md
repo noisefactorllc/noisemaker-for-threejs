@@ -1,4 +1,4 @@
-# noisemaker-three — Design Spec
+# Noisemaker for Three.js — Design Spec
 
 **Date:** 2026-06-20
 **Status:** Approved (user delegated decisions: "proceed autonomously")
@@ -13,7 +13,7 @@ build time via `NM_REFERENCE_ROOT` — never a fixed relative path): a live-codi
 a render graph that runs on **WebGL2 (GLSL)** and **WebGPU (WGSL)** backends. Ports to other engines
 already exist.
 
-This spec defines **`noisemaker-three`**: a port targeting **three.js**.
+This spec defines **Noisemaker for Three.js** (`noisemaker-threejs`): a port targeting **three.js**.
 
 ### What makes this port fundamentally different from its siblings
 
@@ -40,7 +40,7 @@ engineering is **one backend class**.
 ### Why port to three.js at all (the value-add)
 
 The reference is a standalone full-screen canvas renderer owning a raw WebGL2 context.
-noisemaker-three makes noisemaker a **first-class three.js citizen**:
+Noisemaker for Three.js makes Noisemaker a **first-class three.js citizen**:
 
 1. **`NoisemakerTexture`** — run a DSL program into an offscreen render target exposed as a
    `THREE.Texture`, usable on any material / as a scene background / environment map source.
@@ -60,7 +60,7 @@ All three share one core (reused `Pipeline` + new `ThreeBackend`); they differ o
 - **Full live DSL** support from day one (free — the compiler is reused).
 - All 182 effects reachable; parity-verified in tiers, divergences documented.
 - A clean three.js integration surface (`NoisemakerCanvas`, `NoisemakerTexture`, `NoisemakerPass`).
-- Self-contained, publishable as an npm package (`noisemaker-three`).
+- Self-contained, publishable as an npm package (`noisemaker-threejs`).
 
 ### Non-Goals (v1)
 - **WGSL / WebGPU / three.js `WebGPURenderer` / TSL.** The reference already has a WebGPU backend;
@@ -163,7 +163,7 @@ These are the known three.js footguns; each is a parity-gate checkpoint.
 
 ## 5. Reuse Mechanism (vendoring)
 
-noisemaker-three vendors the reference modules so it is self-contained and publishable (no sibling
+Noisemaker for Three.js vendors the reference modules so it is self-contained and publishable (no sibling
 checkout required to build, test, or use it). **`tools/sync-upstream.mjs`** (run by a maintainer with
 the external reference located via `--ref`/`NM_REFERENCE_ROOT`):
 
@@ -210,7 +210,7 @@ Reuse the siblings' language-agnostic harness verbatim:
 
 - **Golden:** `tools/export-graph.mjs` runs the **unchanged reference** `compileGraph(dsl)`;
   `parity/export-and-render.mjs` renders the golden PNG via the reference headless WebGL2 (Chromium).
-- **Candidate:** noisemaker-three (headless, via the same Chromium/Playwright path) renders the same
+- **Candidate:** Noisemaker for Three.js (headless, via the same Chromium/Playwright path) renders the same
   DSL through `ThreeBackend` to a PNG.
 - **Compare:** `parity/compare.py` — **max-abs-diff ≤ 2/255 AND SSIM ≥ 0.98** (default tolerance
   `2.001`); per-effect relaxations table from siblings (`newton`:255, `edge`:8, …); SSIM floor 0.98.
@@ -218,7 +218,7 @@ Reuse the siblings' language-agnostic harness verbatim:
   `blur` [multi-pass], `blendMode` [two-input]) must **all PASS** before bulk coverage.
 - **Sweep:** `parity/sweep.sh` runs all effects, tallies pass/fail, updates a coverage table.
 
-Note: because noisemaker-three runs the **same compiler** as the golden generator, the *graph* is
+Note: because Noisemaker for Three.js runs the **same compiler** as the golden generator, the *graph* is
 identical by construction — the harness is purely validating the **backend's rendering fidelity**,
 not the compiler. This is a stronger guarantee than the siblings get.
 
@@ -236,10 +236,10 @@ not the compiler. This is a stronger guarantee than the siblings get.
 - Build with **esbuild** (same as reference) → ESM bundle + minified; per-effect lazy chunks optional.
 
 ```
-noisemaker-three/
+noisemaker-threejs/
 ├─ package.json            (type:module, peer dep three, esbuild scripts)
 ├─ README.md  ARCHITECTURE.md
-├─ docs/superpowers/specs/2026-06-20-noisemaker-three-design.md   (this file)
+├─ docs/superpowers/specs/2026-06-20-noisemaker-threejs-design.md   (this file)
 ├─ docs/IMPLEMENTATION-PLAN.md
 ├─ src/
 │  ├─ index.js                       (public exports)
@@ -308,5 +308,5 @@ DSL is free (reused), so there is **no "Phase 6 live compiler"** — it works fr
 
 ## 12. Provenance / housekeeping
 
-- Greenfield, self-contained `noisemaker-three` (no dependency on any sibling checkout). Git initialized.
+- Greenfield, self-contained `noisemaker-threejs` (no dependency on any sibling checkout). Git initialized.
 - **No Claude attribution** on commits (per standing user preferences).

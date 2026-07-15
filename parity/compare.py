@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compare two PNGs for the noisemaker-three parity harness.
+"""Compare two PNGs for the Noisemaker for Three.js parity harness.
 
 Loads a GOLDEN reference PNG and a CANDIDATE PNG (both written by the time-series
 harness, parity/timeseries.mjs), computes max-abs-diff and a simple global SSIM,

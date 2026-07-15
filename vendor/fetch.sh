@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # vendor/fetch.sh — vendor the PUBLISHED Noisemaker shader engine from the production CDN.
 #
-# noisemaker-three is a THIN ADAPTER: it reuses the engine verbatim (same JS/WebGL2 runtime —
+# Noisemaker for Three.js is a THIN ADAPTER: it reuses the engine verbatim (same JS/WebGL2 runtime —
 # nothing is translated, only `ThreeBackend` is new). We fetch the published distribution
 # (https://shaders.noisedeck.app/<VERSION>) so the repo depends on NO sibling checkout and
 # commits NO engine bytes (node_modules posture). This is the same artifact noisedeck.app ships:

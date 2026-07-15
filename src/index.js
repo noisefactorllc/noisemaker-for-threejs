@@ -1,5 +1,5 @@
 /**
- * noisemaker-three public API.
+ * Noisemaker for Three.js public API.
  *
  * Integration surface: NoisemakerCanvas (standalone renderer), NoisemakerTexture
  * (program-as-THREE.Texture), NoisemakerPass (EffectComposer post-processing pass).

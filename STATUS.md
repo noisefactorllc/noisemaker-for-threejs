@@ -1,4 +1,4 @@
-# noisemaker-three — status & parity
+# Noisemaker for Three.js — status & parity
 
 *Last verified 2026-07-14 on Apple Silicon / ANGLE + Metal (WebGL2). The sources of truth are
 `parity/sweep-corpus.sh`, `parity/sweep-programs.mjs`, and `parity/timeseries.mjs`.*

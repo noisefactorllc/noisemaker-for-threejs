@@ -1,4 +1,4 @@
-# noisemaker-three
+# Noisemaker for Three.js
 
 > Run **Noisemaker**'s procedural visuals in **three.js**.
 
@@ -16,7 +16,7 @@ render(o0)
 That little language is Noisemaker's **DSL** (a domain-specific language for visuals). The original
 engine runs in the browser at [noisedeck.app](https://noisedeck.app).
 
-**noisemaker-three** runs that same engine in **three.js**, so you can use Noisemaker's ~210 effects
+**Noisemaker for Three.js** runs that same engine in **three.js**, so you can use Noisemaker's ~210 effects
 as live textures, materials, and backgrounds in any three.js scene.
 
 This is a **thin adapter, not a port** — about 2,900 lines of new code wrapped around the

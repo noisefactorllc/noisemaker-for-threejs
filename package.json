@@ -1,7 +1,7 @@
 {
-  "name": "noisemaker-three",
+  "name": "noisemaker-threejs",
   "version": "0.0.1",
-  "description": "noisemaker shader platform for three.js — reuses the reference DSL compiler + pipeline verbatim, adds a three.js backend and integration surface",
+  "description": "Noisemaker for Three.js — reuses the reference DSL compiler and pipeline verbatim, adding a Three.js backend and integration surface",
   "type": "module",
   "license": "MIT",
   "author": "Noise Factor LLC <team@noisefactor.io>",

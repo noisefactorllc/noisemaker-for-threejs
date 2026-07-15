@@ -1,4 +1,4 @@
-# noisemaker-three Implementation Plan
+# Noisemaker for Three.js — Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -38,7 +38,7 @@
 
 ```json
 {
-  "name": "noisemaker-three",
+  "name": "noisemaker-threejs",
   "version": "0.0.1",
   "description": "noisemaker shader platform for three.js",
   "type": "module",
@@ -92,7 +92,7 @@ test('WebGLRenderTarget supports MRT count option (constructor accepts {count})'
 
 - [ ] **Step 5:** Run: `npm test`. Expected: 4 PASS. If MRT `count` test fails, bump three.js to a version with MRT support and re-pin.
 
-- [ ] **Step 6:** Commit. `git add -A && git commit -m "chore: scaffold noisemaker-three, pin three.js, capability gate"`
+- [ ] **Step 6:** Commit. `git add -A && git commit -m "chore: scaffold noisemaker-threejs, pin three.js, capability gate"`
 
 ### Task 0.2: Vendor sync script (full tree, byte-identical) + closure verification
 
@@ -394,7 +394,7 @@ For each namespace:
 
 ### Task 6.3: Types, build, docs
 - [ ] Hand-author `types/index.d.ts` for the public API (`NoisemakerCanvas`, `NoisemakerTexture`, `NoisemakerPass`, `compileGraph`).
-- [ ] `tools/build.mjs` (esbuild) → `dist/noisemaker-three.esm.js` + min; mark `three` external.
+- [ ] `tools/build.mjs` (esbuild) → `dist/noisemaker-threejs.esm.js` + min; mark `three` external.
 - [ ] Write `README.md` (quickstart for each façade + coverage table) and `ARCHITECTURE.md` (the layering + seam, the vendor/provenance model, the parity model). Commit.
 
 ---

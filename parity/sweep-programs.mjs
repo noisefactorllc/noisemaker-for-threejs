@@ -52,7 +52,7 @@ let pass = 0, fail = 0, err = 0, worst = 0
 let batchOut = ''
 let batchFailure = null
 if (files.length > 0) {
-  const temp = mkdtempSync(join(tmpdir(), 'noisemaker-three-sweep-'))
+  const temp = mkdtempSync(join(tmpdir(), 'noisemaker-threejs-sweep-'))
   const manifestPath = join(temp, 'manifest.json')
   writeFileSync(manifestPath, `${JSON.stringify({
     cases: files.map((f) => ({ dslPath: join(progDir, f), frames: Number(frames), capture: Number(capture), size: Number(size), loopFrames: 600 }))
