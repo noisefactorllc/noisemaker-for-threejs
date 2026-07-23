@@ -1,7 +1,18 @@
 # Noisemaker for Three.js — status & parity
 
-*Last verified 2026-07-14 on Apple Silicon / ANGLE + Metal (WebGL2). The sources of truth are
-`parity/sweep-corpus.sh`, `parity/sweep-programs.mjs`, and `parity/timeseries.mjs`.*
+*Last verified 2026-07-23 on Apple Silicon / ANGLE + Metal (WebGL2) against the published engine
+carrying reference `349e9909` (re-fetched via `vendor/fetch.sh`): programs sweep **303/303 PASS,
+worst max-abs-diff 0**. The sources of truth are `parity/sweep-corpus.sh`,
+`parity/sweep-programs.mjs`, and `parity/timeseries.mjs`.*
+
+> **The programs sweep runs at frame 1, where normalized time is 0** (`t_i = i / loopFrames`).
+> That makes it a compile/link/uniform-binding gate, not a temporal one: any effect whose output
+> is scaled by `time` renders its static form there. `filter/pondRipples`' `speed` control is the
+> current example — its two fixtures guard that the new uniform binds and stays byte-exact, but
+> the animated path has to be verified with a non-zero time, e.g.
+> `node parity/timeseries.mjs parity/programs/pondRipples_speed.dsl --frames 150 --capture 150`
+> (t = 0.25), where golden and candidate stay byte-identical *and* differ from the `speed=0`
+> render. Don't read a frame-1 PASS as proof that a time-dependent parameter works.
 
 This file holds the detailed coverage and parity numbers. For what the project is and how to use it,
 see the [README](README.md).
