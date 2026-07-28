@@ -1,7 +1,7 @@
 {
   "name": "noisemaker-for-threejs",
   "version": "0.0.1",
-  "description": "Noisemaker for Three.js — reuses the reference DSL compiler and pipeline verbatim, adding a Three.js backend and integration surface",
+  "description": "Noisemaker for Three.js \u2014 reuses the reference DSL compiler and pipeline verbatim, adding a Three.js backend and integration surface",
   "type": "module",
   "license": "MIT",
   "author": "Noise Factor LLC <team@noisefactor.io>",
@@ -9,16 +9,18 @@
     "three": ">=0.160.0"
   },
   "devDependencies": {
-    "three": "^0.171.0",
-    "esbuild": "^0.28.1",
+    "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.61.0",
+    "esbuild": "^0.28.1",
+    "eslint": "^10.5.0",
+    "globals": "^17.8.0",
     "pngjs": "^7.0.0",
-    "eslint": "^10.5.0"
+    "three": "^0.171.0"
   },
   "scripts": {
     "vendor": "bash vendor/fetch.sh",
     "test": "node --test test/*.test.mjs",
-    "lint": "eslint src/ test/",
+    "lint": "eslint .",
     "build": "node tools/build.mjs",
     "parity": "bash parity/sweep-corpus.sh"
   }
