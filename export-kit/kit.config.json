@@ -1,0 +1,39 @@
+{
+  "configVersion": 1,
+  "id": "threejs",
+  "series": "0.1",
+  "shaderSource": "runtime",
+  "engineSource": "cdn",
+  "shaderDialects": ["glsl"],
+  "pageTemplate": true,
+  "gatedTopLevelDirs": {
+    "engine": "engine",
+    "hostlib": "engine",
+    "shaders": "shaders"
+  },
+  "subtrees": [
+    { "from": "src", "to": "adapter/src" }
+  ],
+  "licenses": [
+    { "from": "LICENSE", "to": "LICENSES/noisemaker-for-threejs-LICENSE.txt" }
+  ],
+  "shaderLayout": {
+    "root": "shaders"
+  },
+  "inject": {
+    "type": "dsl-json-template",
+    "target": "index.html"
+  },
+  "compat": {
+    "mode": "all"
+  },
+  "engineBytesFrom": ["hostlib/"],
+  "hostLib": {
+    "package": "three",
+    "version": "0.171.0",
+    "from": "node_modules/three/build",
+    "files": ["three.module.min.js", "three.core.min.js"],
+    "root": "hostlib/three",
+    "entry": "hostlib/three/three.module.min.js"
+  }
+}
