@@ -11,7 +11,15 @@
 import * as core from '../vendor/noisemaker/noisemaker-shaders-core.esm.js'
 import { bootCore, registerEffectInstance, finalizeEnums } from './effects/register-effect.js'
 
-export const { Backend, Pipeline, compileGraph, WebGL2Backend, createPipeline, extractEffectNamesFromDsl } = core
+export const {
+  Backend,
+  FrameExportQueue,
+  Pipeline,
+  compileGraph,
+  WebGL2Backend,
+  createPipeline,
+  extractEffectNamesFromDsl,
+} = core
 export { core }
 
 const EFFECTS_BASE = new URL('../vendor/noisemaker/effects/', import.meta.url)

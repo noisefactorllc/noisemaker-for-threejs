@@ -46,12 +46,21 @@ export class NoisemakerPass {
     await loadEffectsForDsl(dsl)
     this.graph = compileGraph(dsl)
     if (!this.sourceIds) this.sourceIds = NoisemakerPass.detectSourceIds(this.graph)
-    this.pipeline = await createThreePipeline(this.graph, {
+    const previousPipeline = this.pipeline
+    const pipeline = await createThreePipeline(this.graph, {
       renderer: this.renderer,
       width: this.width,
       height: this.height,
       presentToScreen: false,
     })
+    this.pipeline = pipeline
+    if (previousPipeline && previousPipeline !== pipeline) {
+      try {
+        previousPipeline.dispose()
+      } catch (error) {
+        console.warn('Failed to dispose previous NoisemakerPass pipeline', error)
+      }
+    }
     return this.graph
   }
 
@@ -91,6 +100,8 @@ export class NoisemakerPass {
   }
 
   dispose() {
-    this.pipeline?.backend?.destroy?.()
+    const pipeline = this.pipeline
+    this.pipeline = null
+    pipeline?.dispose?.()
   }
 }

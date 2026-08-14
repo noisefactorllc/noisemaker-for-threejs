@@ -30,17 +30,40 @@ export class NoisemakerCanvas {
   async compile(dsl) {
     await loadEffectsForDsl(dsl)
     const graph = compileGraph(dsl)
-    this.pipeline = await createThreePipeline(graph, {
+    const previousPipeline = this.pipeline
+    const pipeline = await createThreePipeline(graph, {
       renderer: this.renderer,
       width: this.width,
       height: this.height,
     })
+    this.pipeline = pipeline
+    if (previousPipeline && previousPipeline !== pipeline) {
+      try {
+        previousPipeline.dispose()
+      } catch (error) {
+        console.warn('Failed to dispose previous NoisemakerCanvas pipeline', error)
+      }
+    }
     return graph
   }
 
+  addSink(sink) {
+    if (!this.pipeline) {
+      throw new Error('NoisemakerCanvas has no active pipeline; compile before adding a sink')
+    }
+    return this.pipeline.addSink(sink)
+  }
+
+  createFrameExportQueue(options = {}) {
+    if (!this.pipeline) {
+      throw new Error('NoisemakerCanvas has no active pipeline; compile before creating a frame export queue')
+    }
+    return this.pipeline.backend?.createFrameExportQueue?.(options) ?? null
+  }
+
   /** Render a single frame at normalized time t (0..1). */
-  renderFrame(t = 0) {
-    this.pipeline.render(t)
+  renderFrame(t = 0, presentationTimestamp) {
+    this.pipeline.render(t, presentationTimestamp)
   }
 
   /** Render `frames` deterministic frames at a pinned time (matches golden settle=8). */
@@ -58,8 +81,19 @@ export class NoisemakerCanvas {
   }
 
   dispose() {
-    this.pipeline?.dispose?.()
-    this.pipeline?.backend?.destroy?.()
-    this.renderer.dispose()
+    const pipeline = this.pipeline
+    this.pipeline = null
+    let firstError
+    try {
+      pipeline?.dispose?.()
+    } catch (error) {
+      firstError = error
+    }
+    try {
+      this.renderer.dispose()
+    } catch (error) {
+      if (!firstError) firstError = error
+    }
+    if (firstError) throw firstError
   }
 }

@@ -12,8 +12,9 @@
  * 3D/cube, and external media are staged (clearly marked) for later phases.
  */
 import * as THREE from 'three'
-import { Backend } from '../engine-browser.js'
+import { Backend, FrameExportQueue } from '../engine-browser.js'
 import { formatToType, fullscreenTriangle, stripVersion, parseUniformSizes, DEFAULT_VERTEX_SHADER } from './three-resources.js'
+import { ThreeFrameExportAdapter } from './three-frame-export.js'
 
 // Parity + integration require pure-linear pixels everywhere: no sRGB decode on
 // textures, no encode on output. Disabling ColorManagement globally is the simplest
@@ -131,6 +132,10 @@ export class ThreeBackend extends Backend {
 
   static isAvailable() {
     return true
+  }
+
+  createFrameExportQueue(options = {}) {
+    return new FrameExportQueue(new ThreeFrameExportAdapter(this), options)
   }
 
   // --- texture management ---

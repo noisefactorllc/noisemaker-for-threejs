@@ -35,12 +35,21 @@ export class NoisemakerTexture {
   async compile(dsl) {
     await loadEffectsForDsl(dsl)
     const graph = compileGraph(dsl)
-    this.pipeline = await createThreePipeline(graph, {
+    const previousPipeline = this.pipeline
+    const pipeline = await createThreePipeline(graph, {
       renderer: this.renderer,
       width: this.width,
       height: this.height,
       presentToScreen: false,
     })
+    this.pipeline = pipeline
+    if (previousPipeline && previousPipeline !== pipeline) {
+      try {
+        previousPipeline.dispose()
+      } catch (error) {
+        console.warn('Failed to dispose previous NoisemakerTexture pipeline', error)
+      }
+    }
     return graph
   }
 
@@ -67,7 +76,19 @@ export class NoisemakerTexture {
   }
 
   dispose() {
-    this.outputRT.dispose()
-    this.pipeline?.backend?.destroy?.()
+    const pipeline = this.pipeline
+    this.pipeline = null
+    let firstError
+    try {
+      pipeline?.dispose?.()
+    } catch (error) {
+      firstError = error
+    }
+    try {
+      this.outputRT.dispose()
+    } catch (error) {
+      if (!firstError) firstError = error
+    }
+    if (firstError) throw firstError
   }
 }
