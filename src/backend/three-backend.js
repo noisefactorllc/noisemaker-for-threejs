@@ -115,6 +115,15 @@ export class ThreeBackend extends Backend {
   }
 
   async init() {
+    const gl = this.gl
+    const maxDrawBuffers = gl.getParameter(gl.MAX_DRAW_BUFFERS)
+    const maxTextureSize = gl.getParameter(gl.MAX_TEXTURE_SIZE)
+    this.capabilities = {
+      ...this.capabilities,
+      maxDrawBuffers,
+      maxTextureSize,
+      maxColorBytesPerSample: this.probeColorBytesPerSample(maxDrawBuffers),
+    }
     this.renderer.autoClear = false
     this.presentMaterial = new THREE.RawShaderMaterial({
       glslVersion: THREE.GLSL3,
@@ -124,6 +133,86 @@ export class ThreeBackend extends Backend {
       depthTest: false,
       depthWrite: false,
     })
+  }
+
+  /**
+   * Measure the usable aggregate MRT color-attachment size. The renderer owns
+   * this WebGL context, so probe with the draw binding only and restore every
+   * binding touched before returning control to three.js.
+   */
+  probeColorBytesPerSample(maxDrawBuffers = this.gl.getParameter(this.gl.MAX_DRAW_BUFFERS)) {
+    const gl = this.gl
+    const combos = [
+      [64, [gl.RGBA32F, gl.RGBA32F, gl.RGBA32F, gl.RGBA32F]],
+      [48, [gl.RGBA32F, gl.RGBA32F, gl.RGBA32F]],
+      [40, [gl.RGBA32F, gl.RGBA32F, gl.RGBA16F]],
+      [32, [gl.RGBA32F, gl.RGBA16F, gl.RGBA16F]],
+    ]
+    const previousReadFramebuffer = gl.getParameter(gl.READ_FRAMEBUFFER_BINDING)
+    const previousDrawFramebuffer = gl.getParameter(gl.DRAW_FRAMEBUFFER_BINDING)
+    const previousTexture = gl.getParameter(gl.TEXTURE_BINDING_2D)
+    const framebuffer = gl.createFramebuffer()
+    let budget = 16
+    const drainErrors = () => {
+      let error = gl.getError()
+      while (error !== gl.NO_ERROR) error = gl.getError()
+    }
+
+    if (!framebuffer) {
+      drainErrors()
+      return budget
+    }
+
+    try {
+      gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, framebuffer)
+      for (const [bytes, formats] of combos) {
+        if (formats.length > maxDrawBuffers) continue
+
+        const textures = []
+        const buffers = []
+        let complete = false
+        let allocationFailed = false
+        try {
+          for (let i = 0; i < formats.length; i++) {
+            const texture = gl.createTexture()
+            if (!texture) {
+              allocationFailed = true
+              break
+            }
+            textures.push(texture)
+            gl.bindTexture(gl.TEXTURE_2D, texture)
+            const internalFormat = formats[i]
+            const type = internalFormat === gl.RGBA32F ? gl.FLOAT : gl.HALF_FLOAT
+            gl.texImage2D(gl.TEXTURE_2D, 0, internalFormat, 2, 2, 0, gl.RGBA, type, null)
+            const attachment = gl.COLOR_ATTACHMENT0 + i
+            gl.framebufferTexture2D(gl.DRAW_FRAMEBUFFER, attachment, gl.TEXTURE_2D, texture, 0)
+            buffers.push(attachment)
+          }
+          if (!allocationFailed) {
+            gl.drawBuffers(buffers)
+            complete = gl.checkFramebufferStatus(gl.DRAW_FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE
+          }
+        } finally {
+          for (const attachment of buffers) {
+            gl.framebufferTexture2D(gl.DRAW_FRAMEBUFFER, attachment, gl.TEXTURE_2D, null, 0)
+          }
+          for (const texture of textures) gl.deleteTexture(texture)
+        }
+
+        if (complete) {
+          budget = bytes
+          break
+        }
+      }
+    } finally {
+      gl.deleteFramebuffer(framebuffer)
+      gl.bindFramebuffer(gl.READ_FRAMEBUFFER, previousReadFramebuffer)
+      gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, previousDrawFramebuffer)
+      gl.bindTexture(gl.TEXTURE_2D, previousTexture)
+      drainErrors()
+    }
+
+    return budget
   }
 
   getName() {
