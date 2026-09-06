@@ -1,8 +1,8 @@
 # {{NM_PROGRAM_NAME}}
 
-Your program as a Three.js scene, exported from Noisedeck. It runs on **Noisemaker for Three.js** —
-a thin adapter that hands the unmodified Noisemaker engine a `ThreeBackend`, so the effects, the
-shaders and the compiler are the same ones the app uses. It fetches nothing at runtime.
+Your program as a Three.js scene, exported from Noisedeck. It runs on **Noisemaker for Three.js**.
+This thin adapter supplies the unmodified Noisemaker engine with a `ThreeBackend`.
+The effects, shaders and compiler are the same ones the app uses. It fetches nothing at runtime.
 
 ## Run it
 
@@ -40,16 +40,16 @@ import { NoisemakerTexture, NoisemakerPass } from './adapter/src/index.js'
   `scene.background`.
 - `NoisemakerPass` — your program as an `EffectComposer` post-processing pass.
 
-Both need the effects registered first. `index.html` does that in `registerEffects()`, and that
-function is the piece to lift into your own app.
+Both need the effects registered first. `index.html` does that in `registerEffects()`.
+Copy that function into your own app.
 
 ## The engine
 
-Left **include engine code** checked? Everything's here: the engine at
-`adapter/vendor/noisemaker/`, Three.js at `hostlib/three/`. Open the page and it runs offline.
+If you kept **include engine code** checked, the engine is at
+`adapter/vendor/noisemaker/` and Three.js is at `hostlib/three/`. Open the page to run it offline.
 
-Unchecked? Copy your engine to `adapter/vendor/noisemaker/` and Three.js to `hostlib/three/`, or
-point the imports at your copies. The adapter reaches the engine through one static import in
+If you unchecked it, copy your engine to `adapter/vendor/noisemaker/`. Copy Three.js to `hostlib/three/`.
+Alternatively, point the imports at your copies. The adapter reaches the engine through one static import in
 `adapter/src/engine-browser.js`:
 
 ```js
@@ -73,7 +73,7 @@ Effect mini-bundles are loaded by the page rather than by the adapter. `register
 `register-effect.js`, so registration can never drift from the adapter's internal loader.
 
 Three.js is pinned to **0.171.0**, the version the adapter is parity-tested against. Its peer range
-is `>=0.160.0`, so a newer build will very likely work; swap the files in `hostlib/three/`.
+is `>=0.160.0`, so a newer build will very likely work. Replace the files in `hostlib/three/`.
 
 This export is pinned to Noisemaker `{{NM_ENGINE_VERSION}}`. Pinning is deliberate: the page keeps
 rendering the same way after the engine moves on.
@@ -86,7 +86,7 @@ rendering the same way after the engine moves on.
 const DSL = "...";
 ```
 
-Replace it with anything the Noisemaker language accepts and reload. Only the effects your original
+Replace it with anything the Noisemaker language accepts. Reload the page. Only the effects your original
 program used are under `adapter/vendor/noisemaker/effects/`, so a new effect will fail to load.
 Stay within the set below, or add the bundles you need.
 
@@ -111,5 +111,5 @@ particles, want a discrete GPU for a smooth frame rate.
 
 ## License
 
-The Noisemaker engine and the Three.js adapter are both MIT licensed; see `LICENSES/`. Three.js
+The Noisemaker engine and the Three.js adapter are both MIT licensed. See `LICENSES/`. Three.js
 itself is MIT and ships in `hostlib/three/`. Your program and the imagery it renders are yours.

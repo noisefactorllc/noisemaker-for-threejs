@@ -60,7 +60,7 @@ npm run vendor     # fetch the Noisemaker engine from the CDN into vendor/ (git-
 The `vendor` step is required once: it downloads the engine and effect bundles the adapter drives.
 The engine bytes are never committed — only the fetch script is.
 
-Then serve the repo root with any static server and open an example in your browser:
+Then serve the repo root with any static server:
 
 ```bash
 npx serve .        # or any static server, e.g. python3 -m http.server
@@ -72,9 +72,9 @@ will not work.
 
 ## Your first render
 
-Serve the repo root (see Install above) and open an HTML page like this one. An import map tells the
-browser where to find `three` (the adapter imports it by name); the adapter itself loads from
-`/src/index.js`:
+Serve the repo root (see Install above). Open an HTML page like this one.
+An import map tells the browser where to find `three` (the adapter imports it by name).
+The adapter itself loads from `/src/index.js`:
 
 ```html
 <script type="importmap">
@@ -99,9 +99,12 @@ browser where to find `three` (the adapter imports it by name); the adapter itse
 </script>
 ```
 
-**Every DSL program** has the same shape: name the namespaces it uses (`search synth, filter`),
-chain effects, write the result to an output surface (`.write(o0)`), then pick one to show
-(`render(o0)`).
+**Every DSL program** has the same shape:
+
+- Name the namespaces it uses (`search synth, filter`).
+- Chain the effects.
+- Write the result to an output surface (`.write(o0)`).
+- Select a surface to show (`render(o0)`).
 
 ## Use it in your own three.js project
 
@@ -163,11 +166,14 @@ npm run parity     # diff every corpus program (the live noisedeck gallery) agai
 ```
 
 Parity works by running the **same** CDN engine two ways — once through its own WebGL2 backend (the
-"golden") and once through `ThreeBackend` (the candidate) — and comparing the rendered frames. To
-check a single effect, run the time-series harness directly — `node parity/timeseries.mjs
-parity/programs/<effect>.dsl` — or run `parity/sweep-stateful.sh` for the stateful/continuous
-effects (navier–stokes, reaction-diffusion, agents), or `node parity/sweep-programs.mjs` for the
-full roster (one fixture per effect, plus one per compile-time mode variant — 300 fixtures).
+"golden") and once through `ThreeBackend` (the candidate) — and comparing the rendered frames. Choose the harness for the coverage you need:
+
+- For a single effect, run `node parity/timeseries.mjs
+parity/programs/<effect>.dsl`.
+- For stateful/continuous effects (navier–stokes, reaction-diffusion, agents), run `parity/sweep-stateful.sh`.
+- For the full roster, run `node parity/sweep-programs.mjs`.
+  This covers one fixture per effect, plus one per compile-time mode variant — 300 fixtures.
+
 Methodology and per-effect results: **[STATUS.md](STATUS.md)**.
 
 ## Repo layout
