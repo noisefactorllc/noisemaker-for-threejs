@@ -10,3 +10,7 @@ parity/.venv/
 # fetch script + loader, never the bytes). src/vendor/ is the older local-mirror layout.
 vendor/noisemaker/
 src/vendor/
+
+# Python
+__pycache__/
+*.pyc
