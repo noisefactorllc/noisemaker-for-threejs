@@ -5,6 +5,27 @@ carrying reference `349e9909` (re-fetched via `vendor/fetch.sh`): programs sweep
 worst max-abs-diff 0**. The sources of truth are `parity/sweep-corpus.sh`,
 `parity/sweep-programs.mjs`, and `parity/timeseries.mjs`.*
 
+*Incrementally synced 2026-09-15 to reference `0ed489ec4684` (range `246ff57f43cc..0ed489ec4684`,
+the same range ported into the sibling blender/cables/cpu/godot/qt ports this round; re-fetched via
+`vendor/fetch.sh`, published catalog now 213 effects). Found and fixed one real adapter bug:
+`ThreeBackend.compileProgram()` injected the `definesBlock` (`#define KEY value` precision +
+compile-time constants) into the fragment shader only, never into a pass's custom vertex shader —
+harmless until this round, since no effect had a custom-vertex pass with a per-clone `defines` value
+before. `pointsRender`/`pointsBillboardRender`'s new perspective `viewMode` (2) and
+`pointsBillboardRender`'s new depth-sorted alpha-blend path both clone their `deposit` pass per
+`VIEW_MODE`/`BLEND_MODE`/`BLUR_LAYER`, so the gap now caused vertex shader compile failures
+(`undeclared identifier 'VIEW_MODE'`) — confirmed via a before/after fixture run (FAIL,
+max-abs-diff=255 → PASS, max-abs-diff=0). Fixed by injecting the same `definesBlock` into the
+vertex shader whenever a pass supplies one. Added 4 new fixtures for this round's new/changed
+effects (`heightmap3d_landscape`, `heightGrid_billboard`, `heightGrid_billboard_alpha`,
+`heightGrid_pointsRender_perspective`) plus re-ran the existing `remap`/`remap_zoned` fixtures
+(the zone-compositor was fully rewritten this round). **Full programs sweep: 307/307 PASS, worst
+max-abs-diff 0** — no regressions, no new exceptions. Catalog-wide mode-coverage table below is
+unchanged from the last full audit (this round added no new compile-time `MODE`/`define`-selected
+variant *within* an existing effect's own `globals`, only new effects and new runtime-uniform view
+modes already covered by the default-fixture-catches-uniform-bugs reasoning documented under
+[Known limits](#known-limits)).
+
 > **The programs sweep runs at frame 1, where normalized time is 0** (`t_i = i / loopFrames`).
 > That makes it a compile/link/uniform-binding gate, not a temporal one: any effect whose output
 > is scaled by `time` renders its static form there. `filter/pondRipples`' `speed` control is the
@@ -19,8 +40,11 @@ see the [README](README.md).
 
 ## Coverage
 
-**210 effects** across 8 namespaces — the published catalog (`vendor/noisemaker/effects/manifest.json`),
-content-pinned to the `/1` CDN build tagged `1a29d431` (2026-07-14T19:47:07.486Z). 25 new `filter`
+**213 effects** across 8 namespaces (was 210; +`synth3d/heightmap3d`, +`render/renderLandscape3d`,
++`points/heightGrid` — 2026-09-15 sync) — the published catalog
+(`vendor/noisemaker/effects/manifest.json`), content-pinned to the `/1` CDN build re-fetched
+2026-09-15. Earlier snapshot below content-pinned to the `1a29d431` build (2026-07-14T19:47:07.486Z).
+25 new `filter`
 effects landed since the last sync — the full artistic-filter release: `chrome`, `craquelure`,
 `directionalBlur`, `extrude`, `halftone`, `hatch`, `highPass`, `lensFlare`, `median`, `morphology`,
 `mosaicTiles`, `oilPaint`, `patchwork`, `photocopy`, `plasticWrap`, `pondRipples`, `relief`, `scatter`,

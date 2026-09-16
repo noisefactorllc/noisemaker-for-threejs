@@ -296,7 +296,12 @@ export class ThreeBackend extends Backend {
       definesBlock += `#define ${k} ${v}\n`
     }
     const fragmentShader = definesBlock + stripVersion(source)
-    const vertexShader = spec.vertex ? stripVersion(spec.vertex) : DEFAULT_VERTEX_SHADER
+    // A custom vertex stage (points/billboards drawMode) needs the same defines block as
+    // the fragment stage — e.g. pointsRender/pointsBillboardRender's per-viewMode deposit
+    // clones (reference 0ed489ec) reference VIEW_MODE/BLEND_MODE/BLUR_LAYER from BOTH stages.
+    const vertexShader = spec.vertex
+      ? definesBlock + stripVersion(spec.vertex)
+      : DEFAULT_VERTEX_SHADER
     const material = new THREE.RawShaderMaterial({
       glslVersion: THREE.GLSL3,
       vertexShader,
