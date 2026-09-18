@@ -26,6 +26,8 @@ variant *within* an existing effect's own `globals`, only new effects and new ru
 modes already covered by the default-fixture-catches-uniform-bugs reasoning documented under
 [Known limits](#known-limits)).
 
+*Incrementally synced 2026-09-17 to reference `688c5146` (range `5a14256732b5..688c514655d3`) — audited upstream native WebGPU frame export row-inversion changes. ThreeBackend's frame export in `src/backend/three-frame-export.js` already applies `sourceSize.y - 1 - int(gl_FragCoord.y)` during the resolve blit, matching WebGL2 bottom-up texture coordinates to top-down canvas conventions. Verified via `npm test` (all 27 tests PASS) and `npm run lint`.*
+
 > **The programs sweep runs at frame 1, where normalized time is 0** (`t_i = i / loopFrames`).
 > That makes it a compile/link/uniform-binding gate, not a temporal one: any effect whose output
 > is scaled by `time` renders its static form there. `filter/pondRipples`' `speed` control is the
