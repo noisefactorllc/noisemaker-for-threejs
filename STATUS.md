@@ -28,6 +28,8 @@ modes already covered by the default-fixture-catches-uniform-bugs reasoning docu
 
 *Incrementally synced 2026-09-17 to reference `688c5146` (range `5a14256732b5..688c514655d3`) — audited upstream native WebGPU frame export row-inversion changes. ThreeBackend's frame export in `src/backend/three-frame-export.js` already applies `sourceSize.y - 1 - int(gl_FragCoord.y)` during the resolve blit, matching WebGL2 bottom-up texture coordinates to top-down canvas conventions. Verified via `npm test` (all 27 tests PASS) and `npm run lint`.*
 
+*Incrementally synced 2026-09-18 to reference `ead42a5d` (`688c514655d3..ead42a5df110a7f04d732cb200a1a39629db8a67`) — refreshed vendored CDN artifacts via `vendor/fetch.sh` (engine core + manifest + 213/213 mini-bundles). Audited upstream defaultProgram updates in `heightmap3d` and `renderLandscape3d` and transform starter position detection. Verified test suite: `npm test` (all 27 tests PASS) and `npm run lint`.*
+
 > **The programs sweep runs at frame 1, where normalized time is 0** (`t_i = i / loopFrames`).
 > That makes it a compile/link/uniform-binding gate, not a temporal one: any effect whose output
 > is scaled by `time` renders its static form there. `filter/pondRipples`' `speed` control is the
