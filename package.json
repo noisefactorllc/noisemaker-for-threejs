@@ -21,7 +21,6 @@
     "vendor": "bash vendor/fetch.sh",
     "test": "node --test test/*.test.mjs",
     "lint": "eslint .",
-    "build": "node tools/build.mjs",
     "parity": "bash parity/sweep-corpus.sh"
   }
 }

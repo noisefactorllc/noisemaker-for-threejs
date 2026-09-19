@@ -29,3 +29,16 @@ test('compileGraph handles multi-pass blur over noise (two namespaces)', { skip 
   const effectProgs = Object.values(g.programs).filter((p) => p.glsl || p.fragment)
   assert.ok(effectProgs.length >= 1, 'effect programs carry GLSL')
 })
+
+test('compileGraph compiles chained variable alias to terminal write blit', { skip }, () => {
+  const g = eng.compileGraph(
+    'search synth, filter\nlet eff = rotate(1, 0.1)\nnoise().eff().write(o0)\nrender(o0)'
+  )
+  assert.equal(g.passes.length, 3, 'noise + rotate + write blit')
+  assert.equal(g.passes[0].id, 'node_0_pass_0')
+  assert.equal(g.passes[1].id, 'node_1_pass_0')
+  assert.equal(g.passes[2].id, 'node_2_write_blit')
+  assert.equal(g.passes[2].program, 'blit', 'terminal pass is blit')
+  assert.equal(g.passes[2].inputs?.src, 'node_1_out')
+  assert.equal(g.passes[2].outputs?.color, 'global_o0')
+})
