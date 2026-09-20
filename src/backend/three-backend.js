@@ -717,7 +717,7 @@ export class ThreeBackend extends Backend {
     })
   }
 
-  // Upload an HTML video/image/canvas/ImageBitmap as a sampleable input (Canvas2D
+  // Upload an HTML video/image/canvas/ImageBitmap/VideoFrame as a sampleable input (Canvas2D
   // overlays like fibers/scratches/strayHair, media effects, NoisemakerPass non-RT
   // sources). We do the raw-GL upload OURSELVES — byte-identical to the reference
   // webgl2 backend (LINEAR/CLAMP, UNPACK_FLIP_Y, and crucially the DEFAULT
@@ -728,18 +728,60 @@ export class ThreeBackend extends Backend {
   // just binds our handle).
   updateTextureFromSource(id, source, opts = {}) {
     const gl = this.gl
+    if (!gl) return { width: 0, height: 0 }
     const flipY = opts.flipY !== false
-    const width = source.videoWidth || source.naturalWidth || source.width || 1
-    const height = source.videoHeight || source.naturalHeight || source.height || 1
+
+    let width, height
+    if (typeof VideoFrame === 'function' && source instanceof VideoFrame) {
+      width = source.displayWidth
+      height = source.displayHeight
+      const rect = source.visibleRect
+      const rotated = source.rotation === 90 || source.rotation === 270
+      if (!rect || width !== (rotated ? rect.height : rect.width) ||
+          height !== (rotated ? rect.width : rect.height)) {
+        return { width: 0, height: 0 }
+      }
+    } else if (typeof HTMLVideoElement !== 'undefined' && source instanceof HTMLVideoElement) {
+      width = source.videoWidth
+      height = source.videoHeight
+    } else if (typeof HTMLImageElement !== 'undefined' && source instanceof HTMLImageElement) {
+      width = source.naturalWidth || source.width
+      height = source.naturalHeight || source.height
+    } else if ((typeof HTMLCanvasElement !== 'undefined' && source instanceof HTMLCanvasElement) ||
+               (typeof ImageBitmap !== 'undefined' && source instanceof ImageBitmap)) {
+      width = source.width
+      height = source.height
+    } else if (source && typeof source.width === 'number' && typeof source.height === 'number') {
+      width = source.width
+      height = source.height
+    } else {
+      console.warn(`[updateTextureFromSource] Unknown source type for ${id}`)
+      return { width: 0, height: 0 }
+    }
+
+    if (!width || !height) {
+      return { width: 0, height: 0 }
+    }
+
     let info = this.textures.get(id)
     if (!info?.externalGL || info.width !== width || info.height !== height) {
       if (info?.externalGL) gl.deleteTexture(info.externalGL)
       const handle = gl.createTexture()
       const tex = new THREE.Texture() // version stays 0 → three binds our handle, never uploads
-      const props = this.renderer.properties.get(tex)
-      props.__webglTexture = handle
-      props.__webglInit = true
-      info = { texture: tex, external: true, externalGL: handle, width, height }
+      if (this.renderer?.properties?.get) {
+        const props = this.renderer.properties.get(tex)
+        props.__webglTexture = handle
+        props.__webglInit = true
+      }
+      info = {
+        texture: tex,
+        external: true,
+        isExternal: true,
+        externalGL: handle,
+        width,
+        height,
+        format: 'rgba8'
+      }
       this.textures.set(id, info)
     }
     gl.bindTexture(gl.TEXTURE_2D, info.externalGL)
@@ -751,10 +793,14 @@ export class ThreeBackend extends Backend {
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source)
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false)
     gl.bindTexture(gl.TEXTURE_2D, null)
-    this.renderer.resetState() // re-sync three's texture-unit cache after our raw binds
-    const props = this.renderer.properties.get(info.texture)
-    props.__webglTexture = info.externalGL
-    props.__webglInit = true
+    if (typeof this.renderer?.resetState === 'function') {
+      this.renderer.resetState() // re-sync three's texture-unit cache after our raw binds
+    }
+    if (this.renderer?.properties?.get) {
+      const props = this.renderer.properties.get(info.texture)
+      props.__webglTexture = info.externalGL
+      props.__webglInit = true
+    }
     return { width, height }
   }
 

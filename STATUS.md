@@ -32,6 +32,8 @@ modes already covered by the default-fixture-catches-uniform-bugs reasoning docu
 
 *Incrementally synced 2026-09-19 to reference `f1d2b46a` (`ead42a5df110..f1d2b46a277333413160f9f5693b93a286153612`) — re-fetched published engine artifacts via `vendor/fetch.sh` (core bundle 829964 bytes, manifest + 213/213 mini-bundles). Upstream closed compiler phase-2 harness exit-status gap (GAP-023) and updated chained variable test plan; unified agent documentation. Added unit test in `test/compile-graph.test.mjs` asserting chained variable alias plan compiles into a terminal write blit pass (`node_2_write_blit`) reading `node_1_out` and writing `global_o0`. Added `AGENTS.md` codifying repo conventions and strict symlink bans. Verified test suite: `npm test` (all 28 tests PASS) and `npm run lint`.*
 
+*Incrementally synced 2026-09-19 to reference `2df19feb` (`f1d2b46a2773..2df19feb6ce143636809b1e581699a7110b1f94d`) — ported upstream support for borrowed `VideoFrame` into `ThreeBackend.updateTextureFromSource` in `src/backend/three-backend.js`. Matches reference WebGL2 semantics: synchronous display dimension resolution, 90°/270° orientation detection, anamorphic display scaling rejection, and proper format/external texture metadata tagging. Added unit tests in `test/three-backend-videoframe.test.mjs` verifying dimensions, rotation, anamorphic rejection, zero dimensions, texture recreation on dimension changes, and GL handle deletion on cleanup. Verified test suite: `npm test` (all 29 tests PASS) and `npm run lint`.*
+
 
 > **The programs sweep runs at frame 1, where normalized time is 0** (`t_i = i / loopFrames`).
 > That makes it a compile/link/uniform-binding gate, not a temporal one: any effect whose output
