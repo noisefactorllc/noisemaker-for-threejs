@@ -42,3 +42,82 @@ test('compileGraph compiles chained variable alias to terminal write blit', { sk
   assert.equal(g.passes[2].inputs?.src, 'node_1_out')
   assert.equal(g.passes[2].outputs?.color, 'global_o0')
 })
+
+test('legacy MIDI note mode channels must be static integers from 1 to 16', { skip }, () => {
+  const modes = ['noteChange', 'gateNote', 'gateVelocity', 'triggerNote', 'velocity']
+  for (const mode of modes) {
+    for (const channel of ['0', '17', '1.5', 'true', '"1"', 'osc()']) {
+      const compiled = eng.core.compile(
+        `search synth\nnoise(scaleX: midi(channel: ${channel}, mode: midiMode.${mode})).write(o0)`
+      )
+      assert.ok(
+        compiled.diagnostics.some((d) => d.code === 'S001' || d.code === 'S002'),
+        `${mode} channel ${channel} should produce a validation diagnostic`
+      )
+      assert.equal(
+        compiled.plans[0].chain[0].args.scaleX._invalid,
+        true,
+        `${mode} channel ${channel} should keep the descriptor inert`
+      )
+    }
+    for (const channel of [1, 16]) {
+      const compiled = eng.core.compile(
+        `search synth\nnoise(scaleX: midi(channel: ${channel}, mode: midiMode.${mode})).write(o0)`
+      )
+      assert.equal(compiled.diagnostics.length, 0, `${mode} channel ${channel} should remain valid`)
+      assert.equal(compiled.plans[0].chain[0].args.scaleX.channel, channel, `${mode} channel ${channel} compiles`)
+      assert.equal(compiled.plans[0].chain[0].args.scaleX._invalid, undefined)
+    }
+  }
+})
+
+test('Pipeline recreates textures on ThreeBackend when format changes', { skip }, async () => {
+  const { ThreeBackend } = await import('../src/backend/three-backend.js')
+  const mockRenderer = {
+    getContext: () => ({
+      MAX_DRAW_BUFFERS: 8,
+      MAX_TEXTURE_SIZE: 8192,
+      READ_FRAMEBUFFER_BINDING: 3,
+      DRAW_FRAMEBUFFER_BINDING: 4,
+      TEXTURE_BINDING_2D: 5,
+      getParameter: () => 8,
+      createFramebuffer: () => ({}),
+      bindFramebuffer: () => {},
+      deleteFramebuffer: () => {},
+      createTexture: () => ({}),
+      bindTexture: () => {},
+      texImage2D: () => {},
+      framebufferTexture2D: () => {},
+      drawBuffers: () => {},
+      checkFramebufferStatus: () => 30,
+      deleteTexture: () => {},
+      getError: () => 0,
+    }),
+    getRenderTarget: () => null,
+    setRenderTarget: () => {},
+    setClearColor: () => {},
+    clear: () => {},
+  }
+  const backend = new ThreeBackend(mockRenderer)
+  const spec = { format: 'rgba32f', width: 100, height: 100 }
+  const graph = {
+    passes: [],
+    textures: new Map([['node_0_state', spec]]),
+  }
+  const pipeline = new eng.Pipeline(graph, backend)
+  pipeline.width = 100
+  pipeline.height = 100
+  pipeline.recreateTextures()
+  const tex1 = backend.textures.get('node_0_state')
+  assert.equal(tex1.format, 'rgba32f')
+
+  spec.format = 'rgba16f'
+  pipeline.recreateTextures()
+  const tex2 = backend.textures.get('node_0_state')
+  assert.equal(tex2.format, 'rgba16f')
+  assert.notEqual(tex1, tex2, 'texture was recreated on format change')
+
+  pipeline.recreateTextures()
+  const tex3 = backend.textures.get('node_0_state')
+  assert.equal(tex3, tex2, 'matching texture is reused without recreation')
+})
