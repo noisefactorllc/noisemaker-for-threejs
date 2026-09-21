@@ -121,3 +121,16 @@ test('Pipeline recreates textures on ThreeBackend when format changes', { skip }
   const tex3 = backend.textures.get('node_0_state')
   assert.equal(tex3, tex2, 'matching texture is reused without recreation')
 })
+
+test('compileGraph handles filter/adjust and rejects expired effects (bc, colorspace, hs)', { skip }, () => {
+  const g = eng.compileGraph('search synth, filter\nnoise().adjust().write(o0)\nrender(o0)')
+  assert.ok(Array.isArray(g.passes) && g.passes.length >= 1, 'adjust compiles')
+
+  for (const eff of ['bc', 'colorspace', 'hs']) {
+    const res = eng.core.compile(`search synth, filter\nnoise().${eff}().write(o0)`)
+    assert.ok(
+      res.diagnostics.some((d) => d.code === 'S001'),
+      `expired effect ${eff} should produce unknown effect diagnostic S001`
+    )
+  }
+})

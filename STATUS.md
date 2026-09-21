@@ -36,6 +36,9 @@ modes already covered by the default-fixture-catches-uniform-bugs reasoning docu
 
 *Incrementally synced 2026-09-20 to reference `beabda38` (`2df19feb6ce1..beabda385253a3461d2ee5ee2f1b032cbe9a2832`) — refreshed published engine artifacts via `vendor/fetch.sh` (core bundle 831854 bytes, manifest + 213/213 mini-bundles). Upstream introduced surface format check on global ping-pong surfaces and dynamic texture recreation when format or dimensions change (`6e0166ce`), and strict static integer 1..16 channel enforcement across all channel-based MIDI modes (`beabda38`). Added unit tests in `test/compile-graph.test.mjs` verifying legacy MIDI note modes reject non-integer / out-of-range channels and accept 1 and 16, and verifying that ThreeBackend recreates textures when format changes and reuses textures when format and dimensions match. Verified test suite: `npm test` (all 31 tests PASS) and `npm run lint`.*
 
+*Incrementally synced 2026-09-21 to reference `f61ac073` (`beabda385253..f61ac0732088`) — refreshed published engine artifacts via `vendor/fetch.sh` (core bundle 831943 bytes, manifest + 210/210 mini-bundles). Upstream removed expired filter effects `filter/bc`, `filter/colorspace`, and `filter/hs` (commit `2f855c9c`) following migration to `filter/adjust`. Preserved historical DSL fixtures in `parity/programs/` while filtering retired effects in active sweeps via `parity/current-programs.mjs`. Added unit test in `test/compile-graph.test.mjs` verifying `filter/adjust` compiles and expired effects are rejected by the validator. Verified test suite: `npm test` (all 35 tests PASS) and `npm run lint`.*
+
+
 
 > **The programs sweep runs at frame 1, where normalized time is 0** (`t_i = i / loopFrames`).
 > That makes it a compile/link/uniform-binding gate, not a temporal one: any effect whose output
@@ -51,10 +54,9 @@ see the [README](README.md).
 
 ## Coverage
 
-**213 effects** across 8 namespaces (was 210; +`synth3d/heightmap3d`, +`render/renderLandscape3d`,
-+`points/heightGrid` — 2026-09-15 sync) — the published catalog
+**210 effects** across 8 namespaces (was 213; removed expired `filter/bc`, `filter/colorspace`, `filter/hs` — 2026-09-21 sync) — the published catalog
 (`vendor/noisemaker/effects/manifest.json`), content-pinned to the `/1` CDN build re-fetched
-2026-09-15. Earlier snapshot below content-pinned to the `1a29d431` build (2026-07-14T19:47:07.486Z).
+2026-09-21. Earlier snapshot below content-pinned to the `1a29d431` build (2026-07-14T19:47:07.486Z).
 25 new `filter`
 effects landed since the last sync — the full artistic-filter release: `chrome`, `craquelure`,
 `directionalBlur`, `extrude`, `halftone`, `hatch`, `highPass`, `lensFlare`, `median`, `morphology`,
@@ -69,11 +71,11 @@ mini-bundles changed content in the same sync: `dither`, `edge`, `emboss`, `grai
 | Namespace | Effects | Parity |
 |---|---|---|
 | `synth` | 29 | byte-identical (`scope` / `spectrum` / `media` via injected input) |
-| `filter` | 116 | byte-identical (115; `text` untested) |
+| `filter` | 113 | byte-identical (112; `text` untested) |
 | `mixer` | 15 | byte-identical |
 | `classicNoisedeck` | 20 | byte-identical (meta/param effects: `composite`, `kaleido`, `refract`, …) |
-| `points` / `render` | 10 / 11 | byte-identical (agents via time-series; `meshLoader` / `meshRender` via injected OBJ) |
-| `synth3d` / `filter3d` | 7 / 2 | byte-identical (2D-atlas volumes raymarched in-shader; cubemaps via `cubeBasis`) |
+| `points` / `render` | 11 / 12 | byte-identical (agents via time-series; `meshLoader` / `meshRender` via injected OBJ) |
+| `synth3d` / `filter3d` | 8 / 2 | byte-identical (2D-atlas volumes raymarched in-shader; cubemaps via `cubeBasis`) |
 
 Everything in the catalog is exercised, including the pieces that are usually hard to reach:
 
