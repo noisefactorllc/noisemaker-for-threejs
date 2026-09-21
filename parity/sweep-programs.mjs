@@ -26,6 +26,7 @@ import { join, dirname, basename } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { spawnSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
+import { currentPrograms } from './current-programs.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const repoRoot = join(__dirname, '..')
@@ -39,6 +40,7 @@ const filterSub = opt('--filter', null)
 const progDir = join(repoRoot, 'parity', 'programs')
 let files = readdirSync(progDir).filter((f) => f.endsWith('.dsl')).sort()
 if (filterSub) files = files.filter((f) => f.includes(filterSub))
+else files = currentPrograms(files.map(f => basename(f, '.dsl'))).map(name => `${name}.dsl`)
 if (files.length === 0) {
   console.error(`ERR  no parity fixtures matched${filterSub ? ` filter ${JSON.stringify(filterSub)}` : ''}`)
   process.exit(1)

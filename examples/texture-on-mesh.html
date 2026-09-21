@@ -35,7 +35,7 @@
       const nmTex = new NoisemakerTexture(renderer, { width: 512, height: 512 })
       await nmTex.compile(`
         search synth, filter
-        noise(scaleX: 18, scaleY: 18, octaves: 4, speed: 1).hs(rotation: 90).bloom().write(o0)
+        noise(scaleX: 18, scaleY: 18, octaves: 4, speed: 1).adjust(rotation: 90).bloom().write(o0)
         render(o0)
       `)
 

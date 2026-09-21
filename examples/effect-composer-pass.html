@@ -47,7 +47,7 @@
       const nmPass = new NoisemakerPass(renderer, { width: innerWidth, height: innerHeight, loopDuration: 6 })
       await nmPass.compile(`
         search synth, filter
-        media().bloom().hs(rotation: 30).vignette().write(o0)
+        media().bloom().adjust(rotation: 30).vignette().write(o0)
         render(o0)
       `)
       nmPass.renderToScreen = true
