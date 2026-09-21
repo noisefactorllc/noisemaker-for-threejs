@@ -38,6 +38,8 @@ modes already covered by the default-fixture-catches-uniform-bugs reasoning docu
 
 *Incrementally synced 2026-09-21 to reference `f61ac073` (`beabda385253..f61ac0732088`) — refreshed published engine artifacts via `vendor/fetch.sh` (core bundle 831943 bytes, manifest + 210/210 mini-bundles). Upstream removed expired filter effects `filter/bc`, `filter/colorspace`, and `filter/hs` (commit `2f855c9c`) following migration to `filter/adjust`. Preserved historical DSL fixtures in `parity/programs/` while filtering retired effects in active sweeps via `parity/current-programs.mjs`. Added unit test in `test/compile-graph.test.mjs` verifying `filter/adjust` compiles and expired effects are rejected by the validator. Verified test suite: `npm test` (all 35 tests PASS) and `npm run lint`.*
 
+*Incrementally synced 2026-09-21 to reference `50b8f909` (`f61ac0732088..50b8f909ff59`) — refreshed published engine artifacts via `vendor/fetch.sh` (core bundle 832252 bytes, manifest + 210/210 mini-bundles). Upstream closed GAP-001 by enforcing DSL output surface range `o0..o7` at the lexer level. Added unit tests in `test/compile-graph.test.mjs` verifying rejection of out-of-range output surfaces across compiler positions (`render`, `read`, `write`), preservation of `o0` and `o7` boundary behavior, and preservation of member segment accesses (`foo.o8`, `foo.o99`) and other surface families (`s99`, `vol99`, etc.). Verified test suite: `npm test` (all 38 tests PASS) and `npm run lint`.*
+
 
 
 > **The programs sweep runs at frame 1, where normalized time is 0** (`t_i = i / loopFrames`).
