@@ -42,6 +42,8 @@ modes already covered by the default-fixture-catches-uniform-bugs reasoning docu
 
 *Incrementally synced 2026-09-22 to reference `e5bd2013` (`50b8f909ff59..e5bd2013087e`) — refreshed published engine artifacts via `vendor/fetch.sh` (core bundle 832319 bytes, manifest + 210/210 mini-bundles). Upstream excluded builtins from mutation introspection (`listSteps`, `replaceEffect`, `getCompatibleReplacements`) and preserved source columns in DSL diagnostics. Added unit tests in `test/compile-graph.test.mjs` verifying exclusion of builtins from mutation introspection and column preservation in compilation diagnostics. Verified test suite: `npm test` (all 40 tests PASS) and `npm run lint`.*
 
+*Incrementally synced 2026-09-22 to reference `643b2be1` (`e5bd2013087e..643b2be1e28b`) — refreshed published engine artifacts via `vendor/fetch.sh` (core bundle 833120 bytes, manifest + 210/210 mini-bundles). Upstream exposed structured DSL lexer diagnostics (`L001`..`L004`) with exact location and span coordinates attached to thrown `SyntaxError.diagnostic`. Added unit tests in `test/compile-graph.test.mjs` verifying code, location, and span properties for unexpected characters (`L001`), unterminated strings (`L002`), unclosed comments (`L003`), and out-of-range output surfaces (`L004`). Verified test suite: `npm test` (all 41 tests PASS) and `npm run lint`.*
+
 > **The programs sweep runs at frame 1, where normalized time is 0** (`t_i = i / loopFrames`).
 > That makes it a compile/link/uniform-binding gate, not a temporal one: any effect whose output
 > is scaled by `time` renders its static form there. `filter/pondRipples`' `speed` control is the

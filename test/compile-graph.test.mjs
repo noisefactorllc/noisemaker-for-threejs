@@ -235,3 +235,50 @@ test('DSL diagnostics preserve source columns across compiler positions', { skip
   assert.deepEqual(inlineReadDiag.location, { line: 3, column: 13 })
 })
 
+test('DSL lexer attaches structured diagnostic payload with code, location, and span', { skip }, () => {
+  const cases = [
+    {
+      src: '@noise()',
+      code: 'L001',
+      location: { line: 1, column: 1 },
+      span: { start: 0, end: 1 }
+    },
+    {
+      src: 'noise("unterminated)',
+      code: 'L002',
+      location: { line: 1, column: 7 },
+      span: { start: 6, end: 20 }
+    },
+    {
+      src: '/* unclosed comment\nnoise()',
+      code: 'L003',
+      location: { line: 1, column: 1 },
+      span: { start: 0, end: 27 }
+    },
+    {
+      src: 'search synth\nnoise().write(o8)',
+      code: 'L004',
+      location: { line: 2, column: 15 },
+      span: { start: 27, end: 29 }
+    }
+  ]
+
+  for (const c of cases) {
+    assert.throws(
+      () => eng.core.compile(c.src),
+      (err) => {
+        assert.ok(err instanceof SyntaxError, `Expected SyntaxError for ${c.code}`)
+        assert.ok(err.diagnostic, `Expected attached diagnostic for ${c.code}`)
+        assert.equal(err.diagnostic.code, c.code)
+        assert.equal(err.diagnostic.stage, 'lexer')
+        assert.equal(err.diagnostic.severity, 'error')
+        assert.equal(err.diagnostic.message, err.message)
+        assert.ok(typeof err.diagnostic.message === 'string' && err.diagnostic.message.length > 0)
+        assert.deepEqual(err.diagnostic.location, c.location)
+        assert.deepEqual(err.diagnostic.span, c.span)
+        return true
+      }
+    )
+  }
+})
+
