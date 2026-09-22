@@ -40,7 +40,7 @@ modes already covered by the default-fixture-catches-uniform-bugs reasoning docu
 
 *Incrementally synced 2026-09-21 to reference `50b8f909` (`f61ac0732088..50b8f909ff59`) — refreshed published engine artifacts via `vendor/fetch.sh` (core bundle 832252 bytes, manifest + 210/210 mini-bundles). Upstream closed GAP-001 by enforcing DSL output surface range `o0..o7` at the lexer level. Added unit tests in `test/compile-graph.test.mjs` verifying rejection of out-of-range output surfaces across compiler positions (`render`, `read`, `write`), preservation of `o0` and `o7` boundary behavior, and preservation of member segment accesses (`foo.o8`, `foo.o99`) and other surface families (`s99`, `vol99`, etc.). Verified test suite: `npm test` (all 38 tests PASS) and `npm run lint`.*
 
-
+*Incrementally synced 2026-09-22 to reference `e5bd2013` (`50b8f909ff59..e5bd2013087e`) — refreshed published engine artifacts via `vendor/fetch.sh` (core bundle 832319 bytes, manifest + 210/210 mini-bundles). Upstream excluded builtins from mutation introspection (`listSteps`, `replaceEffect`, `getCompatibleReplacements`) and preserved source columns in DSL diagnostics. Added unit tests in `test/compile-graph.test.mjs` verifying exclusion of builtins from mutation introspection and column preservation in compilation diagnostics. Verified test suite: `npm test` (all 40 tests PASS) and `npm run lint`.*
 
 > **The programs sweep runs at frame 1, where normalized time is 0** (`t_i = i / loopFrames`).
 > That makes it a compile/link/uniform-binding gate, not a temporal one: any effect whose output

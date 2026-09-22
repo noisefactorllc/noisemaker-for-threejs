@@ -197,3 +197,41 @@ test('output-shaped member segments and other reference families keep existing b
     ]
   )
 })
+
+test('mutation introspection excludes builtins from steps and replacement targets', { skip }, () => {
+  const compiled = eng.core.compile('search synth, filter\nnoise(10).write(o0)\nrender(o0)')
+  const steps = eng.core.listSteps(compiled)
+  assert.equal(steps.length, 1, 'listSteps should only return user effect steps, excluding builtins')
+  assert.equal(steps[0].effectName, 'synth.noise', 'First step is noise')
+
+  const builtinSteps = compiled.plans[0].chain.filter((step) => step.builtin)
+  assert.ok(builtinSteps.length >= 1, 'chain has builtin steps')
+  for (const builtin of builtinSteps) {
+    const replaceResult = eng.core.replaceEffect(compiled, builtin.temp, 'bloom')
+    assert.equal(replaceResult.success, false, 'replaceEffect on builtin step should fail')
+    assert.equal(replaceResult.error, `Step with index ${builtin.temp} not found`)
+
+    const compatResult = eng.core.getCompatibleReplacements(compiled, builtin.temp)
+    assert.equal(compatResult.success, false, 'getCompatibleReplacements on builtin step should fail')
+    assert.equal(compatResult.error, `Step with index ${builtin.temp} not found`)
+  }
+
+  const validCompat = eng.core.getCompatibleReplacements(compiled, steps[0].stepIndex)
+  assert.equal(validCompat.success, true, 'getCompatibleReplacements on user step should succeed')
+  assert.ok(validCompat.compatible.includes('synth.solid'), 'compatible list should include starter effect')
+})
+
+test('DSL diagnostics preserve source columns across compiler positions', { skip }, () => {
+  const result = eng.core.compile('search synth\n  read(123).write(o0)')
+  const diagSummary = result.diagnostics.map(({ code, location }) => ({ code, location }))
+  assert.deepEqual(diagSummary, [
+    { code: 'S001', location: { line: 2, column: 3 } },
+    { code: 'S005', location: { line: 2, column: 13 } },
+  ])
+
+  const inlineReadResult = eng.core.compile('search synth\n\n    noise().read(o0).write(o1)')
+  const inlineReadDiag = inlineReadResult.diagnostics.find((d) => d.code === 'S001')
+  assert.ok(inlineReadDiag, 'inline read produces S001 diagnostic')
+  assert.deepEqual(inlineReadDiag.location, { line: 3, column: 13 })
+})
+
