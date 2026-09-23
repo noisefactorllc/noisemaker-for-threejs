@@ -282,3 +282,125 @@ test('DSL lexer attaches structured diagnostic payload with code, location, and 
   }
 })
 
+test('DSL parser attaches structured diagnostic payload with code, location, and span', { skip }, () => {
+  const cases = [
+    {
+      src: 'search synth\nrender o0',
+      code: 'P001',
+      location: { line: 2, column: 8 }
+    },
+    {
+      src: 'search synth\nrender(o0',
+      code: 'P002',
+      location: { line: 2, column: 10 }
+    },
+    {
+      src: 'search synth\nlet = 1',
+      code: 'P001',
+      location: { line: 2, column: 5 }
+    },
+    {
+      src: 'search synth\nlet x 1',
+      code: 'P001',
+      location: { line: 2, column: 7 }
+    },
+    {
+      src: 'search synth\nif(true) return 1',
+      code: 'P001',
+      location: { line: 2, column: 10 }
+    },
+    {
+      src: 'search synth\nrender(o0) xyz',
+      code: 'P001',
+      location: { line: 2, column: 12 }
+    },
+    {
+      src: 'search synth\nfoo(1',
+      code: 'P002',
+      location: { line: 2, column: 6 }
+    },
+    {
+      src: 'search synth\nfoo().write3d(tex3d0 geo0)',
+      code: 'P001',
+      location: { line: 2, column: 22 }
+    },
+    {
+      src: '// 😀\r\nsearch synth\r\n\trender(o0',
+      code: 'P002',
+      location: { line: 3, column: 11 }
+    },
+    {
+      src: 'search synth\nlet x = "😀"; render o0',
+      code: 'P001',
+      location: { line: 2, column: 22 }
+    }
+  ]
+
+  for (const c of cases) {
+    assert.throws(
+      () => eng.core.compile(c.src),
+      (err) => {
+        assert.ok(err instanceof SyntaxError, `Expected SyntaxError for ${c.code}`)
+        assert.ok(err.diagnostic, `Expected attached diagnostic for ${c.code}`)
+        assert.equal(err.diagnostic.code, c.code)
+        assert.equal(err.diagnostic.stage, 'parser')
+        assert.equal(err.diagnostic.severity, 'error')
+        assert.equal(err.diagnostic.message, err.message)
+        assert.ok(typeof err.diagnostic.message === 'string' && err.diagnostic.message.length > 0)
+        assert.deepEqual(err.diagnostic.location, c.location)
+        assert.equal(err.diagnostic.span, null)
+        return true
+      }
+    )
+  }
+})
+
+test('parser expectation diagnostics represent unavailable caller-token coordinates explicitly', { skip }, () => {
+  const { lex, parse } = eng.core
+
+  for (const coordinates of [{}, { line: 1 }, { line: 0, col: 1 }, { line: 1, col: NaN }]) {
+    const tokens = lex('search synth\nrender o0').map((token) => {
+      if (token.type !== 'OUTPUT_REF') return token
+      return { type: token.type, lexeme: token.lexeme, ...coordinates }
+    })
+    assert.throws(
+      () => parse(tokens),
+      (err) => {
+        assert.equal(err.message, `Expect '(' at line ${coordinates.line} col ${coordinates.col}`)
+        assert.deepEqual(err.diagnostic, {
+          code: 'P001',
+          stage: 'parser',
+          severity: 'error',
+          message: err.message,
+          location: null,
+          span: null
+        })
+        return true
+      }
+    )
+  }
+})
+
+test('renderLandscape3d filtering define choices compile with expected defines', { skip }, () => {
+  const defaultProgram =
+    'search synth, synth3d, render\nheightmap3d(heightTex: read(o1), tex: read(o2)).renderLandscape3d().write(o0)\nrender(o0)'
+  const isoProgram =
+    'search synth, synth3d, render\nheightmap3d(heightTex: read(o1), tex: read(o2)).renderLandscape3d(filtering: isosurface).write(o0)\nrender(o0)'
+  const voxelProgram =
+    'search synth, synth3d, render\nheightmap3d(heightTex: read(o1), tex: read(o2)).renderLandscape3d(filtering: voxel).write(o0)\nrender(o0)'
+
+  const defaultGraph = eng.compileGraph(defaultProgram)
+  const defaultPass = defaultGraph.passes.find((p) => p.effectFunc === 'renderLandscape3d')
+  assert.ok(defaultPass, 'renderLandscape3d pass found')
+  assert.equal(defaultGraph.programs[defaultPass.program].defines.FILTERING, 1)
+
+  const isoGraph = eng.compileGraph(isoProgram)
+  const isoPass = isoGraph.passes.find((p) => p.effectFunc === 'renderLandscape3d')
+  assert.ok(isoPass, 'renderLandscape3d pass found')
+  assert.equal(isoGraph.programs[isoPass.program].defines.FILTERING, 0)
+
+  const voxelGraph = eng.compileGraph(voxelProgram)
+  const voxelPass = voxelGraph.passes.find((p) => p.effectFunc === 'renderLandscape3d')
+  assert.ok(voxelPass, 'renderLandscape3d pass found')
+  assert.equal(voxelGraph.programs[voxelPass.program].defines.FILTERING, 1)
+})
