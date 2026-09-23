@@ -404,3 +404,165 @@ test('renderLandscape3d filtering define choices compile with expected defines',
   assert.ok(voxelPass, 'renderLandscape3d pass found')
   assert.equal(voxelGraph.programs[voxelPass.program].defines.FILTERING, 1)
 })
+
+test('DSL parser attaches structured diagnostic payload for automation arguments (P003)', { skip }, () => {
+  const automationFailures = [
+    ['osc(type: oscKind.sine, bogus: 1)', "osc() unknown parameter 'bogus'", '. Valid: type, min, max, speed, offset, seed'],
+    ['midi(1, 2, 3, 4, 5, 6)', 'midi() name, id, cc, nrpn, zone and members are keyword-only'],
+    ['midi(bogus: 1)', "midi() unknown parameter 'bogus'", '. Valid: channel, mode, min, max, sensitivity, name, id, cc, nrpn, zone, members'],
+    ['midi(1, 2, 3, 4, 5, channel: 1)', 'midi() has an excess positional argument'],
+    ['midi()', "midi() requires 'channel' or 'zone' argument"],
+    ['midi(1, zone: 1)', "midi() 'channel' and 'zone' are mutually exclusive"],
+    ['midi(1, members: 2)', "midi() 'members' requires 'zone'"],
+    ['midi(1, id: "port")', "midi() 'id' requires readable 'name'"],
+    ['midi(1, name: 1)', "midi() 'name' requires a quoted string"],
+    ['midi(1, name: "")', "midi() 'name' must not be empty"],
+    ['midi(1, name: "port", id: 1)', "midi() 'id' requires a quoted string"],
+    ['midi(1, name: "port", id: "")', "midi() 'id' must not be empty"],
+    ['audio(1, 2, 3, 4)', 'audio() channel, name and id are keyword-only'],
+    ['audio(bogus: 1)', "audio() unknown parameter 'bogus'", '. Valid: band, min, max, channel, name, id'],
+    ['audio(1, 2, 3, band: 1)', 'audio() has an excess positional argument'],
+    ['audio()', "audio() requires 'band' argument"],
+    ['audio(1, id: "device")', "audio() 'id' requires readable 'name'"],
+    ['audio(1, name: "device")', "audio() selected device requires both 'name' and 'channel'"],
+    ['audio(1, channel: 1, name: 1)', "audio() 'name' requires a quoted string"],
+    ['audio(1, channel: 1, name: "")', "audio() 'name' must not be empty"],
+    ['audio(1, channel: 1, name: "device", id: 1)', "audio() 'id' requires a quoted string"],
+    ['audio(1, channel: 1, name: "device", id: "")', "audio() 'id' must not be empty"]
+  ]
+
+  for (const [invocation, prefix, suffix = ''] of automationFailures) {
+    const source = `search synth\nlet x = ${invocation}`
+    const message = `${prefix} at line 2 col 9${suffix}`
+    assert.throws(
+      () => eng.core.compile(source),
+      (err) => {
+        assert.ok(err instanceof SyntaxError, `Expected SyntaxError for ${invocation}`)
+        assert.equal(err.message, message)
+        const expected = {
+          code: 'P003',
+          stage: 'parser',
+          severity: 'error',
+          message,
+          location: { line: 2, column: 9 },
+          span: null
+        }
+        assert.deepEqual(err.diagnostic, expected)
+        return true
+      }
+    )
+  }
+})
+
+test('parser automation diagnostics locate invocation names after CRLF, tabs, and UTF-16 text', { skip }, () => {
+  const source = 'search synth\r\n\tlet x = "😀"; let y = midi()'
+  assert.throws(
+    () => eng.core.compile(source),
+    (err) => {
+      assert.equal(err.message, "midi() requires 'channel' or 'zone' argument at line 2 col 24")
+      assert.deepEqual(err.diagnostic, {
+        code: 'P003',
+        stage: 'parser',
+        severity: 'error',
+        message: err.message,
+        location: { line: 2, column: 24 },
+        span: null
+      })
+      return true
+    }
+  )
+})
+
+test('parser automation diagnostics preserve unavailable caller-token coordinates', { skip }, () => {
+  const { lex, parse } = eng.core
+  for (const invocation of ['osc(type: 1, bogus: 1)', 'midi()', 'audio()']) {
+    for (const coordinates of [{}, { line: 1 }, { line: 0, col: 1 }, { line: 1, col: NaN }]) {
+      const tokens = lex(`search synth\nlet x = ${invocation}`).map((token) => {
+        if (!['osc', 'midi', 'audio'].includes(token.lexeme)) return token
+        return { type: token.type, lexeme: token.lexeme, ...coordinates }
+      })
+      assert.throws(
+        () => parse(tokens),
+        (err) => {
+          assert.ok(err instanceof SyntaxError)
+          assert.ok(err.message.includes(`at line ${coordinates.line} col ${coordinates.col}`))
+          assert.deepEqual(err.diagnostic, {
+            code: 'P003',
+            stage: 'parser',
+            severity: 'error',
+            message: err.message,
+            location: null,
+            span: null
+          })
+          return true
+        }
+      )
+    }
+  }
+})
+
+test('DSL parser attaches structured diagnostic payload for search directives (P004)', { skip }, () => {
+  const missingSearchMessage = "Missing required 'search' directive. Every program must start with 'search <namespace>, ...' to specify namespace search order."
+  const searchFailures = [
+    ['empty program', '', missingSearchMessage, 1, 1],
+    ['missing directive after statements', 'let x = 1', missingSearchMessage, 1, 10],
+    ['duplicate directive', 'search synth search filter', 'Only one search directive is allowed per program at line 1 col 14', 1, 14],
+    ['invalid namespace', 'search bogus', "Invalid namespace 'bogus' at line 1 col 8. Valid namespaces: io, classicNoisedeck, synth, mixer, filter, render, points, synth3d, filter3d, user", 1, 8],
+    ['missing first namespace', 'search', 'Expected namespace identifier after search at line 1 col 7', 1, 7],
+    ['missing additional namespace', 'search synth,', 'Expected namespace identifier after comma at line 1 col 14', 1, 14],
+    ['misplaced directive', 'let x = 1; search synth', "'search' directive must appear before other statements at line 1 col 12", 1, 12],
+    ['nested directive', 'search synth\nif(true) { search filter }', "'search' directive is only allowed at the start of the program at line 2 col 12", 2, 12],
+    ['CRLF and tab', '// 😀\r\n\tsearch 1', 'Expected namespace identifier after search at line 2 col 9', 2, 9],
+    ['UTF-16 column', 'search synth\nlet x = "😀"; search filter', "'search' directive must appear before other statements at line 2 col 15", 2, 15]
+  ]
+
+  for (const [, source, message, line, column] of searchFailures) {
+    assert.throws(
+      () => eng.core.compile(source),
+      (err) => {
+        assert.ok(err instanceof SyntaxError)
+        assert.equal(err.message, message)
+        const expected = {
+          code: 'P004',
+          stage: 'parser',
+          severity: 'error',
+          message,
+          location: { line, column },
+          span: null
+        }
+        assert.deepEqual(err.diagnostic, expected)
+        return true
+      }
+    )
+  }
+})
+
+test('parser search diagnostics preserve unavailable caller-token coordinates', { skip }, () => {
+  const { lex, parse } = eng.core
+  const searchFailures = [
+    ['empty program', ''],
+    ['invalid namespace', 'search bogus'],
+    ['misplaced directive', 'let x = 1; search synth']
+  ]
+  for (const [, source] of searchFailures) {
+    for (const coordinates of [{}, { line: 1 }, { line: 0, col: 1 }, { line: 1, col: NaN }]) {
+      const tokens = lex(source).map(({ type, lexeme }) => ({ type, lexeme, ...coordinates }))
+      assert.throws(
+        () => parse(tokens),
+        (err) => {
+          assert.ok(err instanceof SyntaxError)
+          assert.deepEqual(err.diagnostic, {
+            code: 'P004',
+            stage: 'parser',
+            severity: 'error',
+            message: err.message,
+            location: null,
+            span: null
+          })
+          return true
+        }
+      )
+    }
+  }
+})
+
