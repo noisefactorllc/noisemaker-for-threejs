@@ -718,3 +718,126 @@ test('output syntax preserves shared expectation diagnostic precedence', { skip 
   }
 })
 
+test('DSL parser attaches structured diagnostic payload for subchain operations (P006)', { skip }, () => {
+  const subchainFailures = [
+    ['non-string argument', 'search synth\nread(o0).subchain(name: 1) { .diagProbe() }', 'Expected string value for subchain name at line 2 col 25', 2, 25],
+    ['argument at EOF', 'search synth\nread(o0).subchain(name:', 'Expected string value for subchain name at line 2 col 24', 2, 24],
+    ['missing body dot', 'search synth\nread(o0).subchain() { diagProbe() }', "Expected '.' before chain element in subchain body at line 2 col 23", 2, 23],
+    ['body at EOF', 'search synth\nread(o0).subchain() {', "Expected '.' before chain element in subchain body at line 2 col 22", 2, 22],
+    ['empty body', 'search synth\nread(o0).subchain() {}', 'Subchain body cannot be empty at line 2 col 10', 2, 10],
+    ['comment-only body', 'search synth\nread(o0).subchain() { /* empty */ }', 'Subchain body cannot be empty at line 2 col 10', 2, 10],
+    ['CRLF tab and UTF-16 argument', '// 😀\r\nsearch synth\r\n\tread(o0).subchain(name: "😀", id: 1) { .diagProbe() }', 'Expected string value for subchain id at line 3 col 36', 3, 36],
+    ['missing dot after comment', 'search synth\nread(o0).subchain() { /* 😀 */ missing() }', "Expected '.' before chain element in subchain body at line 2 col 32", 2, 32],
+    ['unclosed nonempty body', 'search synth\nread(o0).subchain() { .diagProbe()', "Expected '.' before chain element in subchain body at line 2 col 35", 2, 35]
+  ]
+
+  const { lex, parse, compile } = eng.core
+  for (const [, source, message, line, column] of subchainFailures) {
+    for (const entryPoint of [(src) => parse(lex(src)), compile]) {
+      assert.throws(
+        () => entryPoint(source),
+        (err) => {
+          assert.ok(err instanceof SyntaxError)
+          assert.equal(err.message, message)
+          const expected = {
+            code: 'P006',
+            stage: 'parser',
+            severity: 'error',
+            message,
+            location: { line, column },
+            span: null
+          }
+          assert.deepEqual(err.diagnostic, expected)
+          return true
+        }
+      )
+    }
+  }
+})
+
+test('parser subchain diagnostics represent unavailable caller-token coordinates', { skip }, () => {
+  const subchainFailures = [
+    ['non-string argument', 'search synth\nread(o0).subchain(name: 1) { .diagProbe() }'],
+    ['argument at EOF', 'search synth\nread(o0).subchain(name:'],
+    ['missing body dot', 'search synth\nread(o0).subchain() { diagProbe() }'],
+    ['body at EOF', 'search synth\nread(o0).subchain() {'],
+    ['empty body', 'search synth\nread(o0).subchain() {}'],
+    ['comment-only body', 'search synth\nread(o0).subchain() { /* empty */ }'],
+    ['CRLF tab and UTF-16 argument', '// 😀\r\nsearch synth\r\n\tread(o0).subchain(name: "😀", id: 1) { .diagProbe() }'],
+    ['missing dot after comment', 'search synth\nread(o0).subchain() { /* 😀 */ missing() }'],
+    ['unclosed nonempty body', 'search synth\nread(o0).subchain() { .diagProbe()']
+  ]
+
+  const { lex, parse } = eng.core
+  for (const [, source] of subchainFailures) {
+    for (const coordinates of [{}, { line: 1 }, { line: 0, col: 1 }, { line: 1, col: NaN }]) {
+      const tokens = lex(source).map(({ type, lexeme }) => ({ type, lexeme, ...coordinates }))
+      assert.throws(
+        () => parse(tokens),
+        (err) => {
+          assert.ok(err instanceof SyntaxError)
+          assert.deepEqual(err.diagnostic, {
+            code: 'P006',
+            stage: 'parser',
+            severity: 'error',
+            message: err.message,
+            location: null,
+            span: null
+          })
+          return true
+        }
+      )
+    }
+  }
+})
+
+test('subchain syntax preserves shared expectation diagnostic precedence', { skip }, () => {
+  const cases = [
+    ['search synth\nread(o0).subchain(1) {}', 'P002', "Expect ')' after subchain arguments at line 2 col 19"],
+    ['search synth\nread(o0).subchain() { . }', 'P001', 'Expected identifier at line 2 col 25']
+  ]
+
+  const { lex, parse, compile } = eng.core
+  for (const [source, code, message] of cases) {
+    for (const entryPoint of [(src) => parse(lex(src)), compile]) {
+      assert.throws(
+        () => entryPoint(source),
+        (err) => {
+          assert.equal(err.message, message)
+          assert.equal(err.diagnostic?.code, code)
+          return true
+        }
+      )
+    }
+  }
+})
+
+test('valid subchains preserve permissive arguments, defaults, and compiled op expansion', { skip }, () => {
+  const { lex, parse, compile } = eng.core
+  for (const [args, name, id] of [
+    ['', null, null],
+    ['"positional"', 'positional', null],
+    ['name: "named", id: "s"', 'named', 's'],
+    ['foo: "x" name: "a" name: "b" id: "s"', 'b', 's']
+  ]) {
+    const source = `search filter\nread(o0).subchain(${args}) { .invert() }.write(o1)`
+    const ast = parse(lex(source))
+    assert.deepEqual(ast.plans[0].chain[1], {
+      type: 'Subchain',
+      name,
+      id,
+      body: [{ type: 'Call', name: 'invert', args: [] }],
+      loc: { line: 2, col: 10 }
+    })
+    const result = compile(source)
+    assert.deepEqual(result.diagnostics, [])
+    assert.deepEqual(result.plans[0].chain, [
+      { op: '_read', args: { tex: { kind: 'output', name: 'o0' } }, from: null, temp: 0, builtin: true },
+      { op: '_subchain_begin', args: { name, id }, from: 0, temp: 1, builtin: true },
+      { op: 'filter.invert', args: { mode: 0 }, from: 1, temp: 2 },
+      { op: '_subchain_end', args: { name, id }, from: 2, temp: 3, builtin: true },
+      { op: '_write', args: { tex: { kind: 'output', name: 'o1' } }, from: 3, temp: 4, builtin: true }
+    ])
+  }
+})
+
