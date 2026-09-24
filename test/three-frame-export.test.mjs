@@ -238,14 +238,17 @@ test('NoisemakerCanvas delegates sink and frame-export APIs to its active pipeli
   canvas.pipeline = null
   assert.throws(() => canvas.addSink({}), /compile/i)
   assert.throws(() => canvas.createFrameExportQueue(), /compile/i)
+  assert.equal(canvas.shouldDeferRender(), false)
 
   const sink = { configure () {}, submit () {}, close () {} }
   const removal = () => {}
   const queue = { kind: 'queue' }
   let receivedSink
   let receivedOptions
+  let deferRenderValue = true
   canvas.pipeline = {
     addSink (value) { receivedSink = value; return removal },
+    shouldDeferRender () { return deferRenderValue },
     backend: {
       createFrameExportQueue (options) { receivedOptions = options; return queue },
     },
@@ -255,6 +258,9 @@ test('NoisemakerCanvas delegates sink and frame-export APIs to its active pipeli
   assert.equal(receivedSink, sink)
   assert.equal(canvas.createFrameExportQueue({ slots: 4 }), queue)
   assert.deepEqual(receivedOptions, { slots: 4 })
+  assert.equal(canvas.shouldDeferRender(), true)
+  deferRenderValue = false
+  assert.equal(canvas.shouldDeferRender(), false)
 })
 
 test('offscreen wrappers dispose their Pipeline so registered sinks are closed', async () => {

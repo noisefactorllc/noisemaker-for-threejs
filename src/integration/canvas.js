@@ -61,6 +61,11 @@ export class NoisemakerCanvas {
     return this.pipeline.backend?.createFrameExportQueue?.(options) ?? null
   }
 
+  /** @returns {boolean} Whether an active output sink has requested skipping the next frame. */
+  shouldDeferRender() {
+    return Boolean(this.pipeline?.shouldDeferRender?.())
+  }
+
   /** Render a single frame at normalized time t (0..1). */
   renderFrame(t = 0, presentationTimestamp) {
     this.pipeline.render(t, presentationTimestamp)

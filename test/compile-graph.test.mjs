@@ -566,3 +566,50 @@ test('parser search diagnostics preserve unavailable caller-token coordinates', 
   }
 })
 
+test('Pipeline delegates shouldDeferRender to active sinks', { skip }, () => {
+  const backend = { textures: new Map(), destroy () {} }
+  const graph = { passes: [], textures: new Map() }
+  const pipeline = new eng.Pipeline(graph, backend)
+  assert.equal(pipeline.shouldDeferRender(), false)
+
+  let defer = false
+  const sink = {
+    configure () {},
+    submit () { return true },
+    close () {},
+    deferRender () { return defer }
+  }
+  const removeSink = pipeline.addSink(sink)
+  assert.equal(pipeline.shouldDeferRender(), false)
+
+  defer = true
+  assert.equal(pipeline.shouldDeferRender(), true)
+
+  removeSink()
+  assert.equal(pipeline.shouldDeferRender(), false)
+
+  pipeline.addSink(sink)
+  pipeline.dispose()
+  assert.equal(pipeline.shouldDeferRender(), false)
+})
+
+test('Pipeline shouldDeferRender isolates throwing sinks and reports error', { skip }, () => {
+  const backend = { textures: new Map(), destroy () {} }
+  const graph = { passes: [], textures: new Map() }
+  const pipeline = new eng.Pipeline(graph, backend)
+  let reported = null
+  pipeline.sinkManager._onError = (err, sink) => { reported = [err.message, sink] }
+
+  const throwingSink = {
+    configure () {},
+    submit () { return true },
+    close () {},
+    deferRender () { throw new Error('backlog probe failed') }
+  }
+  pipeline.addSink(throwingSink)
+
+  assert.equal(pipeline.shouldDeferRender(), false)
+  assert.deepEqual(reported, ['backlog probe failed', throwingSink])
+  assert.equal(pipeline.sinkManager.stats.get(throwingSink).failed, 1)
+})
+
