@@ -5,6 +5,10 @@
 
 # Noisemaker for Three.js
 
+Current measured support: [compatibility report](docs/COMPATIBILITY.md).
+
+Current qualification limits: [completion gaps](docs/COMPLETION_GAPS.md).
+
 > Run **Noisemaker**'s procedural visuals in **three.js**.
 
 > This package supports the "Export Shader Pipeline" feature in Noisedeck.app. The
