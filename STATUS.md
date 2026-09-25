@@ -58,26 +58,45 @@ modes already covered by the default-fixture-catches-uniform-bugs reasoning docu
 
 *Incrementally synced 2026-09-25 to reference `240740dd` (`fca611fd8f91..240740dd2d30`, covering Tearoff #513 trigger `4891b995..240740dd`) — refreshed published engine artifacts via `vendor/fetch.sh` (core bundle 841350 bytes, manifest + 210/210 mini-bundles). Upstream exposed structured DSL parser diagnostics for subchain arguments under GAP-027 (`66b2c721`): `P008` (unknown/discarded subchain argument key warning), `P009` (duplicate subchain argument key warning, last value wins), `P010` (missing comma separator between keyword arguments warning), and opt-in strict validation (`subchainArguments: 'strict'`), along with differential coverage baseline (`240740dd`). Added unit tests in `test/compile-graph.test.mjs` verifying `P008`, `P009`, `P010` warning diagnostics with source coordinates, AST projection invariance discarding unknown keys, duplicate argument precedence, missing separator diagnostics, strict-mode opt-in rejections, and updated legacy permissive subchain argument assertions. Verified test suite: `npm test` (all 66 tests PASS), `npm run lint`, and `npm run parity` (PASS=81 FAIL=0 ERR=7 worst=0).*
 
-*Incrementally synced 2026-09-25 to reference `9d3474df` (`240740dd2d30..9d3474dfdc6c`, Tearoff
-trigger `4891b995..9d3474dfdc6c` with force-push ambiguity — audited directly) — published CDN
-engine artifacts unchanged: core bundle re-fetched and byte-identical (841350 bytes,
-`7b4515a2…`), manifest + 210/210 mini-bundles unchanged, zero effect-definition diffs in the
-range. Upstream's only `shaders/` change is GAP-003 runtime effect-definition validation
-(`ba87ffae` + `9d3474df`): `shaders/src/runtime/effect-validator.js` grew a full grammar contract
-over the definition schema consumed by effect.js/expander.js/compiler.js/uniform packing/UI, wired
-into upstream's own test runners — it is not exported by the published bundle and so touches
-nothing in this adapter's execution path (verified: `validateEffectDefinition` absent from the
-re-fetched core bundle). Cross-check: ran the new upstream validator against the vendored catalog —
-209/210 mini-bundles validate cleanly; the sole flag is `filter/text`, whose vendored class does
-not subclass the upstream `Effect` (the bundle ships its own base class, so the validator treats
-the instance as a plain object and diagnoses its legitimate runtime `id` field), and the CDN
-packaging step adds a `help` field upstream's source definitions don't carry (upstream's own
-corpus gate on `shaders/effects/**/definition.js`: expected=210 executed=210 pass=210 failure=0).
-Both are packaging artifacts, not definition or adapter defects. No adapter code changes required.
-Verified test suite: `npm test` (all 66 tests PASS) and `npm run lint` (clean). Re-ran `npm run
-parity` headless (SwiftShader) as an environmental smoke check: every completed program matched
-byte-exactly (worst=0) with only the documented golden-side compilation ERRs; the full
-PASS=81 FAIL=0 ERR=7 ledger remains pinned to the last Apple Silicon run above.*
+*Incrementally synced 2026-09-25 to upstream reference `9d3474df` (audit window
+`240740dd2d30..9d3474dfdc6c` in noisefactorllc/noisemaker, covering Tearoff trigger
+`4891b995..9d3474dfdc6c` with force-push ambiguity — resolved by diffing a fresh local clone of
+the upstream repo rather than the trigger's range summary; no sibling dependency is added to the
+repo). Evidence provenance, split by what is reproducible here versus observed upstream:
+
+  In-repo, re-checkable without network (the adapter executes ONLY the published CDN artifact):
+  - `vendor/noisemaker/noisemaker-shaders-core.esm.js`: 841350 bytes, SHA-256
+    `7b4515a27ec41b81f812c8b10ffb64a23eb18c62288eb85f9d9c5518a5a4ba48` — byte-identical to the
+    bundle pinned by the previous sync entry (`240740dd`), i.e. the CDN `/1` publication did not
+    change across this upstream increment.
+  - `vendor/noisemaker/effects/manifest.json`: SHA-256
+    `05c4d7b7744837ae90a3bb4c89e5403ff09448a74d9d7e824abb3d719ad3314e`; 210 mini-bundles on disk.
+  - The core bundle contains zero occurrences of `validateEffectDefinition`/`effect-validator`.
+
+  Upstream-audit facts (from the local clone; per-commit file lists):
+  - `shaders/` changed in exactly two commits, both restricted to
+    `shaders/src/runtime/effect-validator.js` + `shaders/tests/test_effect_definition_validation.js`
+    (`ba87ffae` runtime effect-definition validation, upstream repo's own GAP-003; `9d3474df`
+    contract completion + test wiring into upstream's `scripts/run-js-tests.js` /
+    `test:shaders:runtime`). Zero effect-definition (`shaders/effects/`) diffs in the window.
+  - All other commits in the window touch only `llms-full.txt`, `LEDGER.md`, docs/plans, and the
+    landing page — nothing in `shaders/`.
+
+Because the validator is upstream-side test tooling that is not exported by the published bundle
+(checkable above), it touches nothing in this adapter's execution path. Cross-check run in the
+authoring environment: the new upstream validator applied to the vendored catalog reported 209/210
+mini-bundles clean; the sole flag is `filter/text`, whose vendored class does not subclass the
+upstream `Effect` (the bundle ships its own base class, so the validator treats the instance as a
+plain object and diagnoses its legitimate runtime `id` field), and the CDN packaging step adds a
+`help` field upstream's source definitions don't carry (upstream's own corpus gate on
+`shaders/effects/**/definition.js`: expected=210 executed=210 pass=210 failure=0). Both are
+packaging artifacts, not definition or adapter defects. No adapter code changes required.
+
+Checks run in the authoring environment at the pre-commit working tree (not CI at this SHA): `npm
+test` (all 66 tests PASS), `npm run lint` (clean), and `npm run parity` headless (SwiftShader) as
+an environmental smoke check — every completed program matched byte-exactly (worst=0) with only
+the documented golden-side compilation ERRs; the full PASS=81 FAIL=0 ERR=7 ledger remains pinned
+to the last Apple Silicon run above.*
 
 > **The programs sweep runs at frame 1, where normalized time is 0** (`t_i = i / loopFrames`).
 > That makes it a compile/link/uniform-binding gate, not a temporal one: any effect whose output
