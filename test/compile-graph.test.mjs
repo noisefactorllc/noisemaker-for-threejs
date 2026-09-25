@@ -820,11 +820,11 @@ test('subchain syntax preserves shared expectation diagnostic precedence', { ski
 
 test('valid subchains preserve permissive arguments, defaults, and compiled op expansion', { skip }, () => {
   const { lex, parse, compile } = eng.core
-  for (const [args, name, id] of [
-    ['', null, null],
-    ['"positional"', 'positional', null],
-    ['name: "named", id: "s"', 'named', 's'],
-    ['foo: "x" name: "a" name: "b" id: "s"', 'b', 's']
+  for (const [args, name, id, expectDiagnostics] of [
+    ['', null, null, false],
+    ['"positional"', 'positional', null, false],
+    ['name: "named", id: "s"', 'named', 's', false],
+    ['foo: "x" name: "a" name: "b" id: "s"', 'b', 's', true]
   ]) {
     const source = `search filter\nread(o0).subchain(${args}) { .invert() }.write(o1)`
     const ast = parse(lex(source))
@@ -836,7 +836,11 @@ test('valid subchains preserve permissive arguments, defaults, and compiled op e
       loc: { line: 2, col: 10 }
     })
     const result = compile(source)
-    assert.deepEqual(result.diagnostics, [])
+    if (expectDiagnostics) {
+      assert.deepEqual(result.diagnostics.map(d => d.code), ['P008', 'P010', 'P010', 'P009', 'P010'])
+    } else {
+      assert.deepEqual(result.diagnostics, [])
+    }
     assert.deepEqual(result.plans[0].chain, [
       { op: '_read', args: { tex: { kind: 'output', name: 'o0' } }, from: null, temp: 0, builtin: true },
       { op: '_subchain_begin', args: { name, id }, from: 0, temp: 1, builtin: true },
@@ -1083,4 +1087,69 @@ test('valid call forms retain from-override namespaces and mixed automation argu
   const mixed = parse(lex('search synth\nlet a = midi(1, channel: 2)'))
   assert.equal(mixed.vars[0].expr.channel.value, 2)
 })
+
+test('DSL parser attaches structured diagnostic payload for subchain arguments (P008, P009, P010)', { skip }, () => {
+  const { compile } = eng.core
+
+  // P008: unknown subchain argument key (warning)
+  const unknownSource = 'search filter\nread(o0).subchain(unknownKey: "val", name: "ok") { .invert() }.write(o1)'
+  const unknownResult = compile(unknownSource)
+  const p008 = unknownResult.diagnostics.find(d => d.code === 'P008')
+  assert.ok(p008)
+  assert.equal(p008.severity, 'warning')
+  assert.equal(p008.location.line, 2)
+  assert.equal(p008.location.column, 19)
+  assert.match(p008.message, /unknownKey/)
+  // Unknown key discarded from AST projection
+  assert.equal(unknownResult.plans[0].chain[1].args.name, 'ok')
+  assert.equal(unknownResult.plans[0].chain[1].args.id, null)
+
+  // P009: duplicate subchain argument key (warning, last value wins)
+  const dupSource = 'search filter\nread(o0).subchain(name: "first", name: "second") { .invert() }.write(o1)'
+  const dupResult = compile(dupSource)
+  const p009 = dupResult.diagnostics.find(d => d.code === 'P009')
+  assert.ok(p009)
+  assert.equal(p009.severity, 'warning')
+  assert.equal(p009.location.line, 2)
+  assert.equal(p009.location.column, 34)
+  assert.match(p009.message, /name/)
+  assert.equal(dupResult.plans[0].chain[1].args.name, 'second')
+
+  // P010: missing comma separator between keyword arguments (warning)
+  const sepSource = 'search filter\nread(o0).subchain(name: "a" id: "b") { .invert() }.write(o1)'
+  const sepResult = compile(sepSource)
+  const p010 = sepResult.diagnostics.find(d => d.code === 'P010')
+  assert.ok(p010)
+  assert.equal(p010.severity, 'warning')
+  assert.equal(p010.location.line, 2)
+  assert.equal(p010.location.column, 29)
+  assert.deepEqual(sepResult.plans[0].chain[1].args, { name: 'a', id: 'b' })
+
+  // Strict mode: throws SyntaxError with diagnostic code
+  assert.throws(
+    () => compile(unknownSource, { subchainArguments: 'strict' }),
+    (err) => {
+      assert.ok(err instanceof SyntaxError)
+      assert.equal(err.diagnostic?.code, 'P008')
+      return true
+    }
+  )
+  assert.throws(
+    () => compile(dupSource, { subchainArguments: 'strict' }),
+    (err) => {
+      assert.ok(err instanceof SyntaxError)
+      assert.equal(err.diagnostic?.code, 'P009')
+      return true
+    }
+  )
+  assert.throws(
+    () => compile(sepSource, { subchainArguments: 'strict' }),
+    (err) => {
+      assert.ok(err instanceof SyntaxError)
+      assert.equal(err.diagnostic?.code, 'P010')
+      return true
+    }
+  )
+})
+
 
