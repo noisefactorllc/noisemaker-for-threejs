@@ -11,6 +11,12 @@ const CORE = fileURLToPath(new URL('../vendor/noisemaker/noisemaker-shaders-core
 const skip = existsSync(CORE) ? false : 'engine not fetched — run `bash vendor/fetch.sh` first'
 const eng = skip ? null : await bootEngine()
 
+const sourcePosition = (source, line, column) => {
+  const matches = eng.core.lex(source).filter((token) => token.position.line === line && token.position.column === column)
+  assert.equal(matches.length, 1)
+  return { start: matches[0].position.start, end: matches[0].position.end }
+}
+
 test('compileGraph produces a GLSL render graph for solid', { skip }, () => {
   const g = eng.compileGraph('search synth\nsolid(0.2, 0.6, 0.9).write(o0)\nrender(o0)')
   assert.ok(Array.isArray(g.passes) && g.passes.length >= 1, 'has passes')
@@ -348,7 +354,7 @@ test('DSL parser attaches structured diagnostic payload with code, location, and
         assert.equal(err.diagnostic.message, err.message)
         assert.ok(typeof err.diagnostic.message === 'string' && err.diagnostic.message.length > 0)
         assert.deepEqual(err.diagnostic.location, c.location)
-        assert.equal(err.diagnostic.span, null)
+        assert.deepEqual(err.diagnostic.span, sourcePosition(c.src, c.location.line, c.location.column))
         return true
       }
     )
@@ -445,7 +451,7 @@ test('DSL parser attaches structured diagnostic payload for automation arguments
           severity: 'error',
           message,
           location: { line: 2, column: 9 },
-          span: null
+          span: sourcePosition(source, 2, 9)
         }
         assert.deepEqual(err.diagnostic, expected)
         return true
@@ -466,7 +472,7 @@ test('parser automation diagnostics locate invocation names after CRLF, tabs, an
         severity: 'error',
         message: err.message,
         location: { line: 2, column: 24 },
-        span: null
+        span: sourcePosition(source, 2, 24)
       })
       return true
     }
@@ -528,7 +534,7 @@ test('DSL parser attaches structured diagnostic payload for search directives (P
           severity: 'error',
           message,
           location: { line, column },
-          span: null
+          span: sourcePosition(source, line, column)
         }
         assert.deepEqual(err.diagnostic, expected)
         return true
@@ -644,7 +650,7 @@ test('DSL parser attaches structured diagnostic payload for output operations (P
             severity: 'error',
             message,
             location: { line, column },
-            span: null
+            span: sourcePosition(source, line, column)
           }
           assert.deepEqual(err.diagnostic, expected)
           return true
@@ -745,7 +751,7 @@ test('DSL parser attaches structured diagnostic payload for subchain operations 
             severity: 'error',
             message,
             location: { line, column },
-            span: null
+            span: sourcePosition(source, line, column)
           }
           assert.deepEqual(err.diagnostic, expected)
           return true
@@ -839,5 +845,242 @@ test('valid subchains preserve permissive arguments, defaults, and compiled op e
       { op: '_write', args: { tex: { kind: 'output', name: 'o1' } }, from: 3, temp: 4, builtin: true }
     ])
   }
+})
+
+test('DSL parser attaches structured diagnostic payload for call forms (P007)', { skip }, () => {
+  const callFormFailures = [
+    ['from named arguments', 'search synth\nlet x = from(a: 1, b: 2)', "'from' does not support named arguments at line 2 col 9", 2, 9],
+    ['from missing second argument', 'search synth\nlet x = from(synth)', "'from' requires exactly two arguments (namespace, call) at line 2 col 9", 2, 9],
+    ['from namespace not an identifier', 'search synth\nlet x = from(1, probe())', "'from' namespace argument must be an identifier at line 2 col 9", 2, 9],
+    ['from second argument not a call', 'search synth\nlet x = from(synth, 1)', "'from' second argument must be a call expression at line 2 col 9", 2, 9],
+    ['inline namespace', 'search synth\nnd.noise()', "Inline namespace syntax 'nd.noise()' is not allowed. Use 'search nd' at the start of the program instead, at line 2 col 1", 2, 1],
+    ['positional then keyword', 'search synth\nfoo(1, x: 2)', 'Cannot mix positional and keyword arguments at line 2 col 8', 2, 8],
+    ['keyword then positional', 'search synth\nfoo(x: 1, 2)', 'Cannot mix positional and keyword arguments at line 2 col 11', 2, 11],
+    ['CRLF tab and UTF-16', '// 😀\r\nsearch synth\r\n\tfoo(1, x: 2)', 'Cannot mix positional and keyword arguments at line 3 col 9', 3, 9],
+    ['UTF-16 inline namespace column', 'search synth\nlet x = "😀"; nd.noise()', "Inline namespace syntax 'nd.noise()' is not allowed. Use 'search nd' at the start of the program instead, at line 2 col 15", 2, 15]
+  ]
+
+  const { lex, parse, compile } = eng.core
+  for (const [, source, message, line, column] of callFormFailures) {
+    for (const entryPoint of [(src) => parse(lex(src)), compile]) {
+      assert.throws(
+        () => entryPoint(source),
+        (err) => {
+          assert.ok(err instanceof SyntaxError)
+          assert.equal(err.message, message)
+          const expected = {
+            code: 'P007',
+            stage: 'parser',
+            severity: 'error',
+            message,
+            location: { line, column },
+            span: sourcePosition(source, line, column)
+          }
+          assert.deepEqual(err.diagnostic, expected)
+          return true
+        }
+      )
+    }
+  }
+})
+
+test('parser call form diagnostics preserve unavailable caller-token coordinates', { skip }, () => {
+  const callFormFailures = [
+    ['from named arguments', 'search synth\nlet x = from(a: 1, b: 2)'],
+    ['from missing second argument', 'search synth\nlet x = from(synth)'],
+    ['from namespace not an identifier', 'search synth\nlet x = from(1, probe())'],
+    ['from second argument not a call', 'search synth\nlet x = from(synth, 1)'],
+    ['inline namespace', 'search synth\nnd.noise()'],
+    ['positional then keyword', 'search synth\nfoo(1, x: 2)'],
+    ['keyword then positional', 'search synth\nfoo(x: 1, 2)'],
+    ['CRLF tab and UTF-16', '// 😀\r\nsearch synth\r\n\tfoo(1, x: 2)'],
+    ['UTF-16 inline namespace column', 'search synth\nlet x = "😀"; nd.noise()']
+  ]
+
+  const { lex, parse } = eng.core
+  for (const [, source] of callFormFailures) {
+    for (const coordinates of [{}, { line: 1 }, { line: 0, col: 1 }, { line: 1, col: NaN }]) {
+      const tokens = lex(source).map(({ type, lexeme }) => ({ type, lexeme, ...coordinates }))
+      assert.throws(
+        () => parse(tokens),
+        (err) => {
+          assert.ok(err instanceof SyntaxError)
+          assert.deepEqual(err.diagnostic, {
+            code: 'P007',
+            stage: 'parser',
+            severity: 'error',
+            message: err.message,
+            location: null,
+            span: null
+          })
+          return true
+        }
+      )
+    }
+  }
+})
+
+test('parser remaining expectation diagnostics and number coercion diagnostics (P001)', { skip }, () => {
+  const remainingExpectFailures = [
+    ['expected expression in assignment', 'search synth\nlet x = ;', "Expected expression after '=' at line 2 col 9", 2, 9],
+    ['expected expression in keyword argument', 'search synth\nfoo(a: )', "Expected expression after '=' at line 2 col 8", 2, 8],
+    ['expected closing bracket', 'search synth\nlet x = [1 2]', "Expected ']' at line 2 col 12", 2, 12],
+    ['expected identifier after dot', 'search synth\nlet x = foo.+', "Expected identifier after '.' at line 2 col 13", 2, 13],
+    ['unexpected primary token', 'search synth\nfoo(; 1)', 'Unexpected token SEMICOLON at line 2 col 5', 2, 5],
+    ['UTF-16 column', 'search synth\nlet x = "😀"; let y = [1 2]', "Expected ']' at line 2 col 26", 2, 26]
+  ]
+
+  const { lex, parse, compile } = eng.core
+  for (const [, source, message, line, column] of remainingExpectFailures) {
+    for (const entryPoint of [(src) => parse(lex(src)), compile]) {
+      assert.throws(
+        () => entryPoint(source),
+        (err) => {
+          assert.ok(err instanceof SyntaxError)
+          assert.equal(err.message, message)
+          const expected = {
+            code: 'P001',
+            stage: 'parser',
+            severity: 'error',
+            message,
+            location: { line, column },
+            span: sourcePosition(source, line, column)
+          }
+          assert.deepEqual(err.diagnostic, expected)
+          return true
+        }
+      )
+    }
+  }
+
+  const coercionFailures = [
+    ['array addition without drift', 'search synth\nlet y = [1] + 1', 2, 9],
+    ['array multiplication without drift', 'search synth\nlet y = 1 * [1]', 2, 13],
+    ['array unary minus without drift', 'search synth\nlet y = -[1]', 2, 10],
+    ['array addition after multiline function', 'search synth\nlet f = () => (1\n + 2); let y = [1] + 1', 3, 16],
+    ['array multiplication after multiline function', 'search synth\nlet f = () => (1\n + 2); let y = 1 * [1]', 3, 20],
+    ['array unary minus after multiline function', 'search synth\nlet f = () => (1\n + 2); let y = -[1]', 3, 17]
+  ]
+
+  for (const [, source, line, column] of coercionFailures) {
+    for (const entryPoint of [(src) => parse(lex(src)), compile]) {
+      assert.throws(
+        () => entryPoint(source),
+        (err) => {
+          assert.ok(err instanceof SyntaxError)
+          assert.equal(err.message, 'Expected number')
+          const expected = {
+            code: 'P001',
+            stage: 'parser',
+            severity: 'error',
+            message: 'Expected number',
+            location: { line, column },
+            span: sourcePosition(source, line, column)
+          }
+          assert.deepEqual(err.diagnostic, expected)
+          return true
+        }
+      )
+    }
+  }
+})
+
+test('number coercion diagnostics represent unavailable locations explicitly', { skip }, () => {
+  const { compile } = eng.core
+  for (const source of ['search synth\nlet x = 1 + o0', 'search synth\nlet x = noise() + 1']) {
+    assert.throws(
+      () => compile(source),
+      (err) => {
+        assert.ok(err instanceof SyntaxError)
+        assert.equal(err.message, 'Expected number')
+        assert.deepEqual(err.diagnostic, {
+          code: 'P001',
+          stage: 'parser',
+          severity: 'error',
+          message: 'Expected number',
+          location: null,
+          span: null
+        })
+        return true
+      }
+    )
+  }
+})
+
+test('array literal ASTs keep their public shape with private source provenance', { skip }, () => {
+  const { lex, parse } = eng.core
+  const source = 'search synth\nlet y = [1, 2]'
+  const array = parse(lex(source)).vars[0].expr
+  assert.deepEqual(array, {
+    type: 'ArrayLiteral',
+    elements: [{ type: 'Number', value: 1 }, { type: 'Number', value: 2 }],
+    loc: { line: 2, col: 9 }
+  })
+  assert.deepEqual(JSON.parse(JSON.stringify(array)), {
+    type: 'ArrayLiteral',
+    elements: [{ type: 'Number', value: 1 }, { type: 'Number', value: 2 }],
+    loc: { line: 2, col: 9 }
+  })
+  assert.deepEqual(Object.getOwnPropertyDescriptor(array, 'position'), {
+    value: { line: 2, column: 9, start: 21, end: 22 },
+    writable: false,
+    enumerable: false,
+    configurable: false
+  })
+})
+
+test('successful tokens retain their public shape with non-enumerable positions', { skip }, () => {
+  const { lex, parse } = eng.core
+  const tokens = lex('/*x*/\nfoo.o99 "😀"')
+  assert.deepEqual(tokens, [
+    { type: 'COMMENT', lexeme: '/*x*/', line: 1, col: 1 },
+    { type: 'IDENT', lexeme: 'foo', line: 2, col: 1 },
+    { type: 'DOT', lexeme: '.', line: 2, col: 4 },
+    { type: 'OUTPUT_REF', lexeme: 'o99', line: 2, col: 5 },
+    { type: 'STRING', lexeme: '😀', line: 2, col: 9 },
+    { type: 'EOF', lexeme: '', line: 2, col: 13 }
+  ])
+  assert.deepEqual(JSON.parse(JSON.stringify(tokens)), tokens.map(({ type, lexeme, line, col }) => ({ type, lexeme, line, col })))
+  const descriptor = Object.getOwnPropertyDescriptor(tokens[1], 'position')
+  assert.equal(descriptor.enumerable, false)
+  assert.deepEqual(descriptor.value, { line: 2, column: 1, start: 6, end: 9 })
+
+  const unlocatedTokens = lex('search synth\nrender o0').map(({ type, lexeme }) => ({ type, lexeme, line: 2, col: 8 }))
+  assert.throws(
+    () => parse(unlocatedTokens),
+    (err) => {
+      assert.equal(err.message, "Expect '(' at line 2 col 8")
+      assert.deepEqual(err.diagnostic, {
+        code: 'P001',
+        stage: 'parser',
+        severity: 'error',
+        message: err.message,
+        location: { line: 2, column: 8 },
+        span: null
+      })
+      return true
+    }
+  )
+})
+
+test('valid call forms retain from-override namespaces and mixed automation arguments', { skip }, () => {
+  const { lex, parse } = eng.core
+  const ast = parse(lex('search synth\nlet x = from(synth, probe())'))
+  assert.deepEqual(ast.vars[0].expr, {
+    type: 'Call',
+    name: 'probe',
+    args: [],
+    namespace: {
+      name: 'synth',
+      path: ['synth'],
+      explicit: true,
+      source: 'from',
+      resolved: 'synth',
+      searchOrder: ['synth'],
+      fromOverride: true
+    }
+  })
+  const mixed = parse(lex('search synth\nlet a = midi(1, channel: 2)'))
+  assert.equal(mixed.vars[0].expr.channel.value, 2)
 })
 
