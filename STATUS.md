@@ -293,6 +293,58 @@ and `package.json` are byte-identical since `66b4291` and the served bundle is t
 platform scope unchanged (Linux/headless
 SwiftShader; Apple Silicon/Metal remains as documented under Known limits).*
 
+*Kit consumer qualification 2026-09-26, closing the served-kit leg of the distribution state
+(GAP-003). Driver: `parity/kit-consumer.mjs` (committed) assembles the consumer tree from the
+PRODUCTION distribution, never from this checkout, and gate-enforces the run (results.json
+`verdict: "pass"`, exit 0; raw output and screenshot hashes regenerated in gitignored scratch
+at the pre-commit working tree). Served kit `0.1.5` (`deployment-meta.json` git_hash
+`815d35fb3365d66a078f0eee155b14709e9ae9f2`): all **17/17 served inventory files verified against
+`kit.json` sha256 + byte counts**, hard-fail on mismatch. Engine pinned to published authority
+`v1.0.185` = `6a0af04d`: the minified core ESM bundle the kit's import map loads is 412659 bytes,
+SHA-256 `31b766091125742665bee4c5c8392048eaaa786748cc9570b1c94460029fbded`; the
+`effects/manifest.json` is unchanged at SHA-256
+`05c4d7b7744837ae90a3bb4c89e5403ff09448a74d9d7e824abb3d719ad3314e`; **210/210 mini-bundles**
+fetched with the bundle count === manifest entries gate-enforced. The kit's own
+`index.template.html` was injected with the exporter's documented placeholders using the
+committed `parity/programs/adjust.dsl` program (`noise(seed: 1, scaleX: 50, scaleY:
+50).adjust().write(o0)`). Both legs run through the kit page itself over loopback HTTP on
+Linux/headless SwiftShader (Chrome Headless Shell 149.0.7827.55):
+
+- **Valid program** — page reached status `running`; canvas readback (64² center region) min 86,
+  max 192.667, mean 138.346 — a live non-constant image; **zero console errors, zero page
+  errors**. Screenshot SHA-256 `053d70a6bfd612977a81a055eae8b20c1479a2ce3f45da907e118a60d4460441`.
+- **Invalid program** — `.write(o0)` mutated to `.write(o9)`: the page showed its on-screen
+  failure ("This program could not start") with the engine's positioned diagnostic
+  `SyntaxError: Output surface reference 'o9' is out of range; expected o0-o7 at line 2 col 55`,
+  raised from `NoisemakerCanvas.compile`; the console error is the page's designed
+  "Noisedeck export failed" channel (asserted present, not an error). Screenshot SHA-256
+  `bcb57da71f910623552e99cdc89a986cef185c0d65f4e4882189c057c6d85e09`.
+- **Observed difference (not a defect)** — the served kit's diagnostic is the engine's
+  positioned `SyntaxError` without the structured `L004` code; `L004` is enforced through the
+  installed npm package's validator surface and remains covered by the GAP-002 gate (carried,
+  unchanged since its closing commit: src/ and package.json untouched, identical served
+  manifest).
+- **Removal** — the kit distribution is a plain folder: the consumer tree was deleted and the
+  driver verified `index.html` no longer readable.
+- **Notices** — `LICENSES/noisemaker-MIT.txt` (1078 bytes, SHA-256
+  `91c83bf22e48749181dc44701878124f556559700472218cd05cdeda4f719ca4`) and
+  `LICENSES/noisemaker-for-threejs-LICENSE.txt` (1073 bytes, SHA-256
+  `e502d1baf14c5fde7a7476f8a860665352d31d26f75b7a6977943606c8b51259`) are hash-verified members
+  of the served tree.
+- **Upgrade path** — the kit pins the engine version by design ("the page keeps rendering the
+  same way after the engine moves on"); upgrade is a re-export from the app against a newer
+  pinned engine, not an in-place update. Recorded, not exercised (no newer engine is published;
+  the pin is deliberate).
+
+**Registry decision (GAP-003):** the qualified distribution for this port is the export kit.
+`noisemaker-for-threejs` is NOT published to npm as part of this qualification. npm publication
+is an owner release action requiring registry credentials: when the owner opts in, publish via
+`npm pack` from a tagged release of this repo (the same artifact GAP-002 installed and
+qualified at the peer floor and current three). Until that release exists, the registry 404 is
+the expected state and the npm upgrade/removal legs remain unexercised by design. GAP-003's
+acceptance criteria are met by the evidence above; this record qualifies the artifact and
+defines the registry path and still does not approve a release.*
+
 > **The programs sweep runs at frame 1, where normalized time is 0** (`t_i = i / loopFrames`).
 > That makes it a compile/link/uniform-binding gate, not a temporal one: any effect whose output
 > is scaled by `time` renders its static form there. `filter/pondRipples`' `speed` control is the
