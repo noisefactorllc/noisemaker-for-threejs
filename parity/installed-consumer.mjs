@@ -30,7 +30,7 @@
 // serialize function arguments, so each step runs through one `evaluate(key)`.
 import { chromium } from '@playwright/test'
 import { createHash } from 'node:crypto'
-import { mkdirSync, writeFileSync, readFileSync } from 'node:fs'
+import { mkdirSync, writeFileSync, readFileSync, readdirSync } from 'node:fs'
 import http from 'node:http'
 import { extname, join, resolve } from 'node:path'
 
@@ -50,10 +50,25 @@ const vendorCorePath = join(installedPkg, 'vendor', 'noisemaker', 'noisemaker-sh
 const vendorManifestPath = join(installedPkg, 'vendor', 'noisemaker', 'effects', 'manifest.json')
 const vendorCoreBytes = readFileSync(vendorCorePath)
 const vendorManifestBytes = readFileSync(vendorManifestPath)
+// Count the installed mini-bundles against the manifest: completeness is measured,
+// not self-reported (the fetch script tolerates per-bundle MISSes).
+const effectsDir = join(installedPkg, 'vendor', 'noisemaker', 'effects')
+const bundleFiles = []
+const walk = (dir) => {
+  for (const e of readdirSync(dir, { withFileTypes: true })) {
+    const p = join(dir, e.name)
+    if (e.isDirectory()) walk(p)
+    else if (e.isFile() && e.name.endsWith('.js')) bundleFiles.push(p)
+  }
+}
+walk(effectsDir)
+const manifestEntries = Object.keys(JSON.parse(vendorManifestBytes.toString('utf8'))).length
 const vendor = {
   coreSha256: sha256(vendorCoreBytes),
   coreBytes: vendorCoreBytes.length,
   manifestSha256: sha256(vendorManifestBytes),
+  manifestEntries,
+  bundleFiles: bundleFiles.length,
   coreExpectedSha256: expectedCoreSha,
   manifestExpectedSha256: expectedManifestSha,
 }
@@ -253,7 +268,6 @@ window.__ready = true
 </script>
 </body></html>`
 
-writeFileSync(join(consumerDir, 'gap002-page.html'), page_html)
 
 const browser = await chromium.launch({
   headless: true,
@@ -384,6 +398,9 @@ if (expectedCoreSha && vendor.coreSha256 !== expectedCoreSha) {
 }
 if (expectedManifestSha && vendor.manifestSha256 !== expectedManifestSha) {
   gate.push('installed effects manifest hash mismatch: got ' + vendor.manifestSha256 + ', expected ' + expectedManifestSha)
+}
+if (vendor.bundleFiles !== vendor.manifestEntries) {
+  gate.push('mini-bundle completeness mismatch: ' + vendor.bundleFiles + ' bundle files vs ' + vendor.manifestEntries + ' manifest entries')
 }
 results.ok = gate.length === 0
 results.gate = gate

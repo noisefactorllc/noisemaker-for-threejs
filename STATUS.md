@@ -149,7 +149,10 @@ fetched inside each installed consumer via `npm run vendor` and then bound to th
 measurement: `parity/installed-consumer.mjs` hashes the INSTALLED package's vendored engine
 bundle and manifest and the gate enforces them against the expected hashes above (supplied as
 driver arguments), so both recorded trees carry the measured `8b9f9eee…`/`05c4d7b7…` bytes in
-their `results.json`. Consumers: two isolated directories, `npm i <tarball> three@0.160.0`
+their `results.json`; the driver also counts the installed mini-bundles against the manifest
+and the gate requires completeness (210 bundle files === 210 manifest entries in both trees),
+closing the self-reported gap left by the fetch script's per-bundle MISS tolerance. Consumers:
+two isolated directories, `npm i <tarball> three@0.160.0`
 (declared peer floor) and `three@0.171.0` (current supported); the qualification page is
 served from memory and the consumer trees are not mutated by the driver. Harness:
 `parity/installed-consumer.mjs`
@@ -175,7 +178,7 @@ versions; the measured numbers below are IDENTICAL for three 0.160.0 and 0.171.0
 - **Resize** — `renderer.setSize(480, 320)` + `composer.setSize(480, 320)` + camera aspect
   update; canvas measures 480×320 and re-renders without error. Observed limit: post-resize
   and post-recovery composer frames vary at sub-LSB level between runs under SwiftShader
-  (consecutive-render framebuffer means 158.226 vs 158.160 at 0.160.0; 158.233 vs 158.144 at
+  (consecutive-render framebuffer means 158.239 vs 158.182 at 0.160.0; 158.231 vs 158.142 at
   0.171.0; the resize/recovery screenshots are not byte-stable across runs). Resize is verified
   functionally; byte-stability at resized targets is NOT claimed (the fixed-size paths above
   are byte-stable and cross-version identical).
@@ -204,7 +207,8 @@ three of textures/geometries/programs strictly decrease), the invalid-DSL diagno
 the expected L004 contract exactly (SyntaxError naming 'o9', code L004, line 2, column 25,
 span [45, 47)), the texture and recovery readbacks are live non-constant images (min > 0,
 max ≥ 1, max−min > 0.5, mean > 0.1, 65536 samples), the mesh GPU readback is non-blank
-(mean > 1), and supplied expected vendor hashes match the installed bytes. A negative
+(mean > 1), supplied expected vendor hashes match the installed bytes, and the installed
+mini-bundle count matches the manifest entry count (210/210). A negative
 control (wrong expected engine hash) fails the gate and exits 1. The recorded values above
 come from gate-passing runs (`gate: []`, exit 0 in both versions). Raw per-run output
 (`results.json` per version, with the full step record, measured vendor hashes, and the
