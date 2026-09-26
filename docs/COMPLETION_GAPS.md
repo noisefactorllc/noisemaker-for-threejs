@@ -14,6 +14,10 @@ Served kit `0.1.5` at `815d35fb3365d66a078f0eee155b14709e9ae9f2`: all 17 served 
 All 13 source-derived kit files are byte-identical to that SHA. Kit-relevant source is unchanged through `1822646`.
 The npm registry has no `noisemaker-for-threejs` package (HTTP 404). Evidence: `/series/evidence-audit-20260926-101500/result-noisemaker-for-threejs.json`.
 
+Daily review: 2026-09-26. Reviewed source: [`bbef9990b3515acf16213a6c5a088a9edd702b1c`](https://github.com/noisefactorllc/noisemaker-for-threejs/commit/bbef9990b3515acf16213a6c5a088a9edd702b1c).
+The review re-executed every gate and both consumer drivers. All commands exited 0. It adds GAP-004 and GAP-005. No closure changed.
+Evidence: `/series/review-20260926-133500/result.json`.
+
 ### Earlier source observations
 
 Daily review: 2026-09-25. Current inspected source: [`05f599274ed11e6d0778b7a21978f058f2b47c06`](https://github.com/noisefactorllc/noisemaker-for-threejs/commit/05f599274ed11e6d0778b7a21978f058f2b47c06).
@@ -43,8 +47,8 @@ The containing commit identifies this register's publication revision. The share
 |---|---|---|---|---|
 | CLAIM-001 | [STATUS](https://github.com/noisefactorllc/noisemaker-for-threejs/blob/1822646f9d6d90a164a5146f4db571eea2b98202/STATUS.md) | Catalog and mode fixtures are pixel-identical. Live inputs and broader hosts need separate qualification. | supported | 2026-09-26 audit: programs 304/304 worst=0, stateful 13 bit-exact, corpus 81+7 identified ERR over 88, Linux/headless SwiftShader. Live inputs stay injected-only. |
 | CLAIM-002 | [README](https://github.com/noisefactorllc/noisemaker-for-threejs/blob/1822646f9d6d90a164a5146f4db571eea2b98202/README.md) | Human usability: installation, output, errors, and recovery | supported | GAP-002 closed 2026-09-26. Installed consumers at three 0.160.0 and 0.171.0; resize, L004 diagnostic, recovery, dispose. Linux/headless SwiftShader only. |
-| CLAIM-003 | [Ecosystem reference](https://threejs.org/manual/en/installation.html) | Ecosystem fit and version support | partial | Installed integration verified at the floor and current three versions on Linux only. Other versions and platforms remain unmeasured. |
-| CLAIM-004 | [README](https://github.com/noisefactorllc/noisemaker-for-threejs/blob/1822646f9d6d90a164a5146f4db571eea2b98202/README.md) | Release readiness | supported with limits | GAP-003 closed 2026-09-26: served kit exercised end to end (render, invalid-input diagnosis, removal), hashes/notices/lifecycle recorded, registry decision defined (npm publication deferred to an owner release action; 404 is the expected state until then). |
+| CLAIM-003 | [Ecosystem reference](https://threejs.org/manual/en/installation.html) | Ecosystem fit and version support | partial | Installed integration verified at the floor and current three versions on Linux only. Other versions and platforms remain unmeasured. npm `three` latest `0.186.1` is unmeasured (GAP-004). |
+| CLAIM-004 | [README](https://github.com/noisefactorllc/noisemaker-for-threejs/blob/1822646f9d6d90a164a5146f4db571eea2b98202/README.md) | Release readiness | supported with limits | GAP-003 closed 2026-09-26: served kit exercised end to end (render, invalid-input diagnosis, removal), hashes/notices/lifecycle recorded, registry decision defined (npm publication deferred to an owner release action; 404 is the expected state until then). Open limits: GAP-004 (platform and host-version qualification, blocked) and GAP-005 (no source-update rendered-parity CI gate; release blocker). |
 | CLAIM-005 | [Exact-source Actions](https://github.com/noisefactorllc/noisemaker-for-threejs/actions?query=head_sha%3A1822646f9d6d90a164a5146f4db571eea2b98202) | Workflow status only | supported | No check runs exist at `1822646` (docs-only path filters). Latest export kit run 35954455774 passed at `815d35fb`. A green dispatch does not qualify rendered parity. |
 
 ## 3. Methods and evidence
@@ -71,6 +75,27 @@ Raw evidence: `/series/evidence-audit-20260926-101500/result-noisemaker-for-thre
 Distribution checks this pass: all 17 served kit files match `kit.json` hashes and bytes.
 13/13 source-derived kit files match `git show 815d35fb:<path>` byte-for-byte. `hostlib/three` matches npm `three@0.171.0` bytes.
 `compat.json` is `{"mode":"all"}`. The registry has no `noisemaker-for-threejs` package (HTTP 404).
+
+### Daily review, 2026-09-26
+
+Source `bbef9990`, local and remote identical, clean checkout. Environment: Linux 6.8.0-134-generic, Node v26.5.1, Chrome Headless Shell 149.0.7827.55, SwiftShader. The review re-executed every gate and both consumer drivers. All commands exited 0.
+
+| Command | Exit | Result |
+|---|---|---|
+| `bash vendor/fetch.sh` | 0 | core 870700 bytes SHA-256 `8b9f9eee…`; manifest SHA-256 `05c4d7b7…`; 210/210 mini-bundles |
+| `node parity/sweep-programs.mjs` | 0 | PASS=304 FAIL=0 ERR=0 worst max-abs-diff=0; mode ledger 304/304 PASS |
+| `bash parity/sweep-stateful.sh` | 0 | 13 fixtures bit-exact, worst=0 |
+| `npm run parity` | 0 | PASS=81 FAIL=0 ERR=7 worst=0 over 88 programs; 7 ERR rows are golden-side S001 |
+| `node --test test/*.test.mjs` | 0 | 66 tests, 66 pass, 0 fail, 0 skipped |
+| `npm run lint` | 0 | clean |
+| `node parity/installed-consumer.mjs` at three 0.160.0 and 0.171.0 | 0 | both runs `ok` with empty gate; vendor hashes `8b9f9eee…`/`05c4d7b7…` enforced against the installed bytes |
+| `node parity/kit-consumer.mjs` | 0 | verdict `pass`; 17/17 inventory sha256+bytes; 210/210 bundles; valid leg non-constant with zero console/page errors; invalid leg showed the positioned `SyntaxError` on screen; removal verified |
+
+Remote checks: served kit `0.1.5` metadata at `815d35fb`; npm registry HTTP 404; upstream head `a651c075` docs-only after `v1.0.185`; zero check-runs at `1822646`, `66e05c5`, `bbef999`; latest export-kit run 35954455774 passed at `815d35fb`.
+`git diff 66b4291..bbef999 -- src package.json` is empty, so the GAP-002 carry is byte-backed.
+Manifest audit: 210 entries; `chromeicosahedroninterior`, `vaporwaveflyover`, `bc`, `hs`, `colorspace` are absent, which supports the 304 and 88 denominators.
+npm `three` latest is `0.186.1`; versions above the verified `0.171.0` remain unmeasured (GAP-004).
+Raw evidence: `/series/review-20260926-133500/result.json`.
 
 ### Daily review, 2026-09-25 (superseded by the 2026-09-26 qualification and audit)
 
@@ -152,16 +177,41 @@ These entries record missing qualification. They do not infer implementation def
 - Remaining limits (unchanged, non-blocking): npm publication, and with it the npm upgrade/removal legs, are deliberately deferred (registry decision above); the kit upgrade path is recorded but not exercised; Apple Silicon/Metal and other platforms remain separate qualifications; the register does not approve a release.
 - Last verification: 2026-09-26. Served-kit workflow qualification is evidenced at the commit carrying this record.
 
+### GAP-004: platform and host-version qualification
+
+- Status: blocked. Priority: P2. Category: verification.
+- Affected scope: Rendered parity, installed-consumer, and kit-consumer evidence outside Linux/headless SwiftShader; three.js versions above 0.171.0; live (non-injected) external inputs.
+- Expected behavior: Every declared supported platform and host version is measured with recorded environments.
+- Observed behavior: All current evidence was measured on Linux/headless SwiftShader only. The audit environment has no macOS, Windows, or real-GPU host. The highest verified three.js version is 0.171.0. npm serves three.js `0.186.1` (checked 2026-09-26); no version above 0.171.0 is measured. STATUS.md's Known limits "Platform" bullet still names the historical Apple Silicon/Metal verification. That bullet predates the 2026-09-26 Linux qualification and overstates current platform scope.
+- Evidence: GAP-001, GAP-002, and GAP-003 records; STATUS.md "Full qualification 2026-09-26" and "Known limits"; section 3 review block; npm registry dist-tags.
+- Next action: On an Apple Silicon/Metal host, run the three committed sweeps. Then run both consumer drivers there. Separately, run `parity/installed-consumer.mjs` in a consumer at three.js 0.186.1 on Linux.
+- Dependencies: A macOS/Apple Silicon host and a Windows host. Neither exists in this audit environment. The 0.186.1 check needs no new host.
+- Acceptance criteria: Each platform reports the unchanged denominators (304 programs, 13 stateful, 88 corpus) with every case executed and each named difference recorded. The 0.186.1 consumer run passes the driver gate or records its failure.
+- Required checks: `parity/sweep-programs.mjs`, `parity/sweep-stateful.sh`, `npm run parity`, `parity/installed-consumer.mjs`, `parity/kit-consumer.mjs`, per platform.
+- Last verification: 2026-09-26 (blocked state recorded; no platform beyond Linux measured).
+
+### GAP-005: source updates republish the served kit without a rendered-parity CI gate
+
+- Status: open. Priority: P2. Category: release.
+- Affected scope: `.github/workflows/export-kit.yml` push filters, scaffold's export-kit release gate, the served kit, and release evidence.
+- Expected behavior: A source or dependency change cannot republish the served kit before the rendered parity gates pass at that exact source.
+- Observed behavior: The repository's only workflow is the export-kit dispatcher. It runs no tests and no parity sweeps. A push that changes `src/**` or `package-lock.json` dispatches a kit build directly. Scaffold's kit release gate validates packaging structure (inventories, hashes, template tokens, import maps) and runs no rendered comparison and no repository unit gate. Rendered parity at source updates is detected only by scheduled audits after publication.
+- Evidence: `.github/workflows/export-kit.yml` (dispatch step only, read 2026-09-26); scaffold `export-kit-release.yml` "Validate kit (release gate)" step; scaffold `apps/export-kit-builder/tests/kits-web.node-test.js` (structure checks; its render is a text render). Zero check-runs at `1822646`, `66e05c5`, `bbef999` (API, 2026-09-26). Latest kit run 35954455774 passed at `815d35fb`.
+- Next action: The implementation job adds a rendered-parity gate through existing CI. The gate runs `parity/sweep-programs.mjs` (304), `parity/sweep-stateful.sh` (13), and `npm run parity` (88) for pushes that change `src/**`, `package-lock.json`, or `export-kit/**`, before the kit dispatch.
+- Dependencies: The separate implementation job owns workflow configuration. This audit cannot change it.
+- Acceptance criteria: An exact-source CI run at a commit that changes `src/**` shows the three rendered gates executed and passing before the kit publishes.
+- Required checks: Exact-source Actions runs and the served kit version after the gated push.
+- Last verification: 2026-09-26 (absence verified; no gate exists yet).
+
 ## 5. Ordered next actions
 
-Current first action: none — GAP-003 is closed (served-kit workflow qualified and registry decision defined). Remaining actions are platform qualification and keeping GAP-001 evidence current at each authority or source change.
+Current first action: GAP-005 — add the source-update rendered-parity CI gate. GAP-004 stays blocked on unavailable macOS and Windows hosts.
 Subsequent actions depend on that evidence. No implementation is authorized by this audit.
 
-1. Qualify the served kit host workflow for GAP-003. Record the rendered output, diagnostics, and cleanup. — Done 2026-09-26 (`parity/kit-consumer.mjs`, gate-enforced; STATUS.md "Kit consumer qualification 2026-09-26").
-2. Define the registry path for GAP-003. — Done 2026-09-26: the export kit is the qualified distribution; npm publication is deferred to an owner release action (`npm pack` from a tagged release). The registry 404 is the expected state until then.
-3. Keep GAP-001 evidence current. Re-run the compiler and rendered gates at each authority or source change. — Re-verified 2026-09-26 at `1822646`: 304/304, stateful worst=0, corpus 81+7/88, 66/66, lint clean.
-4. Qualify Apple Silicon/Metal and other platforms. This audit measured Linux/headless SwiftShader only.
-5. Record measured results. Close entries only when their acceptance criteria pass.
+1. Close GAP-005 in the implementation job. A push that changes `src/**`, `package-lock.json`, or `export-kit/**` must run the three rendered gates before the kit republishes. Acceptance: exact-source CI evidence at a src-changing commit.
+2. Clear GAP-004 when a host exists. Re-run the three sweeps and both consumer drivers on Apple Silicon/Metal and record the results. Then run the installed consumer at three.js 0.186.1. Acceptance: unchanged denominators with every case executed.
+3. Keep GAP-001 evidence current. Re-run the compiler and rendered gates at each authority or source change. — Re-verified 2026-09-26 at `1822646` and at this review's source.
+4. Record measured results. Close entries only when their acceptance criteria pass.
 
 Implementation belongs to the separate job. Do not port additional effects or advance the current parity checkpoint through this register.
 
@@ -169,13 +219,16 @@ Implementation belongs to the separate job. Do not port additional effects or ad
 
 2026-09-25 daily review at `05f599274ed11e6d0778b7a21978f058f2b47c06`: source freshness and bounded evidence reviewed. Open qualification limits retained. [Retained review evidence](/Users/alex/.codex/automations/noisemaker-port-completion-audit/review-20260925-053200/threejs-current-tests.json). No new closure claimed.
 
+2026-09-26 daily review at `bbef9990b3515acf16213a6c5a088a9edd702b1c`: every gate and both consumer drivers re-executed independently, all exit 0. GAP-001, GAP-002, and GAP-003 closures verified and retained. GAP-004 (platform and host-version qualification, blocked) and GAP-005 (source-update rendered-parity CI gate, open) added. Evidence: `/series/review-20260926-133500/result.json`.
+
 | Date | Source SHA | Changes | Tested scope | Remaining limits |
 |---|---|---|---|---|
+| 2026-09-26 | `bbef9990b3515acf16213a6c5a088a9edd702b1c` | Daily review: every gate and both consumer drivers re-executed independently (programs 304/304 worst=0, stateful 13 bit-exact, corpus 81 PASS plus 7 golden-side ERR over 88, `npm test` 66/66, lint clean; installed consumer pass at three 0.160.0 and 0.171.0 with enforced vendor hashes; kit consumer verdict pass). GAP-001, GAP-002, and GAP-003 closures verified and retained. Added GAP-004 (blocked) and GAP-005 (open). Evidence: `/series/review-20260926-133500/result.json`. | Linux/headless SwiftShader, Node v26.5.1; served authority `v1.0.185` = `6a0af04d3c4f345ffab5e9f8e54e532216b4cdaa`, bundle `8b9f9eee…`, manifest `05c4d7b7…`; zero check-runs at the docs-only commits; registry 404. | GAP-004 blocked on unavailable macOS and Windows hosts; npm `three` latest 0.186.1 unmeasured; GAP-005 open until CI enforces rendered parity at source updates; this register does not approve a release. |
 | 2026-09-26 | `1822646f9d6d90a164a5146f4db571eea2b98202` | Completion audit: full parity re-executed at the audited source (programs 304/304 worst=0, stateful 13 bit-exact, corpus 81 PASS + 7 identified ERR over 88, `npm test` 66/66, lint clean). Served kit `0.1.5` byte-verified against inventory and source; npm registry 404 recorded. GAP-001's closure is re-verified by fresh execution; GAP-002's closure is carried (src/ and package.json unchanged since 66b4291, identical served bundle); GAP-003 updated, still open. Evidence: `/series/evidence-audit-20260926-101500/result-noisemaker-for-threejs.json`. | Linux/headless SwiftShader; authority `v1.0.185` = `6a0af04d3c4f345ffab5e9f8e54e532216b4cdaa`, served bundle `8b9f9eee…` unchanged; all 210 effects plus mode variants covered. | Kit host workflow, npm publication, upgrade, removal, Apple Silicon/Metal, and live external inputs remain unqualified. |
 | 2026-09-26 | This register's containing commit (see `git log`) | GAP-001 closed: authority `v1.0.183` = `8eeb7b5a` pinned by hash; full programs (304/304 worst=0), stateful (13 bit-exact), and corpus (81 PASS + 7 named ERR over 88) sweeps with exact frame comparisons; `npm test` 66/66, lint clean. Raw output in STATUS.md "Full qualification 2026-09-26". | Linux/headless SwiftShader; full current roster + modes + stateful + corpus denominator preserved. | `filter/text` recorded untested at closure; the same-day audit sweep executed and passed it in-suite (font-raster scope in STATUS Known limits). Apple Silicon/Metal and live external inputs remain separate qualifications (GAP-002/003 unaffected). |
 | 2026-09-26 | This register's containing commit (see `git log`) | GAP-002 closed: tarball `de3fc2ff…` installed into isolated consumers at three 0.160.0 (peer floor) and 0.171.0; texture-on-mesh, EffectComposer pass, resize 480×320, invalid-DSL `L004` diagnostic + valid-DSL recovery, dispose (153→2 textures, 8→1 programs); zero console/page errors; `npm test` 66/66, lint clean at the candidate. Raw output in STATUS.md "Installed consumer qualification 2026-09-26". | Linux/headless SwiftShader (Chrome Headless Shell 149.0.7827.55); engine `8b9f9eee…` (870700 bytes) fetched inside each installed package; mesh/pass/dispose screenshots byte-identical across both three versions. | Apple Silicon/Metal untested; byte-stability at resized targets not claimed (sub-LSB SwiftShader variance); npm publication/upgrade/removal and served kit remain GAP-003. |
 | 2026-09-26 | This register's containing commit (see `git log`) | GAP-003 closed: served kit `0.1.5` exercised end to end in an isolated consumer via the committed `parity/kit-consumer.mjs` (17/17 inventory sha256+bytes; engine `v1.0.185`, import-map core `31b76609…`/412659 bytes, manifest `05c4d7b7…` unchanged, 210/210 bundles; valid program rendered `running` with live readback min 86 / max 192.667 / mean 138.346, zero console/page errors; `.write(o9)` invalid leg showed the engine's positioned `SyntaxError` diagnostic on screen; removal verified). Registry decision recorded: export kit is the qualified distribution; npm publication deferred to an owner release action (404 expected until then). `npm test` 66/66, lint clean at the candidate. Raw output in STATUS.md "Kit consumer qualification 2026-09-26"; screenshots `053d70a6…`, `bcb57da7…`. | Linux/headless SwiftShader (Chrome Headless Shell 149.0.7827.55); kit served from the production distribution, not this checkout; both kit legs executed, no skips. | npm publication and the npm upgrade/removal legs deliberately deferred (registry decision); kit upgrade path recorded, not exercised; Apple Silicon/Metal and other platforms remain separate qualifications; this register does not approve a release. |
 | 2026-09-24 | `815d35fb3365d66a078f0eee155b14709e9ae9f2` | Created six-section register and README link. No closures. | 51 Node tests passed. The full browser image sweep and installed consumer workflow were not executed. | Full audit, installed workflows, current rendered parity, platforms, and releases remain unqualified. |
 
-Run ID: `audit-20260926-101500`. Earlier run: `20260924-remaining-gap-documents`.
+Run ID: `audit-20260926-101500` (worker), `review-20260926-133500` (review). Earlier run: `20260924-remaining-gap-documents`.
 [Operational evidence](/Users/alex/.codex/automations/noisemaker-port-completion-audit/evidence-20260924-remaining-gap-documents) (historical provenance, source host). Current audit evidence: `/series/evidence-audit-20260926-101500/`. Creating this register does not advance successful-audit timestamps or the rotation.
