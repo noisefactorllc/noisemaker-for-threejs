@@ -81,7 +81,7 @@ Rendered parity for the current published authority is measured, not stale. Auth
 | Corpus sweep (`npm run parity`, frames=20 capture=10, all 88 fetched programs) | 88 | 88 | 81 (worst=0) | 0 | 0 | verified — 7 ERR rows identified: 5 × `chromeicosahedroninterior`, 2 × `vaporwaveflyover` (golden-side S001, unpublished community effects; denominator 81+7=88 unchanged) |
 | Compiler gate (`npm test`) | 66 | 66 | 66 | 0 | 0 | verified (exit 0) |
 
-Environment: Linux container, Chrome Headless Shell 149.0.7827.55 (playwright chromium-headless-shell v1228), SwiftShader; platform scope (Apple Silicon/Metal) remains as documented in STATUS Known limits. `filter/text` remains the one untested effect (OS font rasterization). Live external inputs remain injected-only. These limits do not reduce any denominator above.
+Environment: Linux container, Chrome Headless Shell 149.0.7827.55 (playwright chromium-headless-shell v1228), SwiftShader; platform scope (Apple Silicon/Metal) remains as documented in STATUS Known limits. `filter/text` passes in-suite on the same-browser comparison; cross-machine font-raster stability remains unclaimed (STATUS Known limits). Live external inputs remain injected-only. These limits do not reduce any denominator above.
 
 ### Earlier measurements
 
@@ -342,7 +342,7 @@ Implementation corrections remain with the separate job. This report does not ad
 
 2026-09-25 daily review at `05f599274ed11e6d0778b7a21978f058f2b47c06`: source freshness and bounded evidence reviewed. Open qualification limits retained. [Retained review evidence](/Users/alex/.codex/automations/noisemaker-port-completion-audit/review-20260925-053200/threejs-current-tests.json). No new closure claimed.
 
-2026-09-26 completion audit at `1822646f9d6d90a164a5146f4db571eea2b98202`: full suite re-executed (programs 304/304 worst=0, stateful 13 bit-exact, corpus 81 PASS + 7 identified ERR over 88, `npm test` 66/66, lint clean). Served kit `0.1.5` byte-verified against inventory and source; npm registry 404 recorded. GAP-001/GAP-002 closures re-verified; GAP-003 remains open. Evidence: `/series/evidence-audit-20260926-101500/result-noisemaker-for-threejs.json`.
+2026-09-26 completion audit at `1822646f9d6d90a164a5146f4db571eea2b98202`: full suite re-executed (programs 304/304 worst=0, stateful 13 bit-exact, corpus 81 PASS + 7 identified ERR over 88, `npm test` 66/66, lint clean). Served kit `0.1.5` byte-verified against inventory and source; npm registry 404 recorded. GAP-001's closure is re-verified by this fresh execution; GAP-002's closure is carried (src/ and package.json unchanged since 66b4291, identical served bundle; the installed-consumer harness was not re-run this pass); GAP-003 remains open. Evidence: `/series/evidence-audit-20260926-101500/result-noisemaker-for-threejs.json`.
 
 | Date | Source | Result | Change |
 |---|---|---|---|

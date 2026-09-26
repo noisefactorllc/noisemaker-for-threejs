@@ -287,8 +287,10 @@ source-derived files are byte-identical to `git show 815d35fb:<path>`; `hostlib/
 match npm `three@0.171.0`; `compat.json` is `{"mode":"all"}`; and the kit-relevant tree is
 unchanged `815d35fb..1822646` (only README/STATUS/docs/parity-harness/test files differ), so
 the served kit content is current. The npm registry has no `noisemaker-for-threejs` package
-(HTTP 404), so the registry install/upgrade/removal leg remains unqualified. GAP-001 and GAP-002
-closures re-verified by this fresh execution; platform scope unchanged (Linux/headless
+(HTTP 404), so the registry install/upgrade/removal leg remains unqualified. Closure status: GAP-001 is re-verified by this fresh execution; GAP-002 is carried unchanged — `src/`
+and `package.json` are byte-identical since `66b4291` and the served bundle is the same
+`8b9f9eee…` bytes the installed-consumer runs hashed, so that harness was not re-run this pass;
+platform scope unchanged (Linux/headless
 SwiftShader; Apple Silicon/Metal remains as documented under Known limits).*
 
 > **The programs sweep runs at frame 1, where normalized time is 0** (`t_i = i / loopFrames`).
@@ -316,13 +318,14 @@ effects landed since the last sync — the full artistic-filter release: `chrome
 mini-bundles changed content in the same sync: `dither`, `edge`, `emboss`, `grain`, `invert`, `lowPoly`,
 `parallax`, `temporalAberration`, `texture` (`filter`); `channelCombine` (`mixer`); `mandala`,
 `sacredGeometry` (`synth`).
-**209 of 210 render byte-identical** to the reference engine; the one exception is `filter/text`
-(unchanged from prior rounds — see [Known limits](#known-limits)).
+**210 of 210 pass in-suite** in the 2026-09-26 sweeps (worst max-abs-diff=0). `filter/text`'s
+glyph rasterization is font-dependent — earlier Apple Silicon rounds measured it as the one
+non-zero result (209/210); see [Known limits](#known-limits).
 
 | Namespace | Effects | Parity |
 |---|---|---|
 | `synth` | 29 | byte-identical (`scope` / `spectrum` / `media` via injected input) |
-| `filter` | 113 | byte-identical (112; `text` untested) |
+| `filter` | 113 | byte-identical in-suite (113; `text` font-raster scope in [Known limits](#known-limits)) |
 | `mixer` | 15 | byte-identical |
 | `classicNoisedeck` | 20 | byte-identical (meta/param effects: `composite`, `kaleido`, `refract`, …) |
 | `points` / `render` | 11 / 12 | byte-identical (agents via time-series; `meshLoader` / `meshRender` via injected OBJ) |
@@ -400,10 +403,12 @@ with `node parity/sweep-programs.mjs` (writes `parity/out/mode-ledger.json`, git
   complex emergent program (3D perlin → 1M-agent flow field → blur → o0; `navierStokes(read o0)` →
   palette/lighting/adjust → bloom/lens/vignette → o1) — matches at `max-abs-diff=0.000` at every 5s
   sample across 1800 frames.
-- **Full roster + mode sweep: 299/300 byte-identical** (`node parity/sweep-programs.mjs`, worst
-  `max-abs-diff=0` outside the one known exception) — one fixture per effect, plus one per
-  compile-time mode variant (see [Mode coverage](#mode-coverage)). The one non-zero result is
-  `filter/text`, the same pre-existing, documented font-rendering exception.
+- **Full roster + mode sweep: 304/304 byte-identical (2026-09-26 sweeps, worst `max-abs-diff=0`)** —
+  one fixture per effect, plus one per compile-time mode variant (see
+  [Mode coverage](#mode-coverage)). `filter/text` passes in-suite: golden and candidate render in
+  the same browser and share one font raster. The 2026-07-23 Apple Silicon run measured 299/300
+  with `filter/text` the lone non-zero; cross-machine font-raster stability remains unclaimed
+  (see [Known limits](#known-limits)).
 - **Live corpus: 81/88 byte-identical** (`npm run parity`, worst `max-abs-diff=0`) — the public
   noisedeck gallery fetched program-for-program (`parity/fetch-corpus.mjs`) and run through the
   harness: real emergent/stateful programs (kaleido, reaction-diffusion, 3D lit volumes, attractors,
@@ -451,10 +456,12 @@ The binding/upload infrastructure exists (`setExternalTexture`, `updateTextureFr
 
 Coverage is measured against the published 210-effect catalog.
 
-- **`filter/text` — untested (the lone uncovered effect).** It rasterizes a string through Canvas2D
-  fonts. No deterministic-injection fixture was built for it, glyph rendering is OS/font-dependent,
-  and no corpus program calls `text()` — so it is neither corpus-exercised nor injected. (The sibling
-  Babylon port also drops `text`.)
+- **`filter/text` — passes in-suite; cross-machine font stability unclaimed.** It rasterizes a
+  string through Canvas2D fonts. The sweep drives golden and candidate in the same browser context,
+  so both share one font raster: the fixture passes worst=0 on the 2026-09-26 Linux/SwiftShader
+  runs. The 2026-07-23 Apple Silicon run measured it as the lone non-zero result. Glyph rendering
+  is OS/font-dependent, so cross-machine byte-stability is not claimed, and no corpus program
+  calls `text()`. (The sibling Babylon port also drops `text`.)
 - **External inputs are injected, not live.** `scope`/`spectrum` have no live `AnalyserNode`/mic
   decode; `media` has no live `<video>`/camera/image-URL decode; `meshLoader`/`meshRender` cannot
   load a real `.obj` URL because the engine's `parseOBJ` is internal-only in the published bundle (not
@@ -478,8 +485,9 @@ Coverage is measured against the published 210-effect catalog.
 
 ## Follow-up work
 
-- **`text` parity** — build a deterministic fixture (fixed glyphs / pre-rasterized atlas), or gate it
-  with SSIM instead of byte-equality to absorb font-raster variance across machines.
+- **`text` cross-machine stability** — the existing `text.dsl` fixture passes in-suite (same-browser
+  font raster, worst=0 on the 2026-09-26 Linux/SwiftShader runs). Remaining risk is font-raster
+  variance across machines: gate with SSIM instead of byte-equality, or use a pre-rasterized atlas.
 - **Live host inputs** — wire real feeds for `scope`/`spectrum` (`AnalyserNode`), `media`
   (`<video>`/image element), and `meshLoader` (fetch + parse OBJ — needs `parseOBJ` exported
   upstream, or a small local OBJ parser).
