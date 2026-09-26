@@ -192,21 +192,22 @@ These entries record missing qualification. They do not infer implementation def
 
 ### GAP-005: source updates republish the served kit without a rendered-parity CI gate
 
-- Status: open. Priority: P2. Category: release.
+- Status: blocked. Priority: P2. Category: release.
 - Affected scope: `.github/workflows/export-kit.yml` push filters, scaffold's export-kit release gate, the served kit, and release evidence.
 - Expected behavior: A source or dependency change cannot republish the served kit before the rendered parity gates pass at that exact source.
 - Observed behavior: The repository's only workflow is the export-kit dispatcher. It runs no tests and no parity sweeps. A push that changes `src/**` or `package-lock.json` dispatches a kit build directly. Scaffold's kit release gate validates packaging structure (inventories, hashes, template tokens, import maps) and runs no rendered comparison and no repository unit gate. Rendered parity at source updates is detected only by scheduled audits after publication.
 - Evidence: `.github/workflows/export-kit.yml` (dispatch step only, read 2026-09-26); scaffold `export-kit-release.yml` "Validate kit (release gate)" step; scaffold `apps/export-kit-builder/tests/kits-web.node-test.js` (structure checks; its render is a text render). Zero check-runs at `1822646`, `66e05c5`, `bbef999` (API, 2026-09-26). Latest kit run 35954455774 passed at `815d35fb`.
 - Next action: The implementation job adds a rendered-parity gate through existing CI. The gate runs `parity/sweep-programs.mjs` (304), `parity/sweep-stateful.sh` (13), and `npm run parity` (88) for pushes that change `src/**`, `package-lock.json`, or `export-kit/**`, before the kit dispatch.
-- Dependencies: The separate implementation job owns workflow configuration. This audit cannot change it.
+- Dependencies: The separate implementation job owns workflow configuration. This audit cannot change it. This run prepared the gate (see "Prepared gate") but the publication control rejected every workflow-change candidate — `d32d5c7`, `42f26f4`, `b018798`, 2026-09-26 — with "workflow changes require explicit job authority". No automated path exists: the repository's only workflow is `.github/workflows/export-kit.yml` and the scaffold-side gate is outside this job's writable scope.
+- Prepared gate (executed in the run environment at base `9be956eeace45eb563944b2afb244c3a73f91c11` on 2026-09-26; execution is not independently verifiable from repository content and is not the required exact-source CI evidence): a `parity` job in `.github/workflows/export-kit.yml` — checkout, Node 26, `npm ci`, `npx playwright install --with-deps chromium-headless-shell`, `python3 -m venv parity/.venv` plus `parity/requirements.txt` (numpy, pillow for `parity/compare.py`), `bash vendor/fetch.sh`, `npm run lint`, `npm test`, then the three rendered sweeps — with the `dispatch` job changed to `needs: parity` at the same `github.sha`. Local result at the base source: `node parity/sweep-programs.mjs` PASS=304 FAIL=0 ERR=0 worst=0 exit 0; `bash parity/sweep-stateful.sh` worst=0 exit 0; `npm run parity` PASS=81 FAIL=0 ERR=7 worst=0 exit 0 (7 documented golden-side S001 ERRs); `npm test` 66/66 exit 0; `npm run lint` clean. Action pins resolved against the GitHub API (`actions/checkout` v6.0.3, `actions/setup-node` v6.5.0).
 - Acceptance criteria: An exact-source CI run at a commit that changes `src/**` shows the three rendered gates executed and passing before the kit publishes.
 - Required checks: Exact-source Actions runs and the served kit version after the gated push.
-- Last verification: 2026-09-26 (absence verified; no gate exists yet).
+- Last verification: 2026-09-26 (absence verified; no gate exists; the prepared gate above was executed green locally but is unpublished — blocked on explicit workflow-change authority).
 
 ## 5. Ordered next actions
 
 Current first action: GAP-005 — add the source-update rendered-parity CI gate. GAP-004 stays blocked on unavailable macOS and Windows hosts (its Linux 0.186.1 consumer leg passed 2026-09-26).
-Subsequent actions depend on that evidence. No implementation is authorized by this audit.
+Subsequent actions depend on that evidence. GAP-005 is blocked at publication: the prepared gate was executed green locally at the base source (see GAP-005 "Prepared gate") but the publication control rejects workflow changes from this job pending an explicit authority grant, so the gate remains unpublished.
 
 1. Close GAP-005 in the implementation job. A push that changes `src/**`, `package-lock.json`, or `export-kit/**` must run the three rendered gates before the kit republishes. Acceptance: exact-source CI evidence at a src-changing commit.
 2. Clear GAP-004 when a host exists. Re-run the three sweeps and both consumer drivers on Apple Silicon/Metal and record the results. The installed consumer at three.js 0.186.1 passed on Linux 2026-09-26; the remaining host legs are the platform sweeps and both consumer drivers on macOS/Apple Silicon and Windows. Acceptance: unchanged denominators with every case executed.
@@ -216,6 +217,8 @@ Subsequent actions depend on that evidence. No implementation is authorized by t
 Implementation belongs to the separate job. Do not port additional effects or advance the current parity checkpoint through this register.
 
 ## 6. Pass history
+
+2026-09-26 GAP-005 blocked at base `9be956eeace45eb563944b2afb244c3a73f91c11` (this register's containing commit at run time; see `git log`): the rendered-parity gate candidate for `.github/workflows/export-kit.yml` (parity job with lint, unit tests, and the three rendered sweeps at the exact push SHA; `dispatch` needs `parity`) was prepared and executed green locally at that source (programs 304/304 worst=0 exit 0, stateful 13 worst=0 exit 0, corpus 81 PASS plus 7 identified golden-side S001 ERR over 88 exit 0, `npm test` 66/66, lint clean). The publication control rejected the workflow-change candidate three times — `d32d5c7`, `42f26f4`, `b018798` — with "workflow changes require explicit job authority"; the change was withdrawn unpublished and GAP-005 is recorded blocked. No served kit, workflow, or closure changed.
 
 2026-09-26 GAP-004 partial at `da1849915bdbdfee221d59bacc8f5cc83e69ad3d` (this register's containing commit at run time; see `git log`): the gap's Linux host-version leg was executed — `parity/installed-consumer.mjs` in an isolated npm consumer at three.js `0.186.1` (npm `dist-tags.latest`) passed the driver gate, exit 0, zero console/page errors, enforced vendor hashes `8b9f9eee…`/`05c4d7b7…`, 210/210 mini-bundles; STATUS.md Known limits "Platform" bullet corrected to scope the historical Apple Silicon/Metal claim. GAP-004 remains blocked: no macOS/Apple Silicon or Windows host exists in this environment, so the per-platform sweep and consumer-driver legs are unmeasured. `npm test` 66/66 and lint clean at the candidate. Evidence: STATUS.md "Installed consumer at three.js `0.186.1` 2026-09-26".
 
