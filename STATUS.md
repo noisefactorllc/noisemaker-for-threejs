@@ -170,7 +170,7 @@ versions; the measured numbers below are IDENTICAL for three 0.160.0 and 0.171.0
 - **Resize** — `renderer.setSize(480, 320)` + `composer.setSize(480, 320)` + camera aspect
   update; canvas measures 480×320 and re-renders without error. Observed limit: post-resize
   and post-recovery composer frames vary at sub-LSB level between runs under SwiftShader
-  (consecutive-render framebuffer means 158.237 vs 158.152 at 0.160.0; 158.229 vs 158.131 at
+  (consecutive-render framebuffer means 158.231 vs 158.172 at 0.160.0; 158.228 vs 158.142 at
   0.171.0; the resize/recovery screenshots are not byte-stable across runs). Resize is verified
   functionally; byte-stability at resized targets is NOT claimed (the fixed-size paths above
   are byte-stable and cross-version identical).
@@ -191,10 +191,14 @@ Cancellation and file preservation are not applicable to this workflow (the inst
 performs no file I/O; there is no long-running job to cancel) — recorded explicitly, not
 skipped silently. Platform scope: this qualification ran on Linux/headless SwiftShader only;
 Apple Silicon/Metal remains unqualified (unchanged STATUS Known limits). The npm
-publication/upgrade/removal and served-kit leg remains GAP-003. Raw per-run output
-(`results.json` per version) and screenshots were regenerated in gitignored scratch at the
-pre-commit working tree with the committed `parity/installed-consumer.mjs`; the hashes above
-bind this entry to that run.*
+publication/upgrade/removal and served-kit leg remains GAP-003. Every recorded run is
+gate-enforced: `parity/installed-consumer.mjs` exits 0 only when every step completed (no
+stepError), the driver raised no error, the page logged zero console errors, and dispose left
+the renderer renderable (`postDisposeRenderThrows === false`); the recorded values above come
+from gate-passing runs (`gate: []`, exit 0 in both versions). Raw per-run output
+(`results.json` per version, with the full step record and the enforced-gate verdict) and
+screenshots were regenerated in gitignored scratch at the pre-commit working tree with the
+committed `parity/installed-consumer.mjs`; the hashes above bind this entry to that run.*
 
 > **The programs sweep runs at frame 1, where normalized time is 0** (`t_i = i / loopFrames`).
 > That makes it a compile/link/uniform-binding gate, not a temporal one: any effect whose output

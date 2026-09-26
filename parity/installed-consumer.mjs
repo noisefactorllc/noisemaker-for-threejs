@@ -16,7 +16,9 @@
 // (structured diagnostic expected), recovery via a fresh valid compile + render, and dispose
 // (adapter + pass pipelines, renderer dispose + context loss, three's own resource counters
 // before/after). Screenshots and a results.json land in <outDir>; the driver exits 0 only when
-// every step completed and the page produced zero console errors / page errors.
+// the enforced gate passes: every step completed (no stepError), the driver raised no error,
+// the page logged zero console errors, and dispose left the renderer renderable
+// (postDisposeRenderThrows false) — see the gate block near the end of this file.
 //
 // Steps are registered in the page (`window.__steps`) and invoked by name — Playwright cannot
 // serialize function arguments, so each step runs through one `evaluate(key)`.
@@ -286,9 +288,11 @@ try {
   // --- Step 3: resize ---
   await step('resize')
   await step('renderPass')
-  results.steps.resizeRender1Mean = await step('canvasMean')
+  const m1 = await step('canvasMean')
+  results.steps.resizeRender1Mean = m1.ok ? m1.result : null
   await step('renderPass')
-  results.steps.resizeRender2Mean = await step('canvasMean')
+  const m2 = await step('canvasMean')
+  results.steps.resizeRender2Mean = m2.ok ? m2.result : null
   results.steps.resizeShot = await shot('3-after-resize')
 
   // --- Step 4: invalid DSL diagnostics ---
@@ -304,15 +308,28 @@ try {
   results.steps.disposeShot = await shot('5-after-dispose')
   results.steps.pageConsoleCap = await page.evaluate(() => window.__state.consoleCap)
   results.consoleErrors = consoleErrors
-  results.ok = consoleErrors.length === 0 && !results.steps.dispose?.stepError
 } catch (err) {
   results.errors.push(String(err && err.stack ? err.stack : err))
-  results.ok = false
 } finally {
   try { await browser.close() } catch { /* already closed */ }
   server.close()
 }
 
+// Enforced gate: the run passes only when every step completed, the driver
+// raised no errors, the browser logged no console errors, and dispose left the
+// renderer renderable (postDisposeRenderThrows false).
+const failedSteps = Object.entries(results.steps)
+  .filter(([key, v]) => key !== 'pageConsoleCap' && v && typeof v === 'object' && v.stepError)
+  .map(([key]) => key)
+const dispose = results.steps.dispose || {}
+const gate = []
+if (failedSteps.length) gate.push('failed steps: ' + failedSteps.join(', '))
+if (results.errors.length) gate.push('driver errors: ' + results.errors.join(' | '))
+if (results.consoleErrors.length) gate.push('console errors: ' + results.consoleErrors.join(' | '))
+if (dispose.postDisposeRenderThrows !== false) gate.push('postDisposeRenderThrows is ' + dispose.postDisposeRenderThrows)
+results.ok = gate.length === 0
+results.gate = gate
+
 writeFileSync(join(outDir, 'results.json'), JSON.stringify(results, null, 2))
-console.log(JSON.stringify({ ok: results.ok, threeVersion, errors: results.errors }, null, 1))
+console.log(JSON.stringify({ ok: results.ok, threeVersion, gate: results.gate }, null, 1))
 process.exit(results.ok ? 0 : 1)
