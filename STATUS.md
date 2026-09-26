@@ -137,6 +137,65 @@ platform scope is unchanged from the [Known limits](#known-limits) note. Raw per
 and the mode ledger were regenerated in `parity/out/` (gitignored scratch) at the pre-commit
 working tree; the commit containing this entry is the evidence-binding revision.*
 
+*Installed consumer qualification 2026-09-26, closing the installed-workflow state (GAP-002).
+Artifact: `npm pack` of this tree — `noisemaker-for-threejs-0.0.1.tgz`, 465 files, 408097 bytes,
+SHA-256 `de3fc2ff427e08c170740ab9174149f1db60f816ed3ced65db3044943dd4a937` (npm shasum
+`524be92505ff16d1d8f7720d9361084ee24c0ceb`). Engine input: the current served CDN `/1` bundle —
+870700 bytes, SHA-256 `8b9f9eee0cffdb88e96907d32eb8d73128cca6ccdbaefb47b5eb026b894a8469`
+(Last-Modified 2026-09-26T01:49:01Z; the CDN republished again after the GAP-001 closure's
+`092c3b77…`/858616-byte bundle; `effects/manifest.json` unchanged at SHA-256
+`05c4d7b7744837ae90a3bb4c89e5403ff09448a74d9d7e824abb3d719ad3314e`, 210/210 mini-bundles) —
+fetched inside each installed consumer via `npm run vendor` and verified byte-identical in both
+trees. Consumers: two isolated directories, `npm i <tarball> three@0.160.0` (declared peer
+floor) and `three@0.171.0` (current supported). Harness: `parity/installed-consumer.mjs`
+drives an import-mapped page that imports the adapter from the INSTALLED package
+(`/node_modules/noisemaker-for-threejs/src/index.js`) over loopback HTTP. Host: Linux
+6.8.0-134-generic, Node v26.5.1, Chrome Headless Shell 149.0.7827.55 (playwright
+chromium-headless-shell v1228, `PLAYWRIGHT_BROWSERS_PATH=/state/cache/pw-browsers`), GPU
+`ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)`,
+WebGL2 true. Every step completed with zero console errors and zero page errors in both
+versions; the measured numbers below are IDENTICAL for three 0.160.0 and 0.171.0:
+
+- **NoisemakerTexture on a lit mesh** — compile
+  `search synth, filter\nnoise(seed: 3, scaleX: 20, scaleY: 20).bloom().write(o0)\nrender(o0)`,
+  `update(0.25)`, two `renderer.render(scene, camera)` passes. Texture readback (128²,
+  65536 samples): min 0.000018, max 1.431641, mean 0.605436 — a live non-constant image;
+  default-framebuffer GPU readback mean 38.021/255 (`preserveDrawingBuffer` on). Screenshot
+  SHA-256 `db9bff66f93d32608f0796b7898dcd973e44863b31116d54b4805be3d12ae6d1` — byte-identical
+  across both three versions.
+- **NoisemakerPass in EffectComposer** — `RenderPass(scene, camera)` + generative
+  `noise(seed: 5).bloom().write(o0)` pass; `composer.render()` completed. Screenshot SHA-256
+  `612aac31efa68df6ec8cfe8af2ac149e12804c01517aa018c06d9ec6f9a418ed` — byte-identical across
+  both three versions.
+- **Resize** — `renderer.setSize(480, 320)` + `composer.setSize(480, 320)` + camera aspect
+  update; canvas measures 480×320 and re-renders without error. Observed limit: post-resize
+  and post-recovery composer frames vary at sub-LSB level between runs under SwiftShader
+  (consecutive-render framebuffer means 158.237 vs 158.152 at 0.160.0; 158.229 vs 158.131 at
+  0.171.0; the resize/recovery screenshots are not byte-stable across runs). Resize is verified
+  functionally; byte-stability at resized targets is NOT claimed (the fixed-size paths above
+  are byte-stable and cross-version identical).
+- **Invalid DSL through the installed entry point** — `nmTex.compile()` of
+  `noise(scaleX: 10).write(o9)` threw `SyntaxError`: "Output surface reference 'o9' is out of
+  range; expected o0-o7 at line 2 col 25", structured diagnostic `L004`, line 2 column 25,
+  span [45, 47).
+- **Recovery** — a fresh valid compile
+  (`noise(seed: 7, scaleX: 30, scaleY: 30).adjust(rotation: 90)`) after the failure, `update(0.5)`,
+  and `composer.render()` all succeeded; texture readback min 0.000006, max 1, mean 0.573125.
+- **Dispose** — `nmTex.dispose()` + `nmPass.dispose()` dropped three's own counters from
+  textures 153 / geometries 3 / programs 8 to 2 / 1 / 1; `composer.render()` after adapter
+  disposal raised no exception; `renderer.dispose()` + `forceContextLoss()` completed. Post-dispose
+  screenshot SHA-256 `2b6f5dadafc15613197994b2dc486e938b1e443d7520f1adcec05dd93a90f503`
+  (blank context), byte-identical across both three versions.
+
+Cancellation and file preservation are not applicable to this workflow (the installed adapter
+performs no file I/O; there is no long-running job to cancel) — recorded explicitly, not
+skipped silently. Platform scope: this qualification ran on Linux/headless SwiftShader only;
+Apple Silicon/Metal remains unqualified (unchanged STATUS Known limits). The npm
+publication/upgrade/removal and served-kit leg remains GAP-003. Raw per-run output
+(`results.json` per version) and screenshots were regenerated in gitignored scratch at the
+pre-commit working tree with the committed `parity/installed-consumer.mjs`; the hashes above
+bind this entry to that run.*
+
 > **The programs sweep runs at frame 1, where normalized time is 0** (`t_i = i / loopFrames`).
 > That makes it a compile/link/uniform-binding gate, not a temporal one: any effect whose output
 > is scaled by `time` renders its static form there. `filter/pondRipples`' `speed` control is the

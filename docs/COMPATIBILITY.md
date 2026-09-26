@@ -36,12 +36,12 @@ The matrix below retains the earlier measured scope. A historical verified row i
 |---|---|---|
 | Source-level checks | verified | 51 Node tests passed. The full browser image sweep and installed consumer workflow were not executed. |
 | Actual host rendering | unverified | No new complete native or browser workflow qualified by this report. |
-| Minimum and current host versions | unverified | Declared requirements are not a tested version matrix. |
+| Minimum and current host versions | partial | three.js 0.160.0 (declared peer floor) and 0.171.0 verified in installed consumers (2026-09-26, Linux/headless SwiftShader only); other versions and platforms unmeasured. |
 | Supported operating systems and backends | unverified | This pass does not establish Windows, Linux, and macOS coverage. |
-| Installed package and first useful result | unverified | Complete isolated installation was not qualified for this source. |
+| Installed package and first useful result | partial | Installed-consumer workflow qualified 2026-09-26 on Linux/headless SwiftShader (see STATUS.md "Installed consumer qualification 2026-09-26" and GAP-002); other platforms unmeasured. |
 | Parameters, external inputs, state, and chains | unverified | Full current-authority combinations remain unmeasured. |
-| Invalid input and recovery | unverified | Unit checks do not establish every installed public entry point. |
-| Upgrade, removal, and resource cleanup | unverified | Prior defects and missing workflows remain in the gap register. |
+| Invalid input and recovery | partial | Invalid-DSL diagnostic (`L004`) and valid-DSL recovery verified through the installed public entry point (2026-09-26); unit checks and other entry points remain as before. |
+| Upgrade, removal, and resource cleanup | partial | In-page dispose verified via three's own resource counters (2026-09-26); npm upgrade/removal and lifecycle remain GAP-003. |
 | Accessibility of provided controls | unverified | Keyboard, focus, labels, and diagnostics need host observations where applicable. |
 | Release readiness | blocked | Full parity, installation, host, and artifact evidence remain incomplete. |
 
@@ -308,7 +308,7 @@ A successful dispatch or unit-test summary does not establish a full rendered ga
 
 ## 5. Open compatibility limits
 
-Next bounded check: Install the npm tarball in an isolated consumer at the declared Three.js floor and current supported version. Exercise texture, canvas, and EffectComposer entry points with a useful rendered graph. Compare the same immutable reference cases, then test resize, disposal, invalid-input recovery, and an external texture.
+Next bounded check: Pack the adapter and qualify distribution contents and lifecycle for GAP-003 — match artifact bytes to their inventory, check notices and dependencies, and pass installation, examples, upgrade, and removal. The installed-consumer workflow for GAP-002 was qualified 2026-09-26 (tarball installed into isolated consumers at three 0.160.0 and 0.171.0; texture-on-mesh, EffectComposer pass, resize, invalid-DSL `L004` diagnostic + recovery, dispose; see STATUS.md "Installed consumer qualification 2026-09-26").
 See the stable entries in [completion gaps](COMPLETION_GAPS.md).
 
 See [GAP-001 and the complete gap register](COMPLETION_GAPS.md#4-known-gaps) for evidence, dependencies, and acceptance criteria.

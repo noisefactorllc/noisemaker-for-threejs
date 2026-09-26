@@ -95,16 +95,17 @@ These entries record missing qualification. They do not infer implementation def
 
 ### GAP-002: installed developer workflow qualification
 
-- Status: open. Priority: P2. Category: usability.
+- Status: closed 2026-09-26. Priority: P2. Category: usability.
 - Affected scope: Public API, examples, supported hosts, errors, recovery, and lifecycle.
 - Expected behavior: Developers can install, produce useful output, integrate it, recover from errors, and remove the package.
 - Observed behavior: This pass did not exercise the complete installed workflow or supported-version matrix.
-- Evidence: [README](https://github.com/noisefactorllc/noisemaker-for-threejs/blob/815d35fb3365d66a078f0eee155b14709e9ae9f2/README.md), [official reference](https://threejs.org/manual/en/installation.html), and section 3.
-- Next action: Install into an isolated consumer, render a texture on a mesh, run an EffectComposer pass, resize, recover from invalid DSL, and dispose.
-- Dependencies: Use an isolated consumer. Identify host, GPU, licensing, and input requirements before execution.
-- Acceptance criteria: Retain artifact hashes, steps, meaningful output, error diagnostics, recovery results, and cleanup results.
-- Required checks: Test minimum and current supported versions. Check cancellation and file preservation where relevant. Keep unavailable platforms explicit.
-- Last verification: 2026-09-24. Source inspection does not close this gap.
+- Evidence: STATUS.md, "Installed consumer qualification 2026-09-26" entry (packed-tarball hash, engine-bundle hash, per-step output, diagnostics, recovery results, dispose counters, screenshot hashes), and section 3.
+- Resolution: The packed artifact (`noisemaker-for-threejs-0.0.1.tgz`, 465 files, SHA-256 `de3fc2ff427e08c170740ab9174149f1db60f816ed3ced65db3044943dd4a937`) was installed into two isolated npm consumers — three.js `0.160.0` (declared peer floor) and `0.171.0` (current supported) — with the served engine (`8b9f9eee…`/870700 bytes, manifest `05c4d7b7…` unchanged, 210/210 mini-bundles) fetched inside each installed package via `npm run vendor` and verified byte-identical in both trees. `parity/installed-consumer.mjs` then exercised, through the installed package's public entry points on headless SwiftShader (Chrome Headless Shell 149.0.7827.55): `NoisemakerTexture` compiled onto a lit box mesh with a live non-constant image (readback min 0.000018 / max 1.431641 / mean 0.605436; GPU framebuffer mean 38.021/255), a `NoisemakerPass` inside `EffectComposer` rendered, resize to 480×320 re-rendered without error, an invalid DSL program threw `SyntaxError` with structured diagnostic `L004` (line 2 col 25, span [45, 47), "Output surface reference 'o9' is out of range; expected o0-o7"), a fresh valid compile + `update(0.5)` + `composer.render()` recovered (readback min 0.000006 / max 1 / mean 0.573125), and dispose dropped three's own counters from textures 153 / geometries 3 / programs 8 to 2 / 1 / 1 with no post-dispose exception. Zero console and zero page errors in both runs. Mesh-render, composer-pass, and post-dispose screenshots are byte-identical across both three versions (SHA-256 `db9bff66…`, `612aac31…`, `2b6f5dad…`); measured numbers are identical across versions.
+- Dependencies: Resolved — isolated consumers (separate scratch directories, npm tarball install only); host, GPU, licensing (MIT, LICENSE shipped in the tarball), and input (DSL text programs) identified and recorded before execution.
+- Acceptance criteria: Met. Artifact hash, steps, meaningful output, error diagnostics, recovery results, and cleanup results are retained verbatim in the STATUS entry; screenshot and results JSONs were regenerated in gitignored scratch with the committed harness at the pre-commit working tree of the commit carrying this record.
+- Required checks: Minimum (0.160.0) and current (0.171.0) supported three.js versions both tested in installed consumers. Cancellation and file preservation are not applicable to this workflow (no file I/O, no long-running job) — recorded explicitly. Unavailable platforms kept explicit: Linux/headless SwiftShader only; Apple Silicon/Metal untested; byte-stability at resized targets not claimed (sub-LSB run-to-run variance under SwiftShader, ≤1 LSB, recorded in STATUS).
+- Remaining limits (unchanged, non-blocking): npm publication, upgrade/removal, and served-kit qualification remain GAP-003; Apple Silicon/Metal remains a separate qualification.
+- Last verification: 2026-09-26. Installed-workflow qualification for the current served engine is evidenced at the commit carrying this record.
 
 ### GAP-003: distribution and release qualification
 
@@ -125,7 +126,7 @@ Current first action: Install the npm tarball in an isolated consumer at the dec
 Subsequent historical actions remain dependent on that evidence. No implementation is authorized by this audit.
 
 1. Resolve authority identities for GAP-001. Retain earlier denominators, goldens, tolerances, and exclusions. — Done 2026-09-26 (authority `v1.0.183` = `8eeb7b5a`, pinned by hash; see GAP-001).
-2. Execute the installed workflow for GAP-002. Record meaningful output, failure recovery, versions, and cleanup.
+2. Execute the installed workflow for GAP-002. Record meaningful output, failure recovery, versions, and cleanup. — Done 2026-09-26 (tarball installed into isolated consumers at three 0.160.0 and 0.171.0; texture-on-mesh, EffectComposer pass, resize, L004 diagnostic + recovery, dispose; see GAP-002).
 3. Run compiler and rendered parity for GAP-001. Keep structural, numerical, and platform evidence separate. — Done 2026-09-26 (66/66 compiler tests; programs 304/304, stateful 13 bit-exact, corpus 81+7 ERRs identified over 88; see GAP-001).
 4. Qualify distribution contents and lifecycle for GAP-003 after the installed workflow passes.
 5. Record measured results. Close entries only when their acceptance criteria pass.
@@ -139,6 +140,7 @@ Implementation belongs to the separate job. Do not port additional effects or ad
 | Date | Source SHA | Changes | Tested scope | Remaining limits |
 |---|---|---|---|---|
 | 2026-09-26 | This register's containing commit (see `git log`) | GAP-001 closed: authority `v1.0.183` = `8eeb7b5a` pinned by hash; full programs (304/304 worst=0), stateful (13 bit-exact), and corpus (81 PASS + 7 named ERR over 88) sweeps with exact frame comparisons; `npm test` 66/66, lint clean. Raw output in STATUS.md "Full qualification 2026-09-26". | Linux/headless SwiftShader; full current roster + modes + stateful + corpus denominator preserved. | `filter/text` untested; Apple Silicon/Metal and live external inputs remain separate qualifications (GAP-002/003 unaffected). |
+| 2026-09-26 | This register's containing commit (see `git log`) | GAP-002 closed: tarball `de3fc2ff…` installed into isolated consumers at three 0.160.0 (peer floor) and 0.171.0; texture-on-mesh, EffectComposer pass, resize 480×320, invalid-DSL `L004` diagnostic + valid-DSL recovery, dispose (153→2 textures, 8→1 programs); zero console/page errors; `npm test` 66/66, lint clean at the candidate. Raw output in STATUS.md "Installed consumer qualification 2026-09-26". | Linux/headless SwiftShader (Chrome Headless Shell 149.0.7827.55); engine `8b9f9eee…` (870700 bytes) fetched inside each installed package; mesh/pass/dispose screenshots byte-identical across both three versions. | Apple Silicon/Metal untested; byte-stability at resized targets not claimed (sub-LSB SwiftShader variance); npm publication/upgrade/removal and served kit remain GAP-003. |
 | 2026-09-24 | `815d35fb3365d66a078f0eee155b14709e9ae9f2` | Created six-section register and README link. No closures. | 51 Node tests passed. The full browser image sweep and installed consumer workflow were not executed. | Full audit, installed workflows, current rendered parity, platforms, and releases remain unqualified. |
 
 Run ID: `20260924-remaining-gap-documents`.
