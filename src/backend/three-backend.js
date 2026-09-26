@@ -265,10 +265,22 @@ export class ThreeBackend extends Backend {
   destroyTexture(id) {
     const info = this.textures.get(id)
     if (info?.target) info.target.dispose()
+    if (info?.dataTexture) info.dataTexture.dispose()
     // Free a raw GL handle WE created for an HTML/canvas source (updateTextureFromSource);
     // never the caller's bound GPU texture (setExternalTexture) — that's owned elsewhere.
     if (info?.externalGL) this.gl.deleteTexture(info.externalGL)
+    if (info?.target) this._releaseMeshDepth(info.target)
     this.textures.delete(id)
+  }
+
+  // A meshRender target's DEPTH_COMPONENT24 renderbuffer lives only as long as its render
+  // target. Without this, the pipeline's resize path (destroyTexture → createTexture for
+  // every surface) abandons each old FBO's renderbuffer and GPU memory accumulates.
+  _releaseMeshDepth(rt) {
+    const rec = this._meshDepth?.get(rt)
+    if (!rec) return
+    this._meshDepth.delete(rt)
+    this.gl.deleteRenderbuffer(rec.buffer)
   }
 
   clearTexture(id) {
@@ -561,12 +573,17 @@ export class ThreeBackend extends Backend {
   }
 
   // Cached host count:N WebGLRenderTarget (three owns its FBO + sets drawBuffers[0..N-1]).
+  // One host per attachment count: when the surface size changes (pipeline resize) the
+  // out-of-size host is disposed rather than accumulated in a size-keyed map.
   getMRTHost(n, w, h) {
-    const key = `${n}_${w}_${h}`
-    let host = this._mrtHosts?.get(key)
+    let host = (this._mrtHosts ||= new Map()).get(n)
     if (!host) {
       host = new THREE.WebGLRenderTarget(w, h, { count: n, depthBuffer: false, stencilBuffer: false })
-      ;(this._mrtHosts ||= new Map()).set(key, host)
+      this._mrtHosts.set(n, host)
+    } else if (host.width !== w || host.height !== h) {
+      host.dispose()
+      host = new THREE.WebGLRenderTarget(w, h, { count: n, depthBuffer: false, stencilBuffer: false })
+      this._mrtHosts.set(n, host)
     }
     return host
   }
@@ -764,6 +781,10 @@ export class ThreeBackend extends Backend {
     }
 
     let info = this.textures.get(id)
+    // Replacing an owned record (RT or data texture) releases the old GPU resource —
+    // same contract as setExternalTexture; overwriting silently would leak it.
+    if (info?.target && !info.external) this.destroyTexture(id)
+    else if (info?.dataTexture) info.dataTexture.dispose()
     if (!info?.externalGL || info.width !== width || info.height !== height) {
       if (info?.externalGL) gl.deleteTexture(info.externalGL)
       const handle = gl.createTexture()
@@ -813,7 +834,10 @@ export class ThreeBackend extends Backend {
       info.dataTexture.needsUpdate = true
       return
     }
-    if (info?.dataTexture) info.dataTexture.dispose()
+    // Replacing an owned record releases the old GPU resource (RT or raw handle).
+    if (info?.target && !info.external) this.destroyTexture(id)
+    else if (info?.externalGL) this.gl.deleteTexture(info.externalGL)
+    else if (info?.dataTexture) info.dataTexture.dispose()
     const tex = new THREE.DataTexture(data, width, height, THREE.RGBAFormat, THREE.FloatType)
     tex.colorSpace = THREE.NoColorSpace
     tex.magFilter = THREE.NearestFilter
@@ -832,6 +856,8 @@ export class ThreeBackend extends Backend {
   _uploadMeshTexture(texId, data, width, height, internalFormat, formatName) {
     const gl = this.gl
     let info = this.textures.get(texId)
+    // Replacing an owned render target releases it (mirrors setExternalTexture).
+    if (info?.target && !info.external) this.destroyTexture(texId)
     if (!info?.externalGL || info.width !== width || info.height !== height) {
       if (info?.externalGL) gl.deleteTexture(info.externalGL)
       const handle = gl.createTexture()
@@ -889,10 +915,12 @@ export class ThreeBackend extends Backend {
   ensureMeshDepth(rt) {
     const gl = this.gl
     const fbo = this.renderer.properties.get(rt).__webglFramebuffer
-    let rec = this._meshDepth?.get(fbo)
+    // Keyed by the render target (not the raw FBO handle) so _releaseMeshDepth can
+    // retire the renderbuffer when destroyTexture disposes the target.
+    let rec = this._meshDepth?.get(rt)
     if (!rec) {
       rec = { buffer: gl.createRenderbuffer(), width: 0, height: 0 }
-      ;(this._meshDepth ||= new Map()).set(fbo, rec)
+      ;(this._meshDepth ||= new Map()).set(rt, rec)
     }
     gl.bindFramebuffer(gl.FRAMEBUFFER, fbo)
     if (rec.width !== rt.width || rec.height !== rt.height) {
@@ -951,6 +979,25 @@ export class ThreeBackend extends Backend {
     for (const id of Array.from(this.textures.keys())) this.destroyTexture(id)
     for (const { material } of this.programs.values()) material?.dispose?.()
     this.programs.clear()
+    // Release what the per-frame paths accumulate; without this, disposing a pipeline
+    // (NoisemakerCanvas/Texture/Pass) leaks hosts, geometries, and depth renderbuffers
+    // until the context is lost.
+    if (this._mrtHosts) {
+      for (const host of this._mrtHosts.values()) host.dispose()
+      this._mrtHosts.clear()
+    }
+    if (this._meshDepth) {
+      for (const rec of this._meshDepth.values()) this.gl.deleteRenderbuffer(rec.buffer)
+      this._meshDepth.clear()
+    }
+    if (this._pointGeoCache) {
+      for (const geo of this._pointGeoCache.values()) geo.dispose()
+      this._pointGeoCache.clear()
+    }
+    if (this._triGeoCache) {
+      for (const geo of this._triGeoCache.values()) geo.dispose()
+      this._triGeoCache.clear()
+    }
     this.geometry?.dispose?.()
     this.presentMaterial?.dispose?.()
   }
