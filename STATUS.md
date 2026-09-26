@@ -216,6 +216,55 @@ enforced-gate verdict) and screenshots were regenerated in gitignored scratch at
 pre-commit working tree with the committed `parity/installed-consumer.mjs`; the hashes above
 bind this entry to that run.*
 
+*Incrementally synced 2026-09-26 to upstream reference `6a0af04d` (published authority tag
+`v1.0.185`), closing the consolidated Tearoff trigger `4891b995..8eeb7b5a` with
+force-push/non-contiguous delivery: the trigger's observed ranges (`428ea29b..95743621`,
+`95743621..6a0af04d`) extend past the nominal end, so the audit window here runs
+`8eeb7b5ac14e..6a0af04d3c4f` — the shader deltas after the GAP-001/GAP-002 entries. Audited by
+diffing a fresh clone of noisefactorllc/noisemaker (no sibling dependency added to the repo).
+Served engine refreshed via `vendor/fetch.sh`: core bundle 870700 bytes, SHA-256
+`8b9f9eee0cffdb88e96907d32eb8d73128cca6ccdbaefb47b5eb026b894a8469` (Last-Modified
+2026-09-26T01:49:01Z; `effects/manifest.json` unchanged at SHA-256
+`05c4d7b7744837ae90a3bb4c89e5403ff09448a74d9d7e824abb3d719ad3314e`, 210/210 mini-bundles).
+Authority identification: tag `v1.0.185` = `6a0af04d` (2026-09-26T01:36:41Z) precedes the
+republish by 12 minutes; intermediate `v1.0.184` = `95743621`; no `shaders/` commit exists after
+`6a0af04d` (upstream HEAD `a651c075` is docs-only), so the served bundle is the range end.
+
+Shader deltas in the window, all engine-side (executed verbatim by the adapter through the
+vendored bundle; no adapter code change required):
+- `6113da00` (GAP-006): consumes the analyzer's resource-allocation plan behind the opt-in
+  `texturePooling` pipeline option (default off) with a queryable runtime plan. It uses only
+  pre-existing backend APIs the adapter already implements (`createTexture`/`destroyTexture`/
+  `copyTexture` + the backend `textures` map). Cross-checked against the catalog: zero of the
+  210 mini-bundles carry `mipmaps`/`persistent`/3D-`filter` texture-spec fields (grep hits are
+  prose comments only), so the GAP-004 allocation policies and the per-frame
+  `backend.generateMipmaps` call (guarded by a `typeof` check ThreeBackend legitimately skips)
+  remain inert on this catalog.
+- `95743621`: a `viewport` pass without `clear` is treated as partially written for texture
+  pooling. Together with `fa83eeab`'s `resolvePassViewport` (GAP-005, prior entry) this
+  resolves authored viewport specs inside the engine; ThreeBackend renders each pass into its
+  resolved output render target and three.js applies that target's full viewport — every
+  catalog pass's resolved viewport equals its output target, confirmed by the byte-exact
+  sweeps below.
+- `f83a427e` (GAP-007): structured `ShaderDiagnostic` errors for reference WebGL2/WebGPU
+  compile/link failures. ThreeBackend extends `Backend`, not either reference backend, and the
+  legacy thrown fields stay preserved, so adapter-side diagnostics (L/P/S codes) are
+  unchanged. Also re-verified: the bundle still contains zero occurrences of
+  `validateEffectDefinition`/`effect-validator` (GAP-003 validator stays out of the published
+  artifact).
+
+Checks at the pre-commit working tree (Linux 6.8.0-134-generic, Node v26.5.1, Chrome Headless
+Shell 149.0.7827.55 / SwiftShader): `npm test` 66/66 PASS exit 0; `npm run lint` clean exit 0;
+`node parity/sweep-programs.mjs` **PASS=304 FAIL=0 ERR=0, worst max-abs-diff=0** exit 0;
+`bash parity/sweep-stateful.sh` worst max-abs-diff=0 exit 0; `npm run parity` corpus
+PASS=81 FAIL=0 ERR=7 worst=0 exit 0 (the 7 are the documented golden-side `S001`
+community-effect ERRs, denominator unchanged). Container-fault note (environment, not
+product): this harness resets per-invocation env, so `PLAYWRIGHT_BROWSERS_PATH` must be set on
+each sweep invocation (otherwise chrome-headless-shell is not found under the noexec HOME) and
+`parity/.venv` must be rebuilt from `parity/requirements.txt` (gitignored; without it
+`compare.py` produces empty output and the batch exits 1 with no per-sample lines — first two
+sweep attempts failed for exactly these two reasons and were re-run clean after the fix).*
+
 > **The programs sweep runs at frame 1, where normalized time is 0** (`t_i = i / loopFrames`).
 > That makes it a compile/link/uniform-binding gate, not a temporal one: any effect whose output
 > is scaled by `time` renders its static form there. `filter/pondRipples`' `speed` control is the
