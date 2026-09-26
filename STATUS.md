@@ -145,9 +145,14 @@ SHA-256 `de3fc2ff427e08c170740ab9174149f1db60f816ed3ced65db3044943dd4a937` (npm 
 (Last-Modified 2026-09-26T01:49:01Z; the CDN republished again after the GAP-001 closure's
 `092c3b77…`/858616-byte bundle; `effects/manifest.json` unchanged at SHA-256
 `05c4d7b7744837ae90a3bb4c89e5403ff09448a74d9d7e824abb3d719ad3314e`, 210/210 mini-bundles) —
-fetched inside each installed consumer via `npm run vendor` and verified byte-identical in both
-trees. Consumers: two isolated directories, `npm i <tarball> three@0.160.0` (declared peer
-floor) and `three@0.171.0` (current supported). Harness: `parity/installed-consumer.mjs`
+fetched inside each installed consumer via `npm run vendor` and then bound to the run by
+measurement: `parity/installed-consumer.mjs` hashes the INSTALLED package's vendored engine
+bundle and manifest and the gate enforces them against the expected hashes above (supplied as
+driver arguments), so both recorded trees carry the measured `8b9f9eee…`/`05c4d7b7…` bytes in
+their `results.json`. Consumers: two isolated directories, `npm i <tarball> three@0.160.0`
+(declared peer floor) and `three@0.171.0` (current supported); the qualification page is
+served from memory and the consumer trees are not mutated by the driver. Harness:
+`parity/installed-consumer.mjs`
 drives an import-mapped page that imports the adapter from the INSTALLED package
 (`/node_modules/noisemaker-for-threejs/src/index.js`) over loopback HTTP. Host: Linux
 6.8.0-134-generic, Node v26.5.1, Chrome Headless Shell 149.0.7827.55 (playwright
@@ -170,7 +175,7 @@ versions; the measured numbers below are IDENTICAL for three 0.160.0 and 0.171.0
 - **Resize** — `renderer.setSize(480, 320)` + `composer.setSize(480, 320)` + camera aspect
   update; canvas measures 480×320 and re-renders without error. Observed limit: post-resize
   and post-recovery composer frames vary at sub-LSB level between runs under SwiftShader
-  (consecutive-render framebuffer means 158.231 vs 158.172 at 0.160.0; 158.228 vs 158.142 at
+  (consecutive-render framebuffer means 158.226 vs 158.160 at 0.160.0; 158.233 vs 158.144 at
   0.171.0; the resize/recovery screenshots are not byte-stable across runs). Resize is verified
   functionally; byte-stability at resized targets is NOT claimed (the fixed-size paths above
   are byte-stable and cross-version identical).
@@ -193,12 +198,19 @@ skipped silently. Platform scope: this qualification ran on Linux/headless Swift
 Apple Silicon/Metal remains unqualified (unchanged STATUS Known limits). The npm
 publication/upgrade/removal and served-kit leg remains GAP-003. Every recorded run is
 gate-enforced: `parity/installed-consumer.mjs` exits 0 only when every step completed (no
-stepError), the driver raised no error, the page logged zero console errors, and dispose left
-the renderer renderable (`postDisposeRenderThrows === false`); the recorded values above come
-from gate-passing runs (`gate: []`, exit 0 in both versions). Raw per-run output
-(`results.json` per version, with the full step record and the enforced-gate verdict) and
-screenshots were regenerated in gitignored scratch at the pre-commit working tree with the
-committed `parity/installed-consumer.mjs`; the hashes above bind this entry to that run.*
+stepError), the driver raised no error, the page logged zero console errors, dispose left
+the renderer renderable (`postDisposeRenderThrows === false`) AND released resources (all
+three of textures/geometries/programs strictly decrease), the invalid-DSL diagnostics match
+the expected L004 contract exactly (SyntaxError naming 'o9', code L004, line 2, column 25,
+span [45, 47)), the texture and recovery readbacks are live non-constant images (min > 0,
+max ≥ 1, max−min > 0.5, mean > 0.1, 65536 samples), the mesh GPU readback is non-blank
+(mean > 1), and supplied expected vendor hashes match the installed bytes. A negative
+control (wrong expected engine hash) fails the gate and exits 1. The recorded values above
+come from gate-passing runs (`gate: []`, exit 0 in both versions). Raw per-run output
+(`results.json` per version, with the full step record, measured vendor hashes, and the
+enforced-gate verdict) and screenshots were regenerated in gitignored scratch at the
+pre-commit working tree with the committed `parity/installed-consumer.mjs`; the hashes above
+bind this entry to that run.*
 
 > **The programs sweep runs at frame 1, where normalized time is 0** (`t_i = i / loopFrames`).
 > That makes it a compile/link/uniform-binding gate, not a temporal one: any effect whose output

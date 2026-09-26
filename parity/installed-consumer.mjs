@@ -17,8 +17,14 @@
 // (adapter + pass pipelines, renderer dispose + context loss, three's own resource counters
 // before/after). Screenshots and a results.json land in <outDir>; the driver exits 0 only when
 // the enforced gate passes: every step completed (no stepError), the driver raised no error,
-// the page logged zero console errors, and dispose left the renderer renderable
-// (postDisposeRenderThrows false) — see the gate block near the end of this file.
+// the page logged zero console errors, dispose left the renderer renderable
+// (postDisposeRenderThrows false) and released resources, the invalid-DSL diagnostics match
+// the expected L004 contract, the rendered output is non-constant, and supplied expected
+// vendor hashes match the installed bytes — see the gate block near the end of this file.
+//
+// Expected vendor hashes may be supplied and are then enforced by the gate:
+//   PLAYWRIGHT_BROWSERS_PATH=<dir> node parity/installed-consumer.mjs \
+//     <consumerDir> <outDir> <threeVersion> [expectedCoreSha256] [expectedManifestSha256]
 //
 // Steps are registered in the page (`window.__steps`) and invoked by name — Playwright cannot
 // serialize function arguments, so each step runs through one `evaluate(key)`.
@@ -31,18 +37,40 @@ import { extname, join, resolve } from 'node:path'
 const consumerDir = resolve(process.argv[2])
 const outDir = resolve(process.argv[3])
 const threeVersion = process.argv[4]
+const expectedCoreSha = process.argv[5] || null
+const expectedManifestSha = process.argv[6] || null
 mkdirSync(outDir, { recursive: true })
 
 const sha256 = (buf) => createHash('sha256').update(buf).digest('hex')
+
+// Hash the INSTALLED package's vendored engine bytes so the run is bound to them by
+// measurement, not self-report. Optional expected hashes (argv) are enforced by the gate.
+const installedPkg = join(consumerDir, 'node_modules', 'noisemaker-for-threejs')
+const vendorCorePath = join(installedPkg, 'vendor', 'noisemaker', 'noisemaker-shaders-core.esm.js')
+const vendorManifestPath = join(installedPkg, 'vendor', 'noisemaker', 'effects', 'manifest.json')
+const vendorCoreBytes = readFileSync(vendorCorePath)
+const vendorManifestBytes = readFileSync(vendorManifestPath)
+const vendor = {
+  coreSha256: sha256(vendorCoreBytes),
+  coreBytes: vendorCoreBytes.length,
+  manifestSha256: sha256(vendorManifestBytes),
+  coreExpectedSha256: expectedCoreSha,
+  manifestExpectedSha256: expectedManifestSha,
+}
 
 const MIME = {
   '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript',
   '.json': 'application/json', '.css': 'text/css', '.png': 'image/png', '.wasm': 'application/wasm',
 }
 
-// Minimal static server rooted at the consumer dir.
+// The qualification page is served from memory — the consumer tree is never mutated.
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, 'http://x')
+  if (url.pathname === '/gap002-page.html') {
+    res.writeHead(200, { 'content-type': 'text/html' })
+    res.end(page_html)
+    return
+  }
   const p = join(consumerDir, decodeURIComponent(url.pathname))
   try {
     const body = readFileSync(p)
@@ -56,7 +84,7 @@ await new Promise((ok) => server.listen(0, '127.0.0.1', ok))
 const port = server.address().port
 const base = `http://127.0.0.1:${port}`
 
-const results = { threeVersion, base, steps: {}, errors: [] }
+const results = { threeVersion, base, vendor, steps: {}, errors: [] }
 
 const page_html = `<!doctype html>
 <html><head><meta charset="utf-8"><style>body{margin:0}</style>
@@ -315,18 +343,48 @@ try {
   server.close()
 }
 
-// Enforced gate: the run passes only when every step completed, the driver
-// raised no errors, the browser logged no console errors, and dispose left the
-// renderer renderable (postDisposeRenderThrows false).
+// Enforced gate: the run passes only when every step completed, the driver raised no
+// errors, the browser logged no console errors, dispose left the renderer renderable
+// (postDisposeRenderThrows false) and actually released resources, the error diagnostics
+// are exactly the expected L004 contract, the rendered output is non-constant, and — when
+// expected hashes were supplied — the installed vendored engine bytes match them.
 const failedSteps = Object.entries(results.steps)
   .filter(([key, v]) => key !== 'pageConsoleCap' && v && typeof v === 'object' && v.stepError)
   .map(([key]) => key)
 const dispose = results.steps.dispose || {}
+const invalid = results.steps.invalidDsl || {}
+const tex = results.steps.textureStats || {}
+const rec = results.steps.recoveryStats || {}
+const gpu = results.steps.meshGpuReadback || {}
 const gate = []
 if (failedSteps.length) gate.push('failed steps: ' + failedSteps.join(', '))
 if (results.errors.length) gate.push('driver errors: ' + results.errors.join(' | '))
 if (results.consoleErrors.length) gate.push('console errors: ' + results.consoleErrors.join(' | '))
 if (dispose.postDisposeRenderThrows !== false) gate.push('postDisposeRenderThrows is ' + dispose.postDisposeRenderThrows)
+if (!(dispose.after && dispose.before && dispose.after.textures < dispose.before.textures
+  && dispose.after.geometries < dispose.before.geometries
+  && dispose.after.programs < dispose.before.programs)) {
+  gate.push('dispose did not release resources: ' + JSON.stringify({ before: dispose.before, after: dispose.after }))
+}
+if (invalid.threw !== true || invalid.name !== 'SyntaxError' || !invalid.diagnostic
+  || invalid.diagnostic.code !== 'L004' || invalid.diagnostic.line !== 2 || invalid.diagnostic.column !== 25
+  || invalid.diagnostic.spanStart !== 45 || invalid.diagnostic.spanEnd !== 47
+  || !String(invalid.message || '').includes("'o9'")) {
+  gate.push('invalidDsl did not produce the expected L004 contract: ' + JSON.stringify(invalid))
+}
+if (!(tex.samples === 65536 && tex.min > 0 && tex.max >= 1 && tex.max - tex.min > 0.5 && tex.mean > 0.1)) {
+  gate.push('textureStats is not a live non-constant image: ' + JSON.stringify(tex))
+}
+if (!(rec.samples === 65536 && rec.min > 0 && rec.max >= 1 && rec.max - rec.min > 0.5 && rec.mean > 0.1)) {
+  gate.push('recoveryStats is not a live non-constant image: ' + JSON.stringify(rec))
+}
+if (!(gpu.mean > 1)) gate.push('meshGpuReadback mean is ' + gpu.mean)
+if (expectedCoreSha && vendor.coreSha256 !== expectedCoreSha) {
+  gate.push('installed engine bundle hash mismatch: got ' + vendor.coreSha256 + ', expected ' + expectedCoreSha)
+}
+if (expectedManifestSha && vendor.manifestSha256 !== expectedManifestSha) {
+  gate.push('installed effects manifest hash mismatch: got ' + vendor.manifestSha256 + ', expected ' + expectedManifestSha)
+}
 results.ok = gate.length === 0
 results.gate = gate
 
