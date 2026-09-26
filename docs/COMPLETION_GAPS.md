@@ -4,13 +4,21 @@ Current compatibility matrix: [compatibility report](COMPATIBILITY.md).
 
 ## 1. Scope and source revisions
 
-Daily review: 2026-09-25. Current inspected source: [`05f599274ed11e6d0778b7a21978f058f2b47c06`](https://github.com/noisefactorllc/noisemaker-for-threejs/commit/05f599274ed11e6d0778b7a21978f058f2b47c06).
-Full rendered parity remains **unverified**. No release approval or new closure follows from this review.
-Current upstream discovery: `bbdeb56c4b75cf33379766c3e87b0f5a18bcbba8`. Published Noisemaker authority: `1.0.179`, source `fca611fd8f91424661d4e531d39313d24ea21134`, 210 effect IDs.
-The observations below retain their original source and authority identities. They do not qualify later updates.
-Current served kit: `0.1.5`, source `815d35fb3365d66a078f0eee155b14709e9ae9f2`. [Retrieved inventory and hashes](/Users/alex/.codex/automations/noisemaker-port-completion-audit/review-20260925-053200/current-served-inventories.json). Artifact identity does not establish host qualification.
+Completion audit: 2026-09-26. Audited source: [`1822646f9d6d90a164a5146f4db571eea2b98202`](https://github.com/noisefactorllc/noisemaker-for-threejs/commit/1822646f9d6d90a164a5146f4db571eea2b98202).
+Local HEAD matched remote main before and after checks. Full rendered parity executed at this source.
+Result: programs 304/304 worst=0, stateful 13 bit-exact, corpus 81 PASS plus 7 identified ERR over 88, compiler 66/66.
+GAP-001 and GAP-002 closures stand at this source. GAP-003 remains open.
+Served authority: CDN `/1` bundle SHA-256 `8b9f9eee…` (870700 bytes), manifest SHA-256 `05c4d7b7…`, 210/210 mini-bundles.
+Identified as published authority `v1.0.185`, source `6a0af04d3c4f345ffab5e9f8e54e532216b4cdaa`. Upstream head `a651c075` is docs-only after that tag.
+Served kit `0.1.5` at `815d35fb3365d66a078f0eee155b14709e9ae9f2`: all 17 served files match the inventory hashes.
+All 13 source-derived kit files are byte-identical to that SHA. Kit-relevant source is unchanged through `1822646`.
+The npm registry has no `noisemaker-for-threejs` package (HTTP 404). Evidence: `/series/evidence-audit-20260926-101500/result-noisemaker-for-threejs.json`.
 
 ### Earlier source observations
+
+Daily review: 2026-09-25. Current inspected source: [`05f599274ed11e6d0778b7a21978f058f2b47c06`](https://github.com/noisefactorllc/noisemaker-for-threejs/commit/05f599274ed11e6d0778b7a21978f058f2b47c06).
+Full rendered parity remained unverified at that review. Current upstream discovery: `bbdeb56c4b75cf33379766c3e87b0f5a18bcbba8`. Published Noisemaker authority: `1.0.179`, source `fca611fd8f91424661d4e531d39313d24ea21134`, 210 effect IDs.
+Current served kit: `0.1.5`, source `815d35fb3365d66a078f0eee155b14709e9ae9f2`. Artifact identity did not establish host qualification.
 
 Date: 2026-09-24. Reviewed SHA: [`815d35fb3365d66a078f0eee155b14709e9ae9f2`](https://github.com/noisefactorllc/noisemaker-for-threejs/commit/815d35fb3365d66a078f0eee155b14709e9ae9f2).
 Local HEAD matched remote main before checks. The operator requested registers for all remaining eligible ports in this run.
@@ -33,17 +41,38 @@ The containing commit identifies this register's publication revision. The share
 
 | Claim ID | Claim source | Claimed scope | Finding | Evidence |
 |---|---|---|---|---|
-| CLAIM-001 | [Historical source](https://github.com/noisefactorllc/noisemaker-for-threejs/blob/815d35fb3365d66a078f0eee155b14709e9ae9f2/STATUS.md) | Historical catalog and mode fixtures are pixel-identical. Live inputs and broader host versions need separate qualification. | partial | 51 Node tests passed. The full browser image sweep and installed consumer workflow were not executed. |
-| CLAIM-002 | [README](https://github.com/noisefactorllc/noisemaker-for-threejs/blob/815d35fb3365d66a078f0eee155b14709e9ae9f2/README.md) | Human usability: installation, output, errors, and recovery | unverified | Complete installed workflows were not observed. GAP-002. |
-| CLAIM-003 | [Ecosystem reference](https://threejs.org/manual/en/installation.html) | Ecosystem fit and version support | partial | Source entry points were examined. Installed integration and version qualification remain open. |
-| CLAIM-004 | [README](https://github.com/noisefactorllc/noisemaker-for-threejs/blob/815d35fb3365d66a078f0eee155b14709e9ae9f2/README.md) | Release readiness | unverified | Metadata and CI do not replace installation of the actual artifact. GAP-003. |
-| CLAIM-005 | [Exact-source Actions](https://github.com/noisefactorllc/noisemaker-for-threejs/actions?query=head_sha%3A815d35fb3365d66a078f0eee155b14709e9ae9f2) | Workflow status only | supported | [Export kit](https://github.com/noisefactorllc/noisemaker-for-threejs/actions/runs/35954455774): `success`. |
+| CLAIM-001 | [STATUS](https://github.com/noisefactorllc/noisemaker-for-threejs/blob/1822646f9d6d90a164a5146f4db571eea2b98202/STATUS.md) | Catalog and mode fixtures are pixel-identical. Live inputs and broader hosts need separate qualification. | supported | 2026-09-26 audit: programs 304/304 worst=0, stateful 13 bit-exact, corpus 81+7 identified ERR over 88, Linux/headless SwiftShader. Live inputs stay injected-only. |
+| CLAIM-002 | [README](https://github.com/noisefactorllc/noisemaker-for-threejs/blob/1822646f9d6d90a164a5146f4db571eea2b98202/README.md) | Human usability: installation, output, errors, and recovery | supported | GAP-002 closed 2026-09-26. Installed consumers at three 0.160.0 and 0.171.0; resize, L004 diagnostic, recovery, dispose. Linux/headless SwiftShader only. |
+| CLAIM-003 | [Ecosystem reference](https://threejs.org/manual/en/installation.html) | Ecosystem fit and version support | partial | Installed integration verified at the floor and current three versions on Linux only. Other versions and platforms remain unmeasured. |
+| CLAIM-004 | [README](https://github.com/noisefactorllc/noisemaker-for-threejs/blob/1822646f9d6d90a164a5146f4db571eea2b98202/README.md) | Release readiness | unverified | GAP-003 open. Kit bytes verified this pass; npm publication, upgrade, removal, and kit host workflow remain unqualified. |
+| CLAIM-005 | [Exact-source Actions](https://github.com/noisefactorllc/noisemaker-for-threejs/actions?query=head_sha%3A1822646f9d6d90a164a5146f4db571eea2b98202) | Workflow status only | supported | No check runs exist at `1822646` (docs-only path filters). Latest export kit run 35954455774 passed at `815d35fb`. A green dispatch does not qualify rendered parity. |
 
 ## 3. Methods and evidence
 
 Review CI boundary: No workflow run exists at the inspected source SHA. A passing export dispatch does not qualify rendered parity. Current complete-render enforcement remains an open verification requirement. [Exact-source responses and workflows](/Users/alex/.codex/automations/noisemaker-port-completion-audit/review-20260925-053200/noisemaker-for-threejs-remote-evidence.json).
 
-### Daily review, 2026-09-25
+### Completion audit, 2026-09-26
+
+Source `1822646`, local and remote identical. Environment: Linux 6.8.0-134-generic, Node v26.5.1, Chrome Headless Shell 149.0.7827.55, SwiftShader. All commands exited 0.
+
+| Command | Exit | Result |
+|---|---|---|
+| `bash vendor/fetch.sh` | 0 | core 870700 bytes SHA-256 `8b9f9eee…`; manifest SHA-256 `05c4d7b7…`; 210/210 mini-bundles |
+| `node parity/sweep-programs.mjs` | 0 | PASS=304 FAIL=0 ERR=0 worst max-abs-diff=0 |
+| `bash parity/sweep-stateful.sh` | 0 | 13 fixtures bit-exact, worst=0 |
+| `npm run parity` | 0 | PASS=81 FAIL=0 ERR=7 worst=0 over 88 programs; 7 ERR rows identified as golden-side S001 |
+| `node --test test/*.test.mjs` | 0 | 66 tests, 66 pass, 0 fail, 0 skipped |
+| `npm run lint` | 0 | clean |
+
+Sweep denominators: 307 fixtures minus 3 retired historical effects (`bc`, `hs`, `colorspace`) absent from the current manifest. The `text` fixture executed and passed.
+The 7 corpus ERR rows are `4bm9AA`, `8KMvAg`, `B5oBsA`, `PmJyUQ`, `WyalUg`, `fKPUww`, `liTYEg`. Both backends reject them identically before rendering.
+Raw evidence: `/series/evidence-audit-20260926-101500/result-noisemaker-for-threejs.json`.
+
+Distribution checks this pass: all 17 served kit files match `kit.json` hashes and bytes.
+13/13 source-derived kit files match `git show 815d35fb:<path>` byte-for-byte. `hostlib/three` matches npm `three@0.171.0` bytes.
+`compat.json` is `{"mode":"all"}`. The registry has no `noisemaker-for-threejs` package (HTTP 404).
+
+### Daily review, 2026-09-25 (superseded by the 2026-09-26 qualification and audit)
 
 65 unit tests pass and the packed artifact contains 465 files. Neither result establishes complete browser rendering or a consumer install across the declared Three.js peer range. The prior compatibility measurements remain historical. GAP-001 remains open. Current full parity is stale and unverified. [Raw evidence](/Users/alex/.codex/automations/noisemaker-port-completion-audit/review-20260925-053200/threejs-current-tests.json).
 The review checked source changes, worker evidence, source-bound CI where present, and current served inventories. Full installed-host and platform qualification remains incomplete.
@@ -112,23 +141,25 @@ These entries record missing qualification. They do not infer implementation def
 - Status: open. Priority: P2. Category: release.
 - Affected scope: Actual artifact, dependencies, notices, version promises, and release evidence.
 - Expected behavior: The delivered artifact supports its documented installation and first useful result.
-- Observed behavior: Complete artifact reproduction, installation, upgrade, and removal remain unverified.
-- Evidence: [Distribution instructions](https://github.com/noisefactorllc/noisemaker-for-threejs/blob/815d35fb3365d66a078f0eee155b14709e9ae9f2/README.md), section 1, and exact-source CI in section 2.
-- Next action: Pack and install the adapter into an isolated consumer. Check engine discovery, public module imports, examples, licenses, and removal.
-- Dependencies: Complete GAP-002 for the candidate. Distinguish source CI from downstream publication and native rendering.
-- Acceptance criteria: Match artifact bytes to their inventory. Check notices and dependencies. Pass installation, examples, upgrade, and removal.
+- Observed behavior: Kit bytes are verified. Lifecycle, host workflow, and registry publication remain unverified.
+- Evidence: Section 3, audit 2026-09-26 distribution checks. [Distribution instructions](https://github.com/noisefactorllc/noisemaker-for-threejs/blob/1822646f9d6d90a164a5146f4db571eea2b98202/README.md). Exact-source CI in section 2.
+- Byte verification 2026-09-26: served kit `0.1.5` at `815d35fb`. All 17 files match `kit.json` hashes and sizes. 13/13 source-derived files match that SHA byte-for-byte. `hostlib/three` matches npm `three@0.171.0`. Kit-relevant source is unchanged through `1822646`.
+- Unqualified: kit host-page workflow, npm publication (`noisemaker-for-threejs` returns HTTP 404), upgrade, and removal.
+- Next action: Run the served kit in an isolated consumer. Serve `index.html` with a DSL program, render, and diagnose one invalid input. Decide the npm publication path.
+- Dependencies: GAP-002 evidence carries at the same served bundle. Distinguish source CI from downstream publication and native rendering.
+- Acceptance criteria: Exercise the served kit end to end. Record artifact hashes, notices, and lifecycle results. Define the registry decision.
 - Required checks: Inspect exact-source CI jobs and actual render legs. Count skips and errors rather than trusting green summaries.
-- Last verification: 2026-09-24. This register does not approve a release.
+- Last verification: 2026-09-26. Kit bytes verified; lifecycle and publication remain open. This register does not approve a release.
 
 ## 5. Ordered next actions
 
-Current first action: Install the npm tarball in an isolated consumer at the declared Three.js floor and current supported version. Exercise texture, canvas, and EffectComposer entry points with a useful rendered graph. Compare the same immutable reference cases, then test resize, disposal, invalid-input recovery, and an external texture.
-Subsequent historical actions remain dependent on that evidence. No implementation is authorized by this audit.
+Current first action: Run the served kit `0.1.5` in an isolated consumer. Load `index.html` with a DSL program, verify a render, and diagnose one invalid input. Then decide the npm publication path.
+Subsequent actions depend on that evidence. No implementation is authorized by this audit.
 
-1. Resolve authority identities for GAP-001. Retain earlier denominators, goldens, tolerances, and exclusions. — Done 2026-09-26 (authority `v1.0.183` = `8eeb7b5a`, pinned by hash; see GAP-001).
-2. Execute the installed workflow for GAP-002. Record meaningful output, failure recovery, versions, and cleanup. — Done 2026-09-26 (tarball installed into isolated consumers at three 0.160.0 and 0.171.0; texture-on-mesh, EffectComposer pass, resize, L004 diagnostic + recovery, dispose; see GAP-002).
-3. Run compiler and rendered parity for GAP-001. Keep structural, numerical, and platform evidence separate. — Done 2026-09-26 (66/66 compiler tests; programs 304/304, stateful 13 bit-exact, corpus 81+7 ERRs identified over 88; see GAP-001).
-4. Qualify distribution contents and lifecycle for GAP-003 after the installed workflow passes.
+1. Qualify the served kit host workflow for GAP-003. Record the rendered output, diagnostics, and cleanup. — Kit bytes verified 2026-09-26; the workflow remains untested.
+2. Define the registry path for GAP-003. The npm registry has no `noisemaker-for-threejs` package (HTTP 404). Publication, upgrade, and removal remain unqualified.
+3. Keep GAP-001 evidence current. Re-run the compiler and rendered gates at each authority or source change. — Re-verified 2026-09-26 at `1822646`: 304/304, stateful worst=0, corpus 81+7/88, 66/66, lint clean.
+4. Qualify Apple Silicon/Metal and other platforms. This audit measured Linux/headless SwiftShader only.
 5. Record measured results. Close entries only when their acceptance criteria pass.
 
 Implementation belongs to the separate job. Do not port additional effects or advance the current parity checkpoint through this register.
@@ -139,9 +170,10 @@ Implementation belongs to the separate job. Do not port additional effects or ad
 
 | Date | Source SHA | Changes | Tested scope | Remaining limits |
 |---|---|---|---|---|
+| 2026-09-26 | `1822646f9d6d90a164a5146f4db571eea2b98202` | Completion audit: full parity re-executed at the audited source (programs 304/304 worst=0, stateful 13 bit-exact, corpus 81 PASS + 7 identified ERR over 88, `npm test` 66/66, lint clean). Served kit `0.1.5` byte-verified against inventory and source; npm registry 404 recorded. GAP-001/GAP-002 closures re-verified; GAP-003 updated, still open. Evidence: `/series/evidence-audit-20260926-101500/result-noisemaker-for-threejs.json`. | Linux/headless SwiftShader; authority `v1.0.185` = `6a0a04d`, served bundle `8b9f9eee…` unchanged; all 210 effects plus mode variants covered. | Kit host workflow, npm publication, upgrade, removal, Apple Silicon/Metal, and live external inputs remain unqualified. |
 | 2026-09-26 | This register's containing commit (see `git log`) | GAP-001 closed: authority `v1.0.183` = `8eeb7b5a` pinned by hash; full programs (304/304 worst=0), stateful (13 bit-exact), and corpus (81 PASS + 7 named ERR over 88) sweeps with exact frame comparisons; `npm test` 66/66, lint clean. Raw output in STATUS.md "Full qualification 2026-09-26". | Linux/headless SwiftShader; full current roster + modes + stateful + corpus denominator preserved. | `filter/text` untested; Apple Silicon/Metal and live external inputs remain separate qualifications (GAP-002/003 unaffected). |
 | 2026-09-26 | This register's containing commit (see `git log`) | GAP-002 closed: tarball `de3fc2ff…` installed into isolated consumers at three 0.160.0 (peer floor) and 0.171.0; texture-on-mesh, EffectComposer pass, resize 480×320, invalid-DSL `L004` diagnostic + valid-DSL recovery, dispose (153→2 textures, 8→1 programs); zero console/page errors; `npm test` 66/66, lint clean at the candidate. Raw output in STATUS.md "Installed consumer qualification 2026-09-26". | Linux/headless SwiftShader (Chrome Headless Shell 149.0.7827.55); engine `8b9f9eee…` (870700 bytes) fetched inside each installed package; mesh/pass/dispose screenshots byte-identical across both three versions. | Apple Silicon/Metal untested; byte-stability at resized targets not claimed (sub-LSB SwiftShader variance); npm publication/upgrade/removal and served kit remain GAP-003. |
 | 2026-09-24 | `815d35fb3365d66a078f0eee155b14709e9ae9f2` | Created six-section register and README link. No closures. | 51 Node tests passed. The full browser image sweep and installed consumer workflow were not executed. | Full audit, installed workflows, current rendered parity, platforms, and releases remain unqualified. |
 
-Run ID: `20260924-remaining-gap-documents`.
-[Operational evidence](/Users/alex/.codex/automations/noisemaker-port-completion-audit/evidence-20260924-remaining-gap-documents). Creating this register does not advance successful-audit timestamps or the rotation.
+Run ID: `audit-20260926-101500`. Earlier run: `20260924-remaining-gap-documents`.
+[Operational evidence](/Users/alex/.codex/automations/noisemaker-port-completion-audit/evidence-20260924-remaining-gap-documents) (historical provenance, source host). Current audit evidence: `/series/evidence-audit-20260926-101500/`. Creating this register does not advance successful-audit timestamps or the rotation.

@@ -2,13 +2,17 @@
 
 ## 1. Source and authority revisions
 
-Daily review: 2026-09-25. Current inspected source: [`05f599274ed11e6d0778b7a21978f058f2b47c06`](https://github.com/noisefactorllc/noisemaker-for-threejs/commit/05f599274ed11e6d0778b7a21978f058f2b47c06).
-Full rendered parity remains **unverified**. No release approval or new closure follows from this review.
-Current upstream discovery: `bbdeb56c4b75cf33379766c3e87b0f5a18bcbba8`. Published Noisemaker authority: `1.0.179`, source `fca611fd8f91424661d4e531d39313d24ea21134`, 210 effect IDs.
-The observations below retain their original source and authority identities. They do not qualify later updates.
-Current served kit: `0.1.5`, source `815d35fb3365d66a078f0eee155b14709e9ae9f2`. [Retrieved inventory and hashes](/Users/alex/.codex/automations/noisemaker-port-completion-audit/review-20260925-053200/current-served-inventories.json). Artifact identity does not establish host qualification.
+Completion audit: 2026-09-26. Current source: [`1822646f9d6d90a164a5146f4db571eea2b98202`](https://github.com/noisefactorllc/noisemaker-for-threejs/commit/1822646f9d6d90a164a5146f4db571eea2b98202).
+Tested source: `1822646` (local and remote identical; full suite executed at this SHA).
+Served authority: `v1.0.185`, source `6a0af04d3c4f345ffab5e9f8e54e532216b4cdaa`. Served CDN `/1` bundle SHA-256 `8b9f9eee…` (870700 bytes), manifest SHA-256 `05c4d7b7…`, 210/210 mini-bundles.
+Freshness: current. The report covers the audited source and the served authority.
+Served kit: `0.1.5`, source `815d35fb3365d66a078f0eee155b14709e9ae9f2`, byte-verified 2026-09-26. Kit-relevant source is unchanged through `1822646`.
+The npm registry has no `noisemaker-for-threejs` package (HTTP 404). Evidence: `/series/evidence-audit-20260926-101500/result-noisemaker-for-threejs.json`.
 
 ### Earlier source observations
+
+Daily review: 2026-09-25. Inspected source: [`05f599274ed11e6d0778b7a21978f058f2b47c06`](https://github.com/noisefactorllc/noisemaker-for-threejs/commit/05f599274ed11e6d0778b7a21978f058f2b47c06).
+Full rendered parity remained unverified at that review. Published Noisemaker authority: `1.0.179`, source `fca611fd8f91424661d4e531d39313d24ea21134`, 210 effect IDs.
 
 Report date: 2026-09-24. Source inspected: [`815d35fb3365d66a078f0eee155b14709e9ae9f2`](https://github.com/noisefactorllc/noisemaker-for-threejs/commit/815d35fb3365d66a078f0eee155b14709e9ae9f2).
 Full rendered parity at this SHA: **unverified**. This is not a release approval.
@@ -34,18 +38,31 @@ The matrix below retains the earlier measured scope. A historical verified row i
 
 | Dimension | Status | Measured scope or limit |
 |---|---|---|
-| Source-level checks | verified | 51 Node tests passed. The full browser image sweep and installed consumer workflow were not executed. |
-| Actual host rendering | unverified | No new complete native or browser workflow qualified by this report. |
+| Source-level checks | verified | 2026-09-26 audit at `1822646`: `npm test` 66/66, lint clean, vendor fetch 210/210. |
+| Actual host rendering | verified | 2026-09-26 audit at `1822646`: programs 304/304 worst=0, stateful 13 bit-exact, corpus 81+7 identified ERR over 88, Linux/headless SwiftShader. |
 | Minimum and current host versions | partial | three.js 0.160.0 (declared peer floor) and 0.171.0 verified in installed consumers (2026-09-26, Linux/headless SwiftShader only); other versions and platforms unmeasured. |
-| Supported operating systems and backends | unverified | This pass does not establish Windows, Linux, and macOS coverage. |
-| Installed package and first useful result | partial | Installed-consumer workflow qualified 2026-09-26 on Linux/headless SwiftShader (see STATUS.md "Installed consumer qualification 2026-09-26" and GAP-002); other platforms unmeasured. |
-| Parameters, external inputs, state, and chains | unverified | Full current-authority combinations remain unmeasured. |
-| Invalid input and recovery | partial | Invalid-DSL diagnostic (`L004`) and valid-DSL recovery verified through the installed public entry point (2026-09-26); unit checks and other entry points remain as before. |
-| Upgrade, removal, and resource cleanup | partial | In-page dispose verified via three's own resource counters (2026-09-26); npm upgrade/removal and lifecycle remain GAP-003. |
+| Supported operating systems and backends | unverified | Linux/headless SwiftShader measured. Windows, macOS, and Apple Silicon/Metal are unmeasured. |
+| Installed package and first useful result | verified | Installed-consumer workflow qualified 2026-09-26 on Linux/headless SwiftShader (see STATUS.md "Installed consumer qualification 2026-09-26" and GAP-002). |
+| Parameters, external inputs, state, and chains | partial | Full mode roster, stateful sequences, and chains verified. Parameter combinations beyond the roster and live external inputs remain unmeasured. |
+| Invalid input and recovery | verified | Invalid-DSL diagnostic (`L004`) and valid-DSL recovery verified through the installed public entry point (2026-09-26). |
+| Upgrade, removal, and resource cleanup | partial | In-page dispose verified via three's own resource counters (2026-09-26); npm upgrade/removal and kit lifecycle remain GAP-003. |
 | Accessibility of provided controls | unverified | Keyboard, focus, labels, and diagnostics need host observations where applicable. |
-| Release readiness | blocked | Full parity, installation, host, and artifact evidence remain incomplete. |
+| Release readiness | blocked | GAP-003 open: kit host workflow, npm publication, upgrade, and removal unqualified. Kit bytes verified 2026-09-26. |
 
 ## 3. Parity coverage
+
+### Completion audit, 2026-09-26 — source `1822646`, authority `v1.0.185`
+
+The full existing suite was executed again at the audited source against the served authority inputs (CDN `/1` bundle SHA-256 `8b9f9eee…`, manifest SHA-256 `05c4d7b7…`, 210/210 mini-bundles). All commands exited 0. Environment: Linux/headless SwiftShader, Chrome Headless Shell 149.0.7827.55.
+
+| Gate | Expected cases | Executed | Strict passes | Failures | Skips | Status |
+|---|---|---|---|---|---|---|
+| Programs + mode sweep (`sweep-programs.mjs`, frames=1) | 304 | 304 | 304 (worst max-abs-diff=0) | 0 | 0 | verified |
+| Stateful sweep (`sweep-stateful.sh`) | 13 | 13 | 13 bit-exact (worst=0) | 0 | 0 | verified |
+| Corpus sweep (`npm run parity`, frames=20 capture=10, all 88 fetched programs) | 88 | 88 | 81 (worst=0) | 0 | 0 | verified — 7 ERR rows identified: golden-side S001, unpublished community effects; denominator 81+7=88 unchanged |
+| Compiler gate (`npm test`) | 66 | 66 | 66 | 0 | 0 | verified (exit 0) |
+
+Programs denominator: 307 fixtures minus 3 retired historical effects (`bc`, `hs`, `colorspace`) absent from the current 210-effect manifest. The `text` fixture executed and passed in-suite; its font-raster dependence is documented in STATUS Known limits. Live external inputs remain injected-only. These limits do not reduce any denominator above. Raw evidence: `/series/evidence-audit-20260926-101500/result-noisemaker-for-threejs.json`.
 
 ### Daily review, 2026-09-25
 
@@ -85,216 +102,216 @@ Missing effects remain visible toward the full-parity goal. Contract exclusions 
 
 | Effect ID | Served declaration | Current full parity |
 |---|---|---|
-| `classicNoisedeck/bitEffects` | all | unverified |
-| `classicNoisedeck/caustic` | all | unverified |
-| `classicNoisedeck/cellNoise` | all | unverified |
-| `classicNoisedeck/cellRefract` | all | unverified |
-| `classicNoisedeck/coalesce` | all | unverified |
-| `classicNoisedeck/colorLab` | all | unverified |
-| `classicNoisedeck/composite` | all | unverified |
-| `classicNoisedeck/effects` | all | unverified |
-| `classicNoisedeck/fractal` | all | unverified |
-| `classicNoisedeck/glitch` | all | unverified |
-| `classicNoisedeck/kaleido` | all | unverified |
-| `classicNoisedeck/lensDistortion` | all | unverified |
-| `classicNoisedeck/moodscape` | all | unverified |
-| `classicNoisedeck/noise` | all | unverified |
-| `classicNoisedeck/noise3d` | all | unverified |
-| `classicNoisedeck/refract` | all | unverified |
-| `classicNoisedeck/shapeMixer` | all | unverified |
-| `classicNoisedeck/shapes` | all | unverified |
-| `classicNoisedeck/shapes3d` | all | unverified |
-| `classicNoisedeck/splat` | all | unverified |
-| `filter/adjust` | all | unverified |
-| `filter/bloom` | all | unverified |
-| `filter/blur` | all | unverified |
-| `filter/bulge` | all | unverified |
-| `filter/celShading` | all | unverified |
-| `filter/channel` | all | unverified |
-| `filter/chroma` | all | unverified |
-| `filter/chromaticAberration` | all | unverified |
-| `filter/chrome` | all | unverified |
-| `filter/clouds` | all | unverified |
-| `filter/colorReplace` | all | unverified |
-| `filter/convolutionFeedback` | all | unverified |
-| `filter/corrupt` | all | unverified |
-| `filter/craquelure` | all | unverified |
-| `filter/crt` | all | unverified |
-| `filter/degauss` | all | unverified |
-| `filter/deriv` | all | unverified |
-| `filter/directionalBlur` | all | unverified |
-| `filter/dither` | all | unverified |
-| `filter/edge` | all | unverified |
-| `filter/emboss` | all | unverified |
-| `filter/extrude` | all | unverified |
-| `filter/feedback` | all | unverified |
-| `filter/fibers` | all | unverified |
-| `filter/flipMirror` | all | unverified |
-| `filter/fxaa` | all | unverified |
-| `filter/glowingEdge` | all | unverified |
-| `filter/glyphMap` | all | unverified |
-| `filter/grade` | all | unverified |
-| `filter/grain` | all | unverified |
-| `filter/grime` | all | unverified |
-| `filter/halftone` | all | unverified |
-| `filter/hatch` | all | unverified |
-| `filter/highPass` | all | unverified |
-| `filter/historicPalette` | all | unverified |
-| `filter/invert` | all | unverified |
-| `filter/lens` | all | unverified |
-| `filter/lensFlare` | all | unverified |
-| `filter/lensWarp` | all | unverified |
-| `filter/lightLeak` | all | unverified |
-| `filter/lighting` | all | unverified |
-| `filter/lowPoly` | all | unverified |
-| `filter/median` | all | unverified |
-| `filter/morphology` | all | unverified |
-| `filter/mosaicTiles` | all | unverified |
-| `filter/motionBlur` | all | unverified |
-| `filter/normalMap` | all | unverified |
-| `filter/normalize` | all | unverified |
-| `filter/octaveWarp` | all | unverified |
-| `filter/oilPaint` | all | unverified |
-| `filter/osd` | all | unverified |
-| `filter/outline` | all | unverified |
-| `filter/palette` | all | unverified |
-| `filter/parallax` | all | unverified |
-| `filter/patchwork` | all | unverified |
-| `filter/photocopy` | all | unverified |
-| `filter/pinch` | all | unverified |
-| `filter/pixelSort` | all | unverified |
-| `filter/pixels` | all | unverified |
-| `filter/plasticWrap` | all | unverified |
-| `filter/polar` | all | unverified |
-| `filter/pondRipples` | all | unverified |
-| `filter/posterize` | all | unverified |
-| `filter/prismaticAberration` | all | unverified |
-| `filter/reindex` | all | unverified |
-| `filter/relief` | all | unverified |
-| `filter/repeat` | all | unverified |
-| `filter/reverb` | all | unverified |
-| `filter/ridge` | all | unverified |
-| `filter/rotate` | all | unverified |
-| `filter/scale` | all | unverified |
-| `filter/scanlineError` | all | unverified |
-| `filter/scatter` | all | unverified |
-| `filter/scratches` | all | unverified |
-| `filter/scroll` | all | unverified |
-| `filter/seamless` | all | unverified |
-| `filter/sharpen` | all | unverified |
-| `filter/simpleAberration` | all | unverified |
-| `filter/sine` | all | unverified |
-| `filter/skew` | all | unverified |
-| `filter/smooth` | all | unverified |
-| `filter/smoothstep` | all | unverified |
-| `filter/snow` | all | unverified |
-| `filter/sobel` | all | unverified |
-| `filter/spatter` | all | unverified |
-| `filter/spinBlur` | all | unverified |
-| `filter/spiral` | all | unverified |
-| `filter/spookyTicker` | all | unverified |
-| `filter/stamp` | all | unverified |
-| `filter/step` | all | unverified |
-| `filter/stipple` | all | unverified |
-| `filter/strayHair` | all | unverified |
-| `filter/strokes` | all | unverified |
-| `filter/temporalAberration` | all | unverified |
-| `filter/tetraColorArray` | all | unverified |
-| `filter/tetraCosine` | all | unverified |
-| `filter/text` | all | unverified |
-| `filter/texture` | all | unverified |
-| `filter/threshold` | all | unverified |
-| `filter/tile` | all | unverified |
-| `filter/tint` | all | unverified |
-| `filter/translate` | all | unverified |
-| `filter/tunnel` | all | unverified |
-| `filter/unsharpMask` | all | unverified |
-| `filter/vaseline` | all | unverified |
-| `filter/vignette` | all | unverified |
-| `filter/warp` | all | unverified |
-| `filter/watercolor` | all | unverified |
-| `filter/waves` | all | unverified |
-| `filter/wind` | all | unverified |
-| `filter/wobble` | all | unverified |
-| `filter/wormhole` | all | unverified |
-| `filter/zoomBlur` | all | unverified |
-| `filter3d/flow3d` | all | unverified |
-| `filter3d/palette3d` | all | unverified |
-| `mixer/alphaMask` | all | unverified |
-| `mixer/applyMode` | all | unverified |
-| `mixer/blendMode` | all | unverified |
-| `mixer/cellSplit` | all | unverified |
-| `mixer/centerMask` | all | unverified |
-| `mixer/channelCombine` | all | unverified |
-| `mixer/distortion` | all | unverified |
-| `mixer/focusBlur` | all | unverified |
-| `mixer/mashup` | all | unverified |
-| `mixer/patternMix` | all | unverified |
-| `mixer/shadow` | all | unverified |
-| `mixer/shapeMask` | all | unverified |
-| `mixer/split` | all | unverified |
-| `mixer/thresholdMix` | all | unverified |
-| `mixer/uvRemap` | all | unverified |
-| `points/attractor` | all | unverified |
-| `points/buddhabrot` | all | unverified |
-| `points/dla` | all | unverified |
-| `points/flock` | all | unverified |
-| `points/flow` | all | unverified |
-| `points/heightGrid` | all | unverified |
-| `points/hydraulic` | all | unverified |
-| `points/lenia` | all | unverified |
-| `points/life` | all | unverified |
-| `points/physarum` | all | unverified |
-| `points/physical` | all | unverified |
-| `render/loopBegin` | all | unverified |
-| `render/loopEnd` | all | unverified |
-| `render/meshLoader` | all | unverified |
-| `render/meshRender` | all | unverified |
-| `render/pointsBillboardRender` | all | unverified |
-| `render/pointsEmit` | all | unverified |
-| `render/pointsRender` | all | unverified |
-| `render/render3d` | all | unverified |
-| `render/renderCubemap3d` | all | unverified |
-| `render/renderCubemapSurface` | all | unverified |
-| `render/renderLandscape3d` | all | unverified |
-| `render/renderLit3d` | all | unverified |
-| `synth/bitwise` | all | unverified |
-| `synth/cell` | all | unverified |
-| `synth/cellularAutomata` | all | unverified |
-| `synth/curl` | all | unverified |
-| `synth/gabor` | all | unverified |
-| `synth/gradient` | all | unverified |
-| `synth/julia` | all | unverified |
-| `synth/mandala` | all | unverified |
-| `synth/mandelbrot` | all | unverified |
-| `synth/media` | all | unverified |
-| `synth/mnca` | all | unverified |
-| `synth/modPattern` | all | unverified |
-| `synth/navierStokes` | all | unverified |
-| `synth/newton` | all | unverified |
-| `synth/noise` | all | unverified |
-| `synth/osc2d` | all | unverified |
-| `synth/pattern` | all | unverified |
-| `synth/perlin` | all | unverified |
-| `synth/polygon` | all | unverified |
-| `synth/reactionDiffusion` | all | unverified |
-| `synth/remap` | all | unverified |
-| `synth/roll` | all | unverified |
-| `synth/sacredGeometry` | all | unverified |
-| `synth/scope` | all | unverified |
-| `synth/shape` | all | unverified |
-| `synth/solid` | all | unverified |
-| `synth/spectrum` | all | unverified |
-| `synth/subdivide` | all | unverified |
-| `synth/testPattern` | all | unverified |
-| `synth3d/cell3d` | all | unverified |
-| `synth3d/cellularAutomata3d` | all | unverified |
-| `synth3d/flythrough3d` | all | unverified |
-| `synth3d/fractal3d` | all | unverified |
-| `synth3d/heightmap3d` | all | unverified |
-| `synth3d/noise3d` | all | unverified |
-| `synth3d/reactionDiffusion3d` | all | unverified |
-| `synth3d/shape3d` | all | unverified |
+| `classicNoisedeck/bitEffects` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `classicNoisedeck/caustic` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `classicNoisedeck/cellNoise` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `classicNoisedeck/cellRefract` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `classicNoisedeck/coalesce` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `classicNoisedeck/colorLab` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `classicNoisedeck/composite` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `classicNoisedeck/effects` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `classicNoisedeck/fractal` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `classicNoisedeck/glitch` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `classicNoisedeck/kaleido` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `classicNoisedeck/lensDistortion` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `classicNoisedeck/moodscape` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `classicNoisedeck/noise` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `classicNoisedeck/noise3d` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `classicNoisedeck/refract` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `classicNoisedeck/shapeMixer` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `classicNoisedeck/shapes` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `classicNoisedeck/shapes3d` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `classicNoisedeck/splat` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/adjust` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/bloom` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/blur` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/bulge` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/celShading` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/channel` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/chroma` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/chromaticAberration` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/chrome` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/clouds` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/colorReplace` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/convolutionFeedback` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/corrupt` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/craquelure` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/crt` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/degauss` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/deriv` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/directionalBlur` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/dither` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/edge` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/emboss` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/extrude` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/feedback` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/fibers` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/flipMirror` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/fxaa` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/glowingEdge` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/glyphMap` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/grade` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/grain` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/grime` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/halftone` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/hatch` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/highPass` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/historicPalette` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/invert` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/lens` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/lensFlare` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/lensWarp` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/lightLeak` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/lighting` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/lowPoly` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/median` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/morphology` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/mosaicTiles` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/motionBlur` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/normalMap` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/normalize` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/octaveWarp` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/oilPaint` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/osd` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/outline` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/palette` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/parallax` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/patchwork` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/photocopy` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/pinch` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/pixelSort` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/pixels` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/plasticWrap` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/polar` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/pondRipples` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/posterize` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/prismaticAberration` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/reindex` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/relief` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/repeat` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/reverb` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/ridge` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/rotate` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/scale` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/scanlineError` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/scatter` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/scratches` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/scroll` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/seamless` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/sharpen` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/simpleAberration` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/sine` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/skew` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/smooth` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/smoothstep` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/snow` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/sobel` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/spatter` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/spinBlur` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/spiral` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/spookyTicker` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/stamp` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/step` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/stipple` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/strayHair` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/strokes` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/temporalAberration` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/tetraColorArray` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/tetraCosine` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/text` | all | verified in-suite (2026-09-26 sweep, worst=0); font-raster dependence documented in STATUS Known limits |
+| `filter/texture` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/threshold` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/tile` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/tint` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/translate` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/tunnel` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/unsharpMask` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/vaseline` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/vignette` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/warp` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/watercolor` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/waves` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/wind` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/wobble` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/wormhole` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter/zoomBlur` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter3d/flow3d` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `filter3d/palette3d` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `mixer/alphaMask` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `mixer/applyMode` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `mixer/blendMode` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `mixer/cellSplit` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `mixer/centerMask` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `mixer/channelCombine` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `mixer/distortion` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `mixer/focusBlur` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `mixer/mashup` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `mixer/patternMix` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `mixer/shadow` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `mixer/shapeMask` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `mixer/split` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `mixer/thresholdMix` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `mixer/uvRemap` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `points/attractor` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `points/buddhabrot` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `points/dla` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `points/flock` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `points/flow` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `points/heightGrid` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `points/hydraulic` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `points/lenia` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `points/life` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `points/physarum` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `points/physical` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `render/loopBegin` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `render/loopEnd` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `render/meshLoader` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `render/meshRender` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `render/pointsBillboardRender` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `render/pointsEmit` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `render/pointsRender` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `render/render3d` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `render/renderCubemap3d` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `render/renderCubemapSurface` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `render/renderLandscape3d` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `render/renderLit3d` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `synth/bitwise` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `synth/cell` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `synth/cellularAutomata` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `synth/curl` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `synth/gabor` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `synth/gradient` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `synth/julia` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `synth/mandala` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `synth/mandelbrot` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `synth/media` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `synth/mnca` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `synth/modPattern` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `synth/navierStokes` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `synth/newton` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `synth/noise` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `synth/osc2d` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `synth/pattern` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `synth/perlin` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `synth/polygon` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `synth/reactionDiffusion` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `synth/remap` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `synth/roll` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `synth/sacredGeometry` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `synth/scope` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `synth/shape` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `synth/solid` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `synth/spectrum` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `synth/subdivide` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `synth/testPattern` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `synth3d/cell3d` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `synth3d/cellularAutomata3d` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `synth3d/flythrough3d` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `synth3d/fractal3d` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `synth3d/heightmap3d` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `synth3d/noise3d` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `synth3d/reactionDiffusion3d` | all | verified (2026-09-26 audit sweep, worst=0) |
+| `synth3d/shape3d` | all | verified (2026-09-26 audit sweep, worst=0) |
 
 ## 4. Evidence
 
@@ -308,7 +325,7 @@ A successful dispatch or unit-test summary does not establish a full rendered ga
 
 ## 5. Open compatibility limits
 
-Next bounded check: Pack the adapter and qualify distribution contents and lifecycle for GAP-003 — match artifact bytes to their inventory, check notices and dependencies, and pass installation, examples, upgrade, and removal. The installed-consumer workflow for GAP-002 was qualified 2026-09-26 (tarball installed into isolated consumers at three 0.160.0 and 0.171.0; texture-on-mesh, EffectComposer pass, resize, invalid-DSL `L004` diagnostic + recovery, dispose; see STATUS.md "Installed consumer qualification 2026-09-26").
+Next bounded check: Run the served kit `0.1.5` in an isolated consumer for GAP-003 — load `index.html` with a DSL program, verify a render, diagnose one invalid input, and record cleanup. Then decide the npm publication path (the registry returns HTTP 404 for `noisemaker-for-threejs`). Kit bytes are verified 2026-09-26: 17/17 files match the inventory; 13/13 source-derived files match `815d35fb` byte-for-byte; `hostlib/three` matches npm `three@0.171.0`.
 See the stable entries in [completion gaps](COMPLETION_GAPS.md).
 
 See [GAP-001 and the complete gap register](COMPLETION_GAPS.md#4-known-gaps) for evidence, dependencies, and acceptance criteria.
@@ -325,8 +342,11 @@ Implementation corrections remain with the separate job. This report does not ad
 
 2026-09-25 daily review at `05f599274ed11e6d0778b7a21978f058f2b47c06`: source freshness and bounded evidence reviewed. Open qualification limits retained. [Retained review evidence](/Users/alex/.codex/automations/noisemaker-port-completion-audit/review-20260925-053200/threejs-current-tests.json). No new closure claimed.
 
+2026-09-26 completion audit at `1822646f9d6d90a164a5146f4db571eea2b98202`: full suite re-executed (programs 304/304 worst=0, stateful 13 bit-exact, corpus 81 PASS + 7 identified ERR over 88, `npm test` 66/66, lint clean). Served kit `0.1.5` byte-verified against inventory and source; npm registry 404 recorded. GAP-001/GAP-002 closures re-verified; GAP-003 remains open. Evidence: `/series/evidence-audit-20260926-101500/result-noisemaker-for-threejs.json`.
+
 | Date | Source | Result | Change |
 |---|---|---|---|
+| 2026-09-26 | `1822646f9d6d90a164a5146f4db571eea2b98202` | Full parity verified at the audited source (measured scope: Linux/headless SwiftShader, authority `v1.0.185`) | Audit update: fresh gate evidence, served-kit byte verification, GAP-003 next actions. |
 | 2026-09-24 | `815d35fb3365d66a078f0eee155b14709e9ae9f2` | Full qualification unverified | Created the requested maintained compatibility report. Preserved historical evidence and open gaps. |
 
-Run: `20260924-remaining-gap-documents`. Later audits and reviews update this report with source-bound results.
+Runs: `audit-20260926-101500`, earlier `20260924-remaining-gap-documents`. Later audits and reviews update this report with source-bound results.

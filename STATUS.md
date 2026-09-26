@@ -265,6 +265,32 @@ each sweep invocation (otherwise chrome-headless-shell is not found under the no
 `compare.py` produces empty output and the batch exits 1 with no per-sample lines — first two
 sweep attempts failed for exactly these two reasons and were re-run clean after the fix).*
 
+*Completion audit 2026-09-26 at source `1822646` (published main; local checkout byte-identical
+to remote before and after the run). No engine or adapter input changed since the `6a0af04d`
+audit: the served CDN `/1` bundle re-fetched this pass is byte-identical (870700 bytes, SHA-256
+`8b9f9eee0cffdb88e96907d32eb8d73128cca6ccdbaefb47b5eb026b894a8469`, Last-Modified
+2026-09-26T01:49:01Z; `effects/manifest.json` unchanged at SHA-256
+`05c4d7b7744837ae90a3bb4c89e5403ff09448a74d9d7e824abb3d719ad3314e`, 210/210 mini-bundles), and
+upstream HEAD remains `a651c075` (docs-only after tag `v1.0.185` = `6a0af04d`; zero `shaders/`
+commits in `6a0af04d..a651c075`). Fresh full-suite execution at this exact source, same
+Linux/headless-SwiftShader environment (Chrome Headless Shell 149.0.7827.55, Node v26.5.1):
+`node parity/sweep-programs.mjs` **PASS=304 FAIL=0 ERR=0, worst max-abs-diff=0** (307 fixtures
+minus the 3 retired `bc`/`hs`/`colorspace` historical effects absent from the manifest; the
+`text` fixture executed and passed in-suite); `bash parity/sweep-stateful.sh` **worst=0** (13
+fixtures bit-exact); corpus `npm run parity` **PASS=81 FAIL=0 ERR=7 worst=0** over the unchanged
+88-program denominator (the same 7 golden-side S001 community-effect ERR rows: `4bm9AA`,
+`8KMvAg`, `B5oBsA`, `PmJyUQ`, `WyalUg`, `fKPUww`, `liTYEg`); compiler gate `npm test` **66/66
+PASS exit 0**; `npm run lint` clean exit 0. Distribution evidence added this pass (GAP-003
+progress; the gap stays open): served kit `kits.noisedeck.app/threejs/0/` version `0.1.5` at
+source `815d35fb` byte-verified — all 17 served files match `kit.json` sha256/bytes; all 13
+source-derived files are byte-identical to `git show 815d35fb:<path>`; `hostlib/three` bytes
+match npm `three@0.171.0`; `compat.json` is `{"mode":"all"}`; and the kit-relevant tree is
+unchanged `815d35fb..1822646` (only README/STATUS/docs/parity-harness/test files differ), so
+the served kit content is current. The npm registry has no `noisemaker-for-threejs` package
+(HTTP 404), so the registry install/upgrade/removal leg remains unqualified. GAP-001 and GAP-002
+closures re-verified by this fresh execution; platform scope unchanged (Linux/headless
+SwiftShader; Apple Silicon/Metal remains as documented under Known limits).*
+
 > **The programs sweep runs at frame 1, where normalized time is 0** (`t_i = i / loopFrames`).
 > That makes it a compile/link/uniform-binding gate, not a temporal one: any effect whose output
 > is scaled by `time` renders its static form there. `filter/pondRipples`' `speed` control is the
