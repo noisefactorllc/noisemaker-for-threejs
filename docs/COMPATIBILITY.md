@@ -49,9 +49,22 @@ The matrix below retains the earlier measured scope. A historical verified row i
 
 ### Daily review, 2026-09-25
 
-65 unit tests pass and the packed artifact contains 465 files. Neither result establishes complete browser rendering or a consumer install across the declared Three.js peer range. The prior compatibility measurements remain historical. GAP-001 remains open. Current full parity is stale and unverified. [Raw evidence](/Users/alex/.codex/automations/noisemaker-port-completion-audit/review-20260925-053200/threejs-current-tests.json).
+65 unit tests pass and the packed artifact contains 465 files. Neither result establishes complete browser rendering or a consumer install across the declared Three.js peer range. The prior compatibility measurements remain historical. GAP-001 remains open. Current full parity is stale and unverified. [Raw evidence](/Users/alex/.codex/automations/noisemaker-port-completion-audit/review-20260925-053200/threejs-current-tests.json). (Superseded 2026-09-26 — see "Current authority qualification" below; GAP-001 is closed there.)
 
 The current full case denominator remains incomplete. Missing parameters, hosts, external inputs, and stateful sequences remain qualification gaps. No skip or tolerated difference counts as exact parity.
+
+### Current authority qualification, 2026-09-26 — GAP-001 closed
+
+Rendered parity for the current published authority is measured, not stale. Authority inputs: CDN `/1` bundle 858616 bytes, SHA-256 `092c3b776003bc1539bed91aa86f421f839b40b1aa8b81ea09a5ec5e6b7bd3c7`; manifest SHA-256 `05c4d7b7744837ae90a3bb4c89e5403ff09448a74d9d7e824abb3d719ad3314e` (210/210 mini-bundles); identified as upstream `v1.0.183` = `8eeb7b5a` (CDN Last-Modified 2026-09-25T22:45:29Z, 18 minutes after the tag). Full raw sweep output and every case/parameter/exclusion/error/tolerance are recorded in STATUS.md's "Full qualification 2026-09-26" entry:
+
+| Gate | Expected cases | Executed | Strict passes | Failures | Skips | Status |
+|---|---|---|---|---|---|---|
+| Programs + mode sweep (`sweep-programs.mjs`, frames=1) | 304 | 304 | 304 (worst max-abs-diff=0) | 0 | 0 | verified |
+| Stateful sweep (`sweep-stateful.sh`, frames=30 capture=15) | 13 | 13 | 13 bit-exact (worst=0) | 0 | 0 | verified |
+| Corpus sweep (`npm run parity`, frames=20 capture=10, all 88 fetched programs) | 88 | 88 | 81 (worst=0) | 0 | 0 | verified — 7 ERR rows identified: 5 × `chromeicosahedroninterior`, 2 × `vaporwaveflyover` (golden-side S001, unpublished community effects; denominator 81+7=88 unchanged) |
+| Compiler gate (`npm test`) | 66 | 66 | 66 | 0 | 0 | verified (exit 0) |
+
+Environment: Linux container, Chrome Headless Shell 149.0.7827.55 (playwright chromium-headless-shell v1228), SwiftShader; platform scope (Apple Silicon/Metal) remains as documented in STATUS Known limits. `filter/text` remains the one untested effect (OS font rasterization). Live external inputs remain injected-only. These limits do not reduce any denominator above.
 
 ### Earlier measurements
 

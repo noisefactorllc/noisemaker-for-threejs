@@ -81,16 +81,17 @@ These entries record missing qualification. They do not infer implementation def
 
 ### GAP-001: current authority and parity qualification
 
-- Status: open. Priority: P2. Category: verification.
+- Status: closed 2026-09-26. Priority: P2. Category: verification.
 - Affected scope: src/, vendor/fetch.sh, package.json, examples/, parity/, STATUS.md
 - Expected behavior: Reproducible evidence binds each supported claim to the port and authority revisions.
 - Observed behavior: A wide Three.js peer range and rolling vendor inputs need current qualification. Historical exact pixels do not qualify untested versions or external feeds.
-- Evidence: [Historical source](https://github.com/noisefactorllc/noisemaker-for-threejs/blob/815d35fb3365d66a078f0eee155b14709e9ae9f2/STATUS.md) and section 3.
-- Next action: Identify vendor hashes and authority SHA. Run the full programs and stateful sweeps with exact frame comparisons.
-- Dependencies: Resolve immutable authority inputs. Preserve historical goldens and provenance.
-- Acceptance criteria: Report every applicable case, parameter choice, exclusion, error, and tolerance. Do not reduce the denominator to report success.
-- Required checks: Existing compiler and rendered parity gates, with raw output and exact source hashes.
-- Last verification: 2026-09-24. Full behavior qualification remains unverified.
+- Evidence: STATUS.md, "Full qualification 2026-09-26" entry (raw sweep output and hashes), and section 3.
+- Resolution: Immutable authority inputs resolved — current CDN `/1` bundle 858616 bytes, SHA-256 `092c3b776003bc1539bed91aa86f421f839b40b1aa8b81ea09a5ec5e6b7bd3c7` (re-fetched 2026-09-26, byte-identical on re-fetch), manifest SHA-256 `05c4d7b7744837ae90a3bb4c89e5403ff09448a74d9d7e824abb3d719ad3314e`, 210/210 mini-bundles; identified as published authority `v1.0.183` = upstream `8eeb7b5a` (CDN Last-Modified 2026-09-25T22:45:29Z vs tag 2026-09-25T22:27:36Z). Full programs sweep 304/304 PASS (worst max-abs-diff=0), stateful sweep 13 fixtures bit-exact (worst=0), corpus sweep 81 PASS + 7 ERR over all 88 fetched programs with every ERR row identified (5 × `chromeicosahedroninterior`, 2 × `vaporwaveflyover` — golden-side S001, unpublished community effects; denominator 81+7=88 unchanged), compiler gate `npm test` 66/66 PASS exit 0, `npm run lint` clean.
+- Dependencies: Resolved — immutable authority inputs pinned by hash; historical goldens and provenance preserved (previous `7b4515a2…`/841350-byte bundle recorded).
+- Acceptance criteria: Met. Every case, parameter variant, exclusion, error, and tolerance is reported in the STATUS entry (default harness tolerance `max-abs-diff ≤ 2.001`, every PASS worst=0); the corpus denominator was not reduced (88/88 reported, 7 ERR rows named).
+- Required checks: Existing compiler and rendered parity gates, with raw output and exact source hashes — run at the pre-commit working tree of the commit containing this closure (Linux/headless SwiftShader, Chrome Headless Shell 149.0.7827.55); raw output regenerated in `parity/out/` (gitignored) and summarized verbatim in STATUS.md.
+- Remaining limits (unchanged, non-blocking): `filter/text` untested (OS font rasterization — STATUS Known limits); this qualification ran on Linux/SwiftShader, not Apple Silicon/Metal; live (non-injected) external inputs remain out of scope.
+- Last verification: 2026-09-26. Full behavior qualification for the current authority is evidenced at the commit carrying this record.
 
 ### GAP-002: installed developer workflow qualification
 
@@ -123,9 +124,9 @@ These entries record missing qualification. They do not infer implementation def
 Current first action: Install the npm tarball in an isolated consumer at the declared Three.js floor and current supported version. Exercise texture, canvas, and EffectComposer entry points with a useful rendered graph. Compare the same immutable reference cases, then test resize, disposal, invalid-input recovery, and an external texture.
 Subsequent historical actions remain dependent on that evidence. No implementation is authorized by this audit.
 
-1. Resolve authority identities for GAP-001. Retain earlier denominators, goldens, tolerances, and exclusions.
+1. Resolve authority identities for GAP-001. Retain earlier denominators, goldens, tolerances, and exclusions. — Done 2026-09-26 (authority `v1.0.183` = `8eeb7b5a`, pinned by hash; see GAP-001).
 2. Execute the installed workflow for GAP-002. Record meaningful output, failure recovery, versions, and cleanup.
-3. Run compiler and rendered parity for GAP-001. Keep structural, numerical, and platform evidence separate.
+3. Run compiler and rendered parity for GAP-001. Keep structural, numerical, and platform evidence separate. — Done 2026-09-26 (66/66 compiler tests; programs 304/304, stateful 13 bit-exact, corpus 81+7 ERRs identified over 88; see GAP-001).
 4. Qualify distribution contents and lifecycle for GAP-003 after the installed workflow passes.
 5. Record measured results. Close entries only when their acceptance criteria pass.
 
@@ -137,6 +138,7 @@ Implementation belongs to the separate job. Do not port additional effects or ad
 
 | Date | Source SHA | Changes | Tested scope | Remaining limits |
 |---|---|---|---|---|
+| 2026-09-26 | This register's containing commit (see `git log`) | GAP-001 closed: authority `v1.0.183` = `8eeb7b5a` pinned by hash; full programs (304/304 worst=0), stateful (13 bit-exact), and corpus (81 PASS + 7 named ERR over 88) sweeps with exact frame comparisons; `npm test` 66/66, lint clean. Raw output in STATUS.md "Full qualification 2026-09-26". | Linux/headless SwiftShader; full current roster + modes + stateful + corpus denominator preserved. | `filter/text` untested; Apple Silicon/Metal and live external inputs remain separate qualifications (GAP-002/003 unaffected). |
 | 2026-09-24 | `815d35fb3365d66a078f0eee155b14709e9ae9f2` | Created six-section register and README link. No closures. | 51 Node tests passed. The full browser image sweep and installed consumer workflow were not executed. | Full audit, installed workflows, current rendered parity, platforms, and releases remain unqualified. |
 
 Run ID: `20260924-remaining-gap-documents`.

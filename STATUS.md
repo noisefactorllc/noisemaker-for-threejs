@@ -98,6 +98,45 @@ an environmental smoke check — every completed program matched byte-exactly (w
 the documented golden-side compilation ERRs; the full PASS=81 FAIL=0 ERR=7 ledger remains pinned
 to the last Apple Silicon run above.*
 
+*Full qualification 2026-09-26 at upstream reference `8eeb7b5a` (published authority tag
+`v1.0.183`), closing the prior smoke-check-only state. The CDN `/1` republished since the
+`9d3474df` audit (verified by re-running `bash vendor/fetch.sh` on 2026-09-26: previous bundle
+841350 bytes / SHA-256 `7b4515a2…`, current bundle 858616 bytes / SHA-256
+`092c3b776003bc1539bed91aa86f421f839b40b1aa8b81ea09a5ec5e6b7bd3c7`; `effects/manifest.json`
+unchanged at SHA-256 `05c4d7b7744837ae90a3bb4c89e5403ff09448a74d9d7e824abb3d719ad3314e`,
+210/210 mini-bundles). Authority identification: CDN bundle Last-Modified
+2026-09-25T22:45:29Z falls within 18 minutes of the `v1.0.183` tag timestamp
+(2026-09-25T22:27:36Z, commit `8eeb7b5a`); the shader deltas in the window are `62eb56fa`
+(WebGL2 mip-chain allocation + WebGPU mip bind-group caching), `2f47612c` (stop double-creating
+global surfaces on allocation change), and `fa83eeab` (copy name/viewport/clear/samplerTypes/type
+onto expanded passes, GAP-005) — all engine-side surface-allocation/pass-metadata work feeding the
+published bundle the adapter executes verbatim. Raw sweep output was regenerated against this
+exact bundle in this Linux/headless-SwiftShader environment (Chrome Headless Shell 149.0.7827.55,
+playwright chromium-headless-shell v1228, `PLAYWRIGHT_BROWSERS_PATH=/state/cache/pw-browsers`),
+exact frame comparisons at the default tolerance (`max-abs-diff ≤ 2.001`, SSIM ≥ 0.98 in the
+harness, every PASS reported worst=0):
+
+- `node parity/sweep-programs.mjs` (frames=1 capture=1 size=128, loopFrames=600): **PASS=304
+  FAIL=0 ERR=0, worst max-abs-diff=0** — full current-program roster incl. every compile-time
+  mode variant; no exceptions.
+- `bash parity/sweep-stateful.sh` (frames=30 capture=15 size=128, 13 stateful fixtures):
+  **worst max-abs-diff=0** — all bit-exact at every captured frame.
+- `npm run parity` corpus sweep (frames=20 capture=10 size=128, all 88 fetched gallery
+  programs — denominator unchanged): **PASS=81 FAIL=0 ERR=7 worst=0**. The 7 ERR rows are the
+  documented golden-side `ERR_COMPILATION_FAILED` (S001) cases — 5 × `chromeicosahedroninterior`
+  (`4bm9AA`, `B5oBsA`, `PmJyUQ`, `fKPUww`, `liTYEg`) and 2 × `vaporwaveflyover` (`8KMvAg`,
+  `WyalUg`) — community effects not published to the CDN catalog; both backends reject them
+  identically before rendering (no candidate-side error, no exclusion from the denominator:
+  81+7=88 reported).
+- Compiler gate `npm test`: **66/66 tests PASS, exit 0** (one full-suite process; the browser
+  frame-export test requires `PLAYWRIGHT_BROWSERS_PATH` to locate the downloaded headless shell
+  in this container). `npm run lint`: clean, exit 0.
+
+This run was authored in the Linux/headless-SwiftShader container, not on Apple Silicon/Metal;
+platform scope is unchanged from the [Known limits](#known-limits) note. Raw per-sweep output
+and the mode ledger were regenerated in `parity/out/` (gitignored scratch) at the pre-commit
+working tree; the commit containing this entry is the evidence-binding revision.*
+
 > **The programs sweep runs at frame 1, where normalized time is 0** (`t_i = i / loopFrames`).
 > That makes it a compile/link/uniform-binding gate, not a temporal one: any effect whose output
 > is scaled by `time` renders its static form there. `filter/pondRipples`' `speed` control is the
