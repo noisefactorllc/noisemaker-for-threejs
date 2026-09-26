@@ -345,6 +345,31 @@ the expected state and the npm upgrade/removal legs remain unexercised by design
 acceptance criteria are met by the evidence above; this record qualifies the artifact and
 defines the registry path and still does not approve a release.*
 
+*Installed consumer at three.js `0.186.1` 2026-09-26 (GAP-004 host-version leg — the newest
+npm three). Registry check 2026-09-26: `dist-tags.latest` = `0.186.1`. Artifact: `npm pack`
+of this tree — `noisemaker-for-threejs-0.0.1.tgz`, 467 files, SHA-256
+`80c36bb5f3864b95aa7dc014e12d22f5445ae3312079fc32ed39840863098c74` — installed into an
+isolated npm consumer with `three@0.186.1` (tarball install only; the committed driver serves
+its qualification page from memory and never writes into the consumer tree). The installed
+package fetched the served engine inside itself via `npm run vendor` (core `8b9f9eee…`/870700
+bytes, manifest `05c4d7b7…` unchanged, 210/210 mini-bundles), and the driver hashed the
+installed vendored bytes with both expected hashes supplied as arguments and enforced by the
+gate. `parity/installed-consumer.mjs` exit 0, gate empty (`ok: true`), zero console and zero
+page errors. Steps and measured numbers: NoisemakerTexture on a lit mesh with a live
+non-constant image (readback min 0.000018 / max 1.431641 / mean 0.605436; GPU framebuffer
+mean 37.391/255), NoisemakerPass inside EffectComposer rendered, resize to 480×320
+re-rendered without error, invalid DSL threw `SyntaxError` with structured diagnostic `L004`
+(line 2 col 25, span [45, 47), "Output surface reference 'o9' is out of range; expected
+o0-o7"), fresh valid compile + `update(0.5)` + `composer.render()` recovered (readback min
+0.000006 / max 1 / mean 0.573125), dispose dropped three's counters from textures 154 /
+geometries 3 / programs 8 to 3 / 1 / 1 with no post-dispose exception. Screenshots: mesh
+`0252b20c…`, pass `89500021…`, resize `22aa050d…`, recovery `e3881e89…`, post-dispose
+`2b6f5dad…` (the post-dispose hash is byte-identical to the GAP-002 runs). This extends the
+measured three.js range to the npm floor/current set (0.160.0, 0.171.0) plus the npm latest
+0.186.1 on the same Linux/headless SwiftShader host; platform scope is unchanged. Raw
+results.json and screenshots regenerated in gitignored scratch at the pre-commit working
+tree.*
+
 > **The programs sweep runs at frame 1, where normalized time is 0** (`t_i = i / loopFrames`).
 > That makes it a compile/link/uniform-binding gate, not a temporal one: any effect whose output
 > is scaled by `time` renders its static form there. `filter/pondRipples`' `speed` control is the
@@ -533,7 +558,10 @@ Coverage is measured against the published 210-effect catalog.
   mishandled, the default case would already show a diff) and were not separately enumerated per
   choice — doing so exhaustively (e.g. the 56-entry shared palette enum, reused across ~8 effects)
   would not test anything the define-mode sweep and the default fixtures don't already cover.
-- **Platform.** Verified on Apple Silicon / ANGLE + Metal (WebGL2).
+- **Platform.** The historical Apple Silicon / ANGLE + Metal (WebGL2) run predates the
+  2026-09-26 Linux qualification; every currently measured gate, sweep, and consumer driver
+  ran on Linux/headless SwiftShader only. macOS, Windows, and real-GPU hosts are unmeasured
+  (GAP-004, blocked on host availability).
 
 ## Follow-up work
 

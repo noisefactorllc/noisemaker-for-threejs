@@ -182,13 +182,13 @@ These entries record missing qualification. They do not infer implementation def
 - Status: blocked. Priority: P2. Category: verification.
 - Affected scope: Rendered parity, installed-consumer, and kit-consumer evidence outside Linux/headless SwiftShader; three.js versions above 0.171.0; live (non-injected) external inputs.
 - Expected behavior: Every declared supported platform and host version is measured with recorded environments.
-- Observed behavior: All current evidence was measured on Linux/headless SwiftShader only. The audit environment has no macOS, Windows, or real-GPU host. The highest verified three.js version is 0.171.0. npm serves three.js `0.186.1` (checked 2026-09-26); no version above 0.171.0 is measured. STATUS.md's Known limits "Platform" bullet still names the historical Apple Silicon/Metal verification. That bullet predates the 2026-09-26 Linux qualification and overstates current platform scope.
-- Evidence: GAP-001, GAP-002, and GAP-003 records; STATUS.md "Full qualification 2026-09-26" and "Known limits"; section 3 review block; npm registry dist-tags.
-- Next action: On an Apple Silicon/Metal host, run the three committed sweeps. Then run both consumer drivers there. Separately, run `parity/installed-consumer.mjs` in a consumer at three.js 0.186.1 on Linux.
+- Observed behavior: All platform evidence was measured on Linux/headless SwiftShader only. The audit environment has no macOS, Windows, or real-GPU host. The highest verified three.js version is now `0.186.1` (npm `dist-tags.latest`, checked 2026-09-26): `parity/installed-consumer.mjs` was run in an isolated npm consumer at three 0.186.1 on Linux and passed the driver gate (STATUS.md "Installed consumer at three.js `0.186.1` 2026-09-26"; exit 0, zero console/page errors, enforced vendor hashes `8b9f9eee…`/`05c4d7b7…`, 210/210 mini-bundles; tarball `80c36bb5…`, 467 files). STATUS.md's Known limits "Platform" bullet was corrected this pass: it previously named the historical Apple Silicon/Metal verification without scoping it; it now records that the historical run predates the 2026-09-26 Linux qualification and that no platform beyond Linux/headless SwiftShader is currently measured.
+- Evidence: GAP-001, GAP-002, and GAP-003 records; STATUS.md "Installed consumer at three.js `0.186.1` 2026-09-26", "Full qualification 2026-09-26" and "Known limits"; section 3 review block; npm registry dist-tags.
+- Next action: On an Apple Silicon/Metal host, run the three committed sweeps. Then run both consumer drivers there. The Linux `0.186.1` installed-consumer leg is done (passed, see Observed behavior).
 - Dependencies: A macOS/Apple Silicon host and a Windows host. Neither exists in this audit environment. The 0.186.1 check needs no new host.
 - Acceptance criteria: Each platform reports the unchanged denominators (304 programs, 13 stateful, 88 corpus) with every case executed and each named difference recorded. The 0.186.1 consumer run passes the driver gate or records its failure.
 - Required checks: `parity/sweep-programs.mjs`, `parity/sweep-stateful.sh`, `npm run parity`, `parity/installed-consumer.mjs`, `parity/kit-consumer.mjs`, per platform.
-- Last verification: 2026-09-26 (blocked state recorded; no platform beyond Linux measured).
+- Last verification: 2026-09-26 (blocked state recorded; no platform beyond Linux measured; the 0.186.1 Linux consumer leg passed the driver gate this pass — see Observed behavior).
 
 ### GAP-005: source updates republish the served kit without a rendered-parity CI gate
 
@@ -205,17 +205,19 @@ These entries record missing qualification. They do not infer implementation def
 
 ## 5. Ordered next actions
 
-Current first action: GAP-005 — add the source-update rendered-parity CI gate. GAP-004 stays blocked on unavailable macOS and Windows hosts.
+Current first action: GAP-005 — add the source-update rendered-parity CI gate. GAP-004 stays blocked on unavailable macOS and Windows hosts (its Linux 0.186.1 consumer leg passed 2026-09-26).
 Subsequent actions depend on that evidence. No implementation is authorized by this audit.
 
 1. Close GAP-005 in the implementation job. A push that changes `src/**`, `package-lock.json`, or `export-kit/**` must run the three rendered gates before the kit republishes. Acceptance: exact-source CI evidence at a src-changing commit.
-2. Clear GAP-004 when a host exists. Re-run the three sweeps and both consumer drivers on Apple Silicon/Metal and record the results. Then run the installed consumer at three.js 0.186.1. Acceptance: unchanged denominators with every case executed.
+2. Clear GAP-004 when a host exists. Re-run the three sweeps and both consumer drivers on Apple Silicon/Metal and record the results. The installed consumer at three.js 0.186.1 passed on Linux 2026-09-26; the remaining host legs are the platform sweeps and both consumer drivers on macOS/Apple Silicon and Windows. Acceptance: unchanged denominators with every case executed.
 3. Keep GAP-001 evidence current. Re-run the compiler and rendered gates at each authority or source change. — Re-verified 2026-09-26 at `1822646` and at this review's source.
 4. Record measured results. Close entries only when their acceptance criteria pass.
 
 Implementation belongs to the separate job. Do not port additional effects or advance the current parity checkpoint through this register.
 
 ## 6. Pass history
+
+2026-09-26 GAP-004 partial at `da1849915bdbdfee221d59bacc8f5cc83e69ad3d` (this register's containing commit at run time; see `git log`): the gap's Linux host-version leg was executed — `parity/installed-consumer.mjs` in an isolated npm consumer at three.js `0.186.1` (npm `dist-tags.latest`) passed the driver gate, exit 0, zero console/page errors, enforced vendor hashes `8b9f9eee…`/`05c4d7b7…`, 210/210 mini-bundles; STATUS.md Known limits "Platform" bullet corrected to scope the historical Apple Silicon/Metal claim. GAP-004 remains blocked: no macOS/Apple Silicon or Windows host exists in this environment, so the per-platform sweep and consumer-driver legs are unmeasured. `npm test` 66/66 and lint clean at the candidate. Evidence: STATUS.md "Installed consumer at three.js `0.186.1` 2026-09-26".
 
 2026-09-25 daily review at `05f599274ed11e6d0778b7a21978f058f2b47c06`: source freshness and bounded evidence reviewed. Open qualification limits retained. [Retained review evidence](/Users/alex/.codex/automations/noisemaker-port-completion-audit/review-20260925-053200/threejs-current-tests.json). No new closure claimed.
 
