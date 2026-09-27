@@ -188,7 +188,7 @@ These entries record missing qualification. They do not infer implementation def
 - Dependencies: A macOS/Apple Silicon host and a Windows host. Neither exists in this audit environment. The 0.186.1 check needs no new host.
 - Acceptance criteria: Each platform reports the unchanged denominators (304 programs, 13 stateful, 88 corpus) with every case executed and each named difference recorded. The 0.186.1 consumer run passes the driver gate or records its failure.
 - Required checks: `parity/sweep-programs.mjs`, `parity/sweep-stateful.sh`, `npm run parity`, `parity/installed-consumer.mjs`, `parity/kit-consumer.mjs`, per platform.
-- Last verification: 2026-09-26 (blocked state recorded; no platform beyond Linux measured; the 0.186.1 Linux consumer leg passed the driver gate this pass — see Observed behavior).
+- Last verification: 2026-09-27 (re-verification pass: blockers re-checked against the current harness and still hold — see the 2026-09-27 pass-history entry; no platform beyond Linux measured). Prior: 2026-09-26 (blocked state recorded; no platform beyond Linux measured; the 0.186.1 Linux consumer leg passed the driver gate this pass — see Observed behavior).
 
 ### GAP-005: source updates republish the served kit without a rendered-parity CI gate
 
@@ -217,6 +217,8 @@ Subsequent actions depend on that evidence. GAP-005 is blocked at publication: t
 Implementation belongs to the separate job. Do not port additional effects or advance the current parity checkpoint through this register.
 
 ## 6. Pass history
+
+2026-09-27 GAP-004 blocker re-verification at `f63af4f726930f68ab721ff08467230c1d90c134` (base source; this register change is docs-only): the gap's recorded blockers were re-checked against the current harness and still hold. The job's declared fleet capabilities are `hermes`, `linux`, `node` on a Linux 6.8.0-134-generic x86_64 container; the harness's move capabilities (`gpu`, `unity`, `touchdesigner`, `blender`, `godot`) are all Linux-host moves and none provides a macOS/Apple Silicon or Windows host. No macOS, Windows, or real-GPU host is available, so the per-platform sweeps and consumer drivers on Apple Silicon/Metal and Windows remain unmeasured and GAP-004 stays blocked. No platform, denominator, or closure changed this pass; the 2026-09-26 Linux three.js 0.186.1 installed-consumer pass remains the latest measured leg.
 
 2026-09-26 GAP-005 blocked at base `9be956eeace45eb563944b2afb244c3a73f91c11` (this register's containing commit at run time; see `git log`): the rendered-parity gate candidate for `.github/workflows/export-kit.yml` (parity job with lint, unit tests, and the three rendered sweeps at the exact push SHA; `dispatch` needs `parity`) was prepared and executed green locally at that source (programs 304/304 worst=0 exit 0, stateful 13 worst=0 exit 0, corpus 81 PASS plus 7 identified golden-side S001 ERR over 88 exit 0, `npm test` 66/66, lint clean). The publication control rejected the workflow-change candidate three times — `d32d5c7`, `42f26f4`, `b018798` — with "workflow changes require explicit job authority"; the change was withdrawn unpublished and GAP-005 is recorded blocked. No served kit, workflow, or closure changed.
 
