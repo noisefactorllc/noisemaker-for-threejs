@@ -372,7 +372,10 @@ tree.*
 
 *Incrementally synced 2026-09-27 to upstream reference `93229933` (published authority tag
 `v1.0.194`), closing the consolidated Tearoff trigger `8eeb7b5ac14e..403c2a4b` with
-force-push/non-contiguous delivery: the trigger's observed ranges (`…19fdcb56e22d..403c2a4b`,
+force-push/non-contiguous delivery (provenance note: the refreshed engine lives in the
+gitignored `vendor/noisemaker/` fetch target per repo policy — commit the fetch script, never
+the engine bytes; see the provenance paragraph at the end of this entry): the trigger's observed
+ranges (`…19fdcb56e22d..403c2a4b`,
 `0ac5250052e2..9f85687d1baf`, `407eb7a73c94..7443f6e61803`, `132d1bf9e3a3..e73a44a37f0c`,
 `e73a44a37f0c..12b4d74fb4f2`, `8fe3ccaf2cc8..93229933b102`) extend past the nominal end to
 `93229933`, and the prior entry already audited `8eeb7b5ac14e..6a0af04d3c4f`, so the audit
@@ -424,8 +427,20 @@ convention): `npm test` 72/72 PASS exit 0; `npm run lint` clean exit 0;
 `bash parity/sweep-stateful.sh` **worst max-abs-diff=0** exit 0; `npm run parity` corpus
 **PASS=81 FAIL=0 ERR=7 worst=0** exit 0 (same 7 documented golden-side S001 community-effect
 ERR rows: `4bm9AA`, `8KMvAg`, `B5oBsA`, `PmJyUQ`, `WyalUg`, `fKPUww`, `liTYEg`; denominator
-unchanged at 88). No adapter, src/, or test/ file changed in this round — the whole delta is
-the refreshed vendored engine plus this entry.*
+unchanged at 88). No adapter, src/, or test/ file changed in this round.*
+
+*Provenance (explicit, resolving the delta question): the committed delta of this round is the
+STATUS.md entry alone. `vendor/noisemaker/` is gitignored by repo policy — "commit the fetch
+script + loader, never the engine bytes" (`vendor/fetch.sh` header; `.gitignore`) — the same
+posture every prior entry documents its bundle under, so no engine blob is in the commit and
+none is meant to be. The documented 884620-byte / SHA-256 `c8cf35cf…` core bundle is the CDN
+artifact served at `https://shaders.noisedeck.app/1/` with Last-Modified 2026-09-27T11:34:37Z;
+it is reproducible byte-for-byte by any consumer via `bash vendor/fetch.sh` (the script's only
+input is the pinned CDN base — verify the recorded SHA-256 after fetching). All checks above
+were executed in this working tree with that refreshed bundle in place, and the adapter's
+`import * as core` loads exactly those vendored bytes, so the recorded hash pins the engine the
+sweeps ran against; the three.js adapter code under `src/` and `test/` is unchanged and
+byte-identical to the prior published commit.*
 
 > **The programs sweep runs at frame 1, where normalized time is 0** (`t_i = i / loopFrames`).
 > That makes it a compile/link/uniform-binding gate, not a temporal one: any effect whose output
