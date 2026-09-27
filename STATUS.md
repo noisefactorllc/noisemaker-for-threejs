@@ -370,6 +370,63 @@ measured three.js range to the npm floor/current set (0.160.0, 0.171.0) plus the
 results.json and screenshots regenerated in gitignored scratch at the pre-commit working
 tree.*
 
+*Incrementally synced 2026-09-27 to upstream reference `93229933` (published authority tag
+`v1.0.194`), closing the consolidated Tearoff trigger `8eeb7b5ac14e..403c2a4b` with
+force-push/non-contiguous delivery: the trigger's observed ranges (`…19fdcb56e22d..403c2a4b`,
+`0ac5250052e2..9f85687d1baf`, `407eb7a73c94..7443f6e61803`, `132d1bf9e3a3..e73a44a37f0c`,
+`e73a44a37f0c..12b4d74fb4f2`, `8fe3ccaf2cc8..93229933b102`) extend past the nominal end to
+`93229933`, and the prior entry already audited `8eeb7b5ac14e..6a0af04d3c4f`, so the audit
+window here runs `6a0af04d..93229933b102` — audited by diffing a fresh clone of
+noisefactorllc/noisemaker (no sibling dependency added to the repo). Served engine refreshed
+via `vendor/fetch.sh`: core bundle 884620 bytes, SHA-256
+`c8cf35cf19319572bdf40410c8f93bcf5e0f2eba83d917015fbee96ad7ebe0c1` (Last-Modified
+2026-09-27T11:34:37Z; `effects/manifest.json` unchanged at SHA-256
+`05c4d7b7744837ae90a3bb4c89e5403ff09448a74d9d7e824abb3d719ad3314e`, 210/210 mini-bundles,
+catalog unchanged). Authority identification: tag `v1.0.194` = `93229933` (2026-09-27T11:28:57Z,
+the trigger's final observed range end and the last upstream commit with any `shaders/` delta
+underneath it besides the docs-only `7c5f1765`); the served bundle's own header reads
+`Build: 93229933 / Date: 2026-09-27T11:34:37.672Z`, matching the CDN Last-Modified, and a clean
+local build at `93229933` (`scripts/bundle-shaders.js`, esbuild 0.28.2 per the upstream
+lockfile; binary relocated because `$HOME` is noexec) is byte-identical to the served bundle
+modulo the `Date:` stamp — the served artifact is the exact range end.
+
+Shader deltas in the window (`6a0af04d..93229933`), all engine-side (executed verbatim by the
+adapter through the `import * as core` vendored bundle; no adapter code change required — the
+src diff adds zero new `backend.*` calls, so there is nothing to guard or implement on
+ThreeBackend):
+- `b35361e0` (GAP-009) and `9f85687d` (GAP-010), `7dc0f564` (GAP-011), `7443f6e6` (GAP-012),
+  `c2252f0c` (GAP-015), `e73a44a3` (GAP-014), `93229933` (GAP-017): upstream test-harness and
+  metric-only commits under `shaders/tests/` — no engine runtime delta.
+- `403c2a4b` (GAP-008): adds `predictReplacement()` (pure prediction of
+  `replaceEffect` compatibility: type-checked args via `collectAcceptedArgNames` +
+  `getParamAliases()`, `predictBackendSupport`, `predictSamplerTopology`,
+  `predictPassesAndOutputs`) and exports it next to `getCompatibleReplacements` from
+  `shaders/src/index.js`; `replaceEffect` itself gains only an opt-in
+  `options.preflight` short-circuit. Registry introspection on the mutation surface only;
+  catalog and Pipeline contract unchanged.
+- `12b4d74f` (GAP-016): adds `shaders/src/runtime/preflight.js`
+  (`preflightEffect()` / `mrtFormatBytes()`, a static side-effect-free analysis of a
+  definition against a capabilities object in the `Pipeline.getCapabilities()` shape)
+  and a `Pipeline#preflight(capabilities)` accessor that delegates to it. The predicted
+  MRT demotion mirrors the pre-existing `applyMrtFormatBudget()`; the clamps mirror
+  allocation-time `maxTextureSize` enforcement. Opt-in API; no backend-API change.
+
+Bundle hygiene re-verified: the new core bundle keeps zero occurrences of
+`validateEffectDefinition`/`effect-validator`, and grep over all 210 mini-bundles finds
+`mipmaps`/`persistent` only in pre-existing prose comments (`filter/smooth.js`,
+`filter/corrupt.js`) — no new texture-spec fields on this catalog.
+
+Checks at the pre-commit working tree (Linux 6.8.0-134-generic, Node v26.5.1, Chrome Headless
+Shell 149.0.7827.55 / SwiftShader; `PLAYWRIGHT_BROWSERS_PATH` set inline per environment
+convention): `npm test` 72/72 PASS exit 0; `npm run lint` clean exit 0;
+`node parity/sweep-programs.mjs` **PASS=304 FAIL=0 ERR=0, worst max-abs-diff=0** exit 0
+(the 3 retired `bc`/`hs`/`colorspace` historical fixtures reported RETIRED as before);
+`bash parity/sweep-stateful.sh` **worst max-abs-diff=0** exit 0; `npm run parity` corpus
+**PASS=81 FAIL=0 ERR=7 worst=0** exit 0 (same 7 documented golden-side S001 community-effect
+ERR rows: `4bm9AA`, `8KMvAg`, `B5oBsA`, `PmJyUQ`, `WyalUg`, `fKPUww`, `liTYEg`; denominator
+unchanged at 88). No adapter, src/, or test/ file changed in this round — the whole delta is
+the refreshed vendored engine plus this entry.*
+
 > **The programs sweep runs at frame 1, where normalized time is 0** (`t_i = i / loopFrames`).
 > That makes it a compile/link/uniform-binding gate, not a temporal one: any effect whose output
 > is scaled by `time` renders its static form there. `filter/pondRipples`' `speed` control is the
