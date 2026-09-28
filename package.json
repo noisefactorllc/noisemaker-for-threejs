@@ -19,7 +19,7 @@
   },
   "scripts": {
     "vendor": "bash vendor/fetch.sh",
-    "test": "node --test test/*.test.mjs",
+    "test": "bash scripts/test.sh",
     "lint": "eslint .",
     "parity": "bash parity/sweep-corpus.sh"
   }
