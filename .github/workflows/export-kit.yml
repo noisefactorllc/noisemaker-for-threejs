@@ -22,7 +22,33 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  parity:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: 26
+          cache: npm
+      - run: npm ci
+      - name: Install rendered-gate tooling
+        run: |
+          node node_modules/.bin/playwright install --with-deps chromium-headless-shell
+          python3 -m venv parity/.venv
+          parity/.venv/bin/pip install -r parity/requirements.txt
+      - run: bash vendor/fetch.sh
+      - run: npm run lint
+      - run: npm test
+      - name: Rendered parity — programs sweep
+        run: node parity/sweep-programs.mjs
+      - name: Rendered parity — stateful sweep
+        run: bash parity/sweep-stateful.sh
+      - name: Rendered parity — corpus sweep
+        run: npm run parity
+
   dispatch:
+    needs: parity
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
