@@ -70,6 +70,34 @@ jobs:
       # invoke package CLIs through their JS entry points.
       - run: node node_modules/eslint/bin/eslint.js .
       - run: npm test
+      # The windows-2025 leg lost its hosted runner twice at this boundary
+      # (runs 36376821131, 36386857021 — "runner lost communication", both
+      # immediately after a green npm test on a ~60-minute job). Reap any
+      # orphaned browser processes before the rendered gates start and snapshot
+      # memory; upload the test-phase outputs so a repeat death leaves evidence.
+      - name: Reap orphaned browsers and snapshot memory
+        if: ${{ !cancelled() }}
+        run: |
+          pkill -f chrome-headless-shell 2>/dev/null || true
+          pkill -f headless_shell 2>/dev/null || true
+          pkill -f chromium 2>/dev/null || true
+          if command -v taskkill >/dev/null 2>&1; then
+            taskkill //F //IM chrome-headless-shell.exe //T 2>/dev/null || true
+            taskkill //F //IM headless_shell.exe //T 2>/dev/null || true
+            taskkill //F //IM chrome.exe //T 2>/dev/null || true
+          fi
+          sleep 5
+          free -h 2>/dev/null || true
+          if command -v powershell >/dev/null 2>&1; then
+            powershell -Command "Get-CimInstance Win32_OperatingSystem | Select-Object FreePhysicalMemory,TotalVisibleMemorySize | Format-List" 2>/dev/null || true
+          fi
+      - name: Upload test-phase outputs
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: post-test-${{ matrix.os }}-${{ github.sha }}
+          path: parity/out/
+          if-no-files-found: ignore
       - name: Programs gate
         run: node parity/sweep-programs.mjs 2>&1 | tee parity/out/programs.log
       - name: Stateful gate
