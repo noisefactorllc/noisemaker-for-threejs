@@ -69,7 +69,14 @@ jobs:
       # npm ci uses --bin-links=false, so node_modules/.bin shims do not exist;
       # invoke package CLIs through their JS entry points.
       - run: node node_modules/eslint/bin/eslint.js .
-      - run: npm test
+      - name: Unit tests
+        run: |
+          set +e
+          mkdir -p parity/out
+          npm test > parity/out/npm-test.log 2>&1; rc=$?
+          tail -n 30 parity/out/npm-test.log
+          if [ $rc -ne 0 ]; then tail -c 3000 parity/out/npm-test.log | sed 's/%/%25/g' | while IFS= read -r line; do echo "::error::$line"; done; fi
+          exit $rc
       # The windows-2025 leg lost its hosted runner twice at this boundary
       # (runs 36376821131, 36386857021 — "runner lost communication", both
       # immediately after a green npm test on a ~60-minute job). Reap any
