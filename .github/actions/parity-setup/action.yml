@@ -1,0 +1,93 @@
+name: 'Rendered-parity setup'
+description: 'Shared setup chain for the export-kit rendered-parity gate jobs (through the chromium launch probe).'
+inputs:
+  skip-unit-tests:
+    description: 'Set true for the split windows stateful/corpus jobs (unit tests run in the matrix parity jobs and the windows programs job).'
+    required: false
+    default: 'false'
+  artifact-suffix:
+    description: 'Unique suffix for the post-test artifact name (each job must produce a distinct name).'
+    required: false
+    default: 'default'
+runs:
+  using: composite
+  steps:
+    - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+    - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+      with:
+        node-version: '24'
+        cache: npm
+    - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+      with:
+        python-version: '3.12'
+    - run: npm ci --bin-links=false
+      shell: bash
+    - run: node node_modules/@playwright/test/cli.js install --with-deps chromium
+      shell: bash
+    - run: python -m pip install -r parity/requirements.txt
+      shell: bash
+    - name: Resolve an immutable engine version for this run
+      shell: bash
+      run: |
+        mkdir -p parity/out
+        node --input-type=module - <<'JS'
+        import { appendFileSync, writeFileSync } from 'node:fs'
+        const response = await fetch('https://shaders.noisedeck.app/1/deployment-meta.json')
+        if (!response.ok) throw new Error(`Engine metadata HTTP ${response.status}`)
+        const metadata = await response.json()
+        if (!/^1\.\d+\.\d+$/.test(metadata.version)) throw new Error('Invalid engine version')
+        appendFileSync(process.env.GITHUB_ENV, `VERSION=${metadata.version}\n`)
+        writeFileSync('parity/out/engine-meta.json', JSON.stringify(metadata, null, 2))
+        JS
+    - run: bash vendor/fetch.sh
+      shell: bash
+    - run: node node_modules/eslint/bin/eslint.js .
+      shell: bash
+    - name: Unit tests
+      if: inputs.skip-unit-tests != 'true'
+      shell: bash
+      run: |
+        set +e
+        mkdir -p parity/out
+        npm test > parity/out/npm-test.log 2>&1; rc=$?
+        tail -n 30 parity/out/npm-test.log
+        if [ $rc -ne 0 ]; then
+          START=$(grep -n '✖' parity/out/npm-test.log | head -1 | cut -d: -f1)
+          if [ -n "$START" ]; then
+            sed -n "${START},\$p" parity/out/npm-test.log | head -n 40 | sed 's/%/%25/g' | while IFS= read -r line; do echo "::error::$line"; done
+          else
+            tail -c 3000 parity/out/npm-test.log | sed 's/%/%25/g' | while IFS= read -r line; do echo "::error::$line"; done
+          fi
+        fi
+        exit $rc
+    - name: Reap orphaned browsers and snapshot memory
+      if: ${{ !cancelled() }}
+      shell: bash
+      run: |
+        pkill -f chrome-headless-shell 2>/dev/null || true
+        pkill -f headless_shell 2>/dev/null || true
+        pkill -f chromium 2>/dev/null || true
+        if command -v taskkill >/dev/null 2>&1; then
+          taskkill //F //IM chrome-headless-shell.exe //T 2>/dev/null || true
+          taskkill //F //IM headless_shell.exe //T 2>/dev/null || true
+          taskkill //F //IM chrome.exe //T 2>/dev/null || true
+        fi
+        sleep 5
+        free -h 2>/dev/null || true
+        if command -v powershell >/dev/null 2>&1; then
+          powershell -Command "Get-CimInstance Win32_OperatingSystem | Select-Object FreePhysicalMemory,TotalVisibleMemorySize | Format-List" 2>/dev/null || true
+        fi
+    - name: Upload test-phase outputs
+      if: ${{ !cancelled() }}
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      with:
+        name: post-test-${{ runner.os }}-${{ inputs.artifact-suffix }}-${{ github.run_attempt }}
+        path: parity/out/
+        if-no-files-found: ignore
+    - name: Chromium WebGL2 launch probe
+      shell: bash
+      run: |
+        mkdir -p parity/out
+        node parity/win-probe.mjs > parity/out/launch-probe.log 2>&1; rc=$?
+        sed 's/%/%25/g' parity/out/launch-probe.log | while IFS= read -r line; do echo "::notice::$line"; done
+        exit $rc

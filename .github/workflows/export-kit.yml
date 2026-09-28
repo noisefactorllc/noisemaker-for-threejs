@@ -20,12 +20,18 @@ on:
       - "parity/**"
       - "test/**"
       - "vendor/fetch.sh"
+      - ".github/actions/**"
 
 concurrency:
   group: export-kit-${{ github.ref }}
   cancel-in-progress: false
 
+env:
+  NM_PARITY_PYTHON: python
+
 jobs:
+  # Linux + macOS run the full suite in one job: both are stable hosted
+  # runners. macOS measures the byte-exact gates on real ANGLE/Metal.
   parity:
     if: github.ref == 'refs/heads/main'
     permissions:
@@ -33,91 +39,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04, macos-15, windows-2022]
+        os: [ubuntu-24.04, macos-15]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 150
     defaults:
       run:
         shell: bash
-    env:
-      NM_PARITY_PYTHON: python
     steps:
-      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
-      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+      - uses: ./.github/actions/parity-setup
         with:
-          node-version: '24'
-          cache: npm
-      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
-        with:
-          python-version: '3.12'
-      - run: npm ci --bin-links=false
-      - run: node node_modules/@playwright/test/cli.js install --with-deps chromium
-      - run: python -m pip install -r parity/requirements.txt
-      - name: Resolve an immutable engine version for this run
-        run: |
-          mkdir -p parity/out
-          node --input-type=module - <<'JS'
-          import { appendFileSync, writeFileSync } from 'node:fs'
-          const response = await fetch('https://shaders.noisedeck.app/1/deployment-meta.json')
-          if (!response.ok) throw new Error(`Engine metadata HTTP ${response.status}`)
-          const metadata = await response.json()
-          if (!/^1\.\d+\.\d+$/.test(metadata.version)) throw new Error('Invalid engine version')
-          appendFileSync(process.env.GITHUB_ENV, `VERSION=${metadata.version}\n`)
-          writeFileSync('parity/out/engine-meta.json', JSON.stringify(metadata, null, 2))
-          JS
-      - run: bash vendor/fetch.sh
-      # npm ci uses --bin-links=false, so node_modules/.bin shims do not exist;
-      # invoke package CLIs through their JS entry points.
-      - run: node node_modules/eslint/bin/eslint.js .
-      - name: Unit tests
-        run: |
-          set +e
-          mkdir -p parity/out
-          npm test > parity/out/npm-test.log 2>&1; rc=$?
-          tail -n 30 parity/out/npm-test.log
-          if [ $rc -ne 0 ]; then
-            START=$(grep -n '✖' parity/out/npm-test.log | head -1 | cut -d: -f1)
-            if [ -n "$START" ]; then
-              sed -n "${START},\$p" parity/out/npm-test.log | head -n 40 | sed 's/%/%25/g' | while IFS= read -r line; do echo "::error::$line"; done
-            else
-              tail -c 3000 parity/out/npm-test.log | sed 's/%/%25/g' | while IFS= read -r line; do echo "::error::$line"; done
-            fi
-          fi
-          exit $rc
-      # The windows-2025 leg lost its hosted runner twice at this boundary
-      # (runs 36376821131, 36386857021 — "runner lost communication", both
-      # immediately after a green npm test on a ~60-minute job). Reap any
-      # orphaned browser processes before the rendered gates start and snapshot
-      # memory; upload the test-phase outputs so a repeat death leaves evidence.
-      - name: Reap orphaned browsers and snapshot memory
-        if: ${{ !cancelled() }}
-        run: |
-          pkill -f chrome-headless-shell 2>/dev/null || true
-          pkill -f headless_shell 2>/dev/null || true
-          pkill -f chromium 2>/dev/null || true
-          if command -v taskkill >/dev/null 2>&1; then
-            taskkill //F //IM chrome-headless-shell.exe //T 2>/dev/null || true
-            taskkill //F //IM headless_shell.exe //T 2>/dev/null || true
-            taskkill //F //IM chrome.exe //T 2>/dev/null || true
-          fi
-          sleep 5
-          free -h 2>/dev/null || true
-          if command -v powershell >/dev/null 2>&1; then
-            powershell -Command "Get-CimInstance Win32_OperatingSystem | Select-Object FreePhysicalMemory,TotalVisibleMemorySize | Format-List" 2>/dev/null || true
-          fi
-      - name: Upload test-phase outputs
-        if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: post-test-${{ matrix.os }}-${{ github.sha }}
-          path: parity/out/
-          if-no-files-found: ignore
-      - name: Chromium WebGL2 launch probe
-        run: |
-          mkdir -p parity/out
-          node parity/win-probe.mjs > parity/out/launch-probe.log 2>&1; rc=$?
-          sed 's/%/%25/g' parity/out/launch-probe.log | while IFS= read -r line; do echo "::notice::$line"; done
-          exit $rc
+          artifact-suffix: ${{ matrix.os }}
       - name: Programs gate
         run: node parity/sweep-programs.mjs 2>&1 | tee parity/out/programs.log
       - name: Stateful gate
@@ -133,8 +64,82 @@ jobs:
           path: parity/out/
           if-no-files-found: error
 
+  # Windows: six hosted-runner losses across windows-2025 and windows-2022
+  # (runs 36376821131, 36386857021, 36393024796, 36400228289, 36422741592,
+  # 36434730160 — "The hosted runner lost communication with the server") at
+  # four different phases of long single-runner jobs, while short windows jobs
+  # complete. Each gate therefore runs on its OWN fresh runner so no single
+  # Windows runner sustains the whole ~2-hour chromium workload.
+  parity-windows-programs:
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+    runs-on: windows-2022
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: ./.github/actions/parity-setup
+        with:
+          artifact-suffix: windows-programs
+      - name: Programs gate
+        run: node parity/sweep-programs.mjs 2>&1 | tee parity/out/programs.log
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: rendered-parity-windows-programs-${{ github.sha }}
+          path: parity/out/
+          if-no-files-found: error
+
+  parity-windows-stateful:
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+    runs-on: windows-2022
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: ./.github/actions/parity-setup
+        with:
+          skip-unit-tests: 'true'
+          artifact-suffix: windows-stateful
+      - name: Stateful gate
+        run: bash parity/sweep-stateful.sh 2>&1 | tee parity/out/stateful.log
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: rendered-parity-windows-stateful-${{ github.sha }}
+          path: parity/out/
+          if-no-files-found: error
+
+  parity-windows-corpus:
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+    runs-on: windows-2022
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: ./.github/actions/parity-setup
+        with:
+          skip-unit-tests: 'true'
+          artifact-suffix: windows-corpus
+      - name: Corpus gate
+        run: npm run parity 2>&1 | tee parity/out/corpus.log
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: rendered-parity-windows-corpus-${{ github.sha }}
+          path: parity/out/
+          if-no-files-found: error
+
   dispatch:
-    needs: parity
+    needs: [parity, parity-windows-programs, parity-windows-stateful, parity-windows-corpus]
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
