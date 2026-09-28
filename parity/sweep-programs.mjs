@@ -36,13 +36,29 @@ const frames = opt('--frames', '1')
 const capture = opt('--capture', '1')
 const size = opt('--size', '128')
 const filterSub = opt('--filter', null)
+const shard = opt('--shard', null)
 
 const progDir = join(repoRoot, 'parity', 'programs')
 let files = readdirSync(progDir).filter((f) => f.endsWith('.dsl')).sort()
 if (filterSub) files = files.filter((f) => f.includes(filterSub))
 else files = currentPrograms(files.map(f => basename(f, '.dsl'))).map(name => `${name}.dsl`)
+// Index-based sharding (--shard i/N): the sorted list is partitioned round-robin,
+// so N shards cover every selected fixture exactly once. Shard coverage is
+// asserted below; the gate denominator is the sum over shards.
+let shardIdx = null
+let shardCount = null
+if (shard) {
+  const m = /^([0-9]+)\/([0-9]+)$/.exec(shard)
+  if (!m || !(+m[1] >= 0 && +m[1] < +m[2] && +m[2] > 0)) {
+    console.error(`ERR  invalid --shard ${JSON.stringify(shard)} (expected i/N)`)
+    process.exit(1)
+  }
+  shardIdx = +m[1]
+  shardCount = +m[2]
+  files = files.filter((f, idx) => idx % shardCount === shardIdx)
+}
 if (files.length === 0) {
-  console.error(`ERR  no parity fixtures matched${filterSub ? ` filter ${JSON.stringify(filterSub)}` : ''}`)
+  console.error(`ERR  no parity fixtures matched${filterSub ? ` filter ${JSON.stringify(filterSub)}` : ''}${shard ? ` shard ${shard}` : ''}`)
   process.exit(1)
 }
 
@@ -97,9 +113,10 @@ if (batchFailure) {
 }
 
 const ledgerSuffix = filterSub ? `.${filterSub.replace(/[^a-zA-Z0-9_.-]/g, '_')}` : ''
-const ledgerPath = join(outDir, `mode-ledger${ledgerSuffix}.json`)
+const shardSuffix = shard ? `.shard${shardIdx}of${shardCount}` : ''
+const ledgerPath = join(outDir, `mode-ledger${ledgerSuffix}${shardSuffix}.json`)
 writeFileSync(ledgerPath, `${JSON.stringify(ledger, null, 1)}\n`)
 console.log('')
-console.log(`==== PROGRAMS SWEEP: PASS=${pass} FAIL=${fail} ERR=${err} worst=${worst} (frames=${frames} capture=${capture} size=${size}) ====`)
+console.log(`==== PROGRAMS SWEEP: PASS=${pass} FAIL=${fail} ERR=${err} worst=${worst} (frames=${frames} capture=${capture} size=${size}${shard ? ` shard=${shard}` : ''}) ====`)
 console.log(`ledger written: ${ledgerPath}`)
 if (fail > 0 || err > 0) process.exitCode = 1

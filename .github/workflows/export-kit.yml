@@ -71,12 +71,21 @@ jobs:
   # four different phases of long single-runner jobs, while short windows jobs
   # complete. Each gate therefore runs on its OWN fresh runner so no single
   # Windows runner sustains the whole ~2-hour chromium workload.
-  parity-windows-programs:
+  # Windows: six hosted-runner losses across windows-2025 and windows-2022
+  # (runs 36376821131, 36386857021, 36393024796, 36400228289, 36422741592,
+  # 36434730160 — "The hosted runner lost communication with the server") at
+  # four different phases of long single-runner jobs, while short windows jobs
+  # complete; run 36446557349 then killed the ~58-minute solo programs gate.
+  # Each remaining long phase therefore runs on its own fresh runner, and the
+  # programs gate is sharded (--shard i/N, round-robin over the sorted fixture
+  # list — the six shards cover all 304 cases exactly once; each runner renders
+  # ~51 cases in ~8 minutes, under the observed Windows runner survival window).
+  parity-windows-programs-0of6:
     if: github.ref == 'refs/heads/main'
     permissions:
       contents: read
     runs-on: windows-2022
-    timeout-minutes: 120
+    timeout-minutes: 90
     defaults:
       run:
         shell: bash
@@ -84,13 +93,133 @@ jobs:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
       - uses: ./.github/actions/parity-setup
         with:
-          artifact-suffix: windows-programs
-      - name: Programs gate
-        run: node parity/sweep-programs.mjs 2>&1 | tee parity/out/programs.log
+          artifact-suffix: windows-programs-0of6
+      - name: Programs gate shard 0/6
+        run: node parity/sweep-programs.mjs --shard 0/6 2>&1 | tee parity/out/programs.log
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
-          name: rendered-parity-windows-programs-${{ github.sha }}
+          name: rendered-parity-windows-programs-0of6-${{ github.sha }}
+          path: parity/out/
+          if-no-files-found: error
+
+  parity-windows-programs-1of6:
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+    runs-on: windows-2022
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+      - uses: ./.github/actions/parity-setup
+        with:
+          skip-unit-tests: 'true'
+          artifact-suffix: windows-programs-1of6
+      - name: Programs gate shard 1/6
+        run: node parity/sweep-programs.mjs --shard 1/6 2>&1 | tee parity/out/programs.log
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: rendered-parity-windows-programs-1of6-${{ github.sha }}
+          path: parity/out/
+          if-no-files-found: error
+
+  parity-windows-programs-2of6:
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+    runs-on: windows-2022
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+      - uses: ./.github/actions/parity-setup
+        with:
+          skip-unit-tests: 'true'
+          artifact-suffix: windows-programs-2of6
+      - name: Programs gate shard 2/6
+        run: node parity/sweep-programs.mjs --shard 2/6 2>&1 | tee parity/out/programs.log
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: rendered-parity-windows-programs-2of6-${{ github.sha }}
+          path: parity/out/
+          if-no-files-found: error
+
+  parity-windows-programs-3of6:
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+    runs-on: windows-2022
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+      - uses: ./.github/actions/parity-setup
+        with:
+          skip-unit-tests: 'true'
+          artifact-suffix: windows-programs-3of6
+      - name: Programs gate shard 3/6
+        run: node parity/sweep-programs.mjs --shard 3/6 2>&1 | tee parity/out/programs.log
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: rendered-parity-windows-programs-3of6-${{ github.sha }}
+          path: parity/out/
+          if-no-files-found: error
+
+  parity-windows-programs-4of6:
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+    runs-on: windows-2022
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+      - uses: ./.github/actions/parity-setup
+        with:
+          skip-unit-tests: 'true'
+          artifact-suffix: windows-programs-4of6
+      - name: Programs gate shard 4/6
+        run: node parity/sweep-programs.mjs --shard 4/6 2>&1 | tee parity/out/programs.log
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: rendered-parity-windows-programs-4of6-${{ github.sha }}
+          path: parity/out/
+          if-no-files-found: error
+
+  parity-windows-programs-5of6:
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+    runs-on: windows-2022
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+      - uses: ./.github/actions/parity-setup
+        with:
+          skip-unit-tests: 'true'
+          artifact-suffix: windows-programs-5of6
+      - name: Programs gate shard 5/6
+        run: node parity/sweep-programs.mjs --shard 5/6 2>&1 | tee parity/out/programs.log
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: rendered-parity-windows-programs-5of6-${{ github.sha }}
           path: parity/out/
           if-no-files-found: error
 
@@ -142,8 +271,33 @@ jobs:
           path: parity/out/
           if-no-files-found: error
 
+  parity-windows-programs-verify:
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+    needs: [parity-windows-programs-0of6, parity-windows-programs-1of6, parity-windows-programs-2of6, parity-windows-programs-3of6, parity-windows-programs-4of6, parity-windows-programs-5of6]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          pattern: rendered-parity-windows-programs-*-${{ github.sha }}
+          path: shard-artifacts
+      - name: Verify shard ledger coverage
+        run: node scripts/verify-shards.mjs shard-artifacts/*/mode-ledger.shard*of6.json
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: rendered-parity-windows-programs-verify-${{ github.sha }}
+          path: shard-artifacts/
+          if-no-files-found: error
+
   dispatch:
-    needs: [parity, parity-windows-programs, parity-windows-stateful, parity-windows-corpus]
+    needs: [parity-windows-programs-verify, parity, parity-windows-programs-0of6, parity-windows-programs-1of6, parity-windows-programs-2of6, parity-windows-programs-3of6, parity-windows-programs-4of6, parity-windows-programs-5of6, parity-windows-stateful, parity-windows-corpus]
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
