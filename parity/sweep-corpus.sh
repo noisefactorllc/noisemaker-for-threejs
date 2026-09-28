@@ -11,7 +11,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 FRAMES="${1:-20}"; CAPTURE="${2:-10}"; SIZE="${3:-128}"
 mkdir -p "$ROOT/parity/out"
 OUT="$ROOT/parity/out/CORPUS.txt"; : > "$OUT"
-pass=0; fail=0; err=0; worst=0
+pass=0; fail=0; err=0; worst=0; rc=0
 for prog in "$ROOT"/parity/corpus/*.dsl; do
   [ -e "$prog" ] || { echo "no corpus — run: node parity/fetch-corpus.mjs"; exit 1; }
   name=$(basename "$prog" .dsl)
@@ -21,16 +21,18 @@ for prog in "$ROOT"/parity/corpus/*.dsl; do
   if [ "$status" -ne 0 ] || [ -z "$line" ]; then
     printf '%s\n' "$out"
     reason=$(echo "$out" | grep -iE "error|not yet|undefined|register" | head -1 | cut -c1-80)
-    echo "ERR  $name | ${reason:-no result; child exit=$status}" | tee -a "$OUT"; err=$((err+1)); continue
+    echo "ERR  $name | ${reason:-no result; child exit=$status}" | tee -a "$OUT"; err=$((err+1))
+    if ! echo "$out" | grep -qE '\[golden\] ERROR:.*S001'; then rc=1; fi
+    continue
   fi
   m=$(echo "$line" | grep -oE "= [0-9]+([.][0-9]+)?$" | cut -d ' ' -f 2)
   if ! echo "$out" | grep -E '^\[FAIL\]' >/dev/null && awk "BEGIN{exit !(${m:-99}<=2.001)}"; then
     echo "PASS $name (worst=$m)" | tee -a "$OUT"; pass=$((pass+1))
   else
-    echo "FAIL $name (worst=$m)" | tee -a "$OUT"; fail=$((fail+1))
+    echo "FAIL $name (worst=$m)" | tee -a "$OUT"; fail=$((fail+1)); rc=1
   fi
   awk "BEGIN{exit !(${m:-0}>$worst)}" && worst=$m
 done
 echo "" | tee -a "$OUT"
 echo "==== CORPUS SWEEP: PASS=$pass FAIL=$fail ERR=$err worst=$worst (frames=$FRAMES capture=$CAPTURE size=$SIZE) ====" | tee -a "$OUT"
-[ "$pass" -gt 0 ] && [ "$fail" -eq 0 ] && [ "$err" -eq 0 ]
+exit $rc

@@ -48,14 +48,19 @@ def global_ssim(a: np.ndarray, b: np.ndarray) -> float:
     Adequate as a structural gate for parity (we already have a strict per-pixel
     max-abs gate); kept dependency-free (no skimage) to match the repo's minimal
     Python toolchain.
+
+    Computed in float64 with matched variance/covariance formulas so that
+    BIT-IDENTICAL images yield exactly 1.0 (a float32 --ssim-min 1 gate reports
+    0.99999994 on identical inputs, a pure arithmetic artifact).
     """
     # Rec. 601 luma, matching the harness's luma weighting.
     def luma(x):
         return 0.299 * x[..., 0] + 0.587 * x[..., 1] + 0.114 * x[..., 2]
 
-    la, lb = luma(a).ravel(), luma(b).ravel()
+    la, lb = luma(a).astype(np.float64).ravel(), luma(b).astype(np.float64).ravel()
     mu_a, mu_b = la.mean(), lb.mean()
-    var_a, var_b = la.var(), lb.var()
+    var_a = ((la - mu_a) ** 2).mean()
+    var_b = ((lb - mu_b) ** 2).mean()
     cov = ((la - mu_a) * (lb - mu_b)).mean()
     c1 = (0.01) ** 2
     c2 = (0.03) ** 2
