@@ -18,6 +18,7 @@ import { createServer } from 'node:http'
 import { deflateSync } from 'node:zlib'
 import { spawnSync } from 'node:child_process'
 import { chromium } from '@playwright/test'
+import { chromiumLaunchArgs } from './launch-args.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const repoRoot = resolve(__dirname, '..')
@@ -144,8 +145,7 @@ async function runCase(browser, port, testCase) {
 
 async function main() {
   const { server, port } = await startServer()
-  const launchArgs = ['--disable-gpu-sandbox']
-  if (process.platform === 'darwin') launchArgs.push('--use-angle=metal')
+  const launchArgs = chromiumLaunchArgs()
   const browser = await chromium.launch({ headless: true, args: launchArgs })
   try {
     let failed = 0

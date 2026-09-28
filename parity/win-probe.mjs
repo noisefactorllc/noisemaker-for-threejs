@@ -4,8 +4,9 @@
 // negligible runtime and prints the renderer so the step can emit it as an
 // annotation readable from a read-only session.
 import { chromium } from '@playwright/test'
+import { chromiumLaunchArgs } from './launch-args.mjs'
 
-const browser = await chromium.launch({ headless: true })
+const browser = await chromium.launch({ headless: true, args: chromiumLaunchArgs() })
 try {
   const page = await browser.newPage()
   const info = await page.evaluate(() => {

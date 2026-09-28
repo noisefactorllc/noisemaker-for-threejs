@@ -9,6 +9,7 @@ import { dirname, resolve, join, extname, basename } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createServer } from 'node:http'
 import { chromium } from '@playwright/test'
+import { chromiumLaunchArgs } from './launch-args.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const repoRoot = resolve(__dirname, '..')
@@ -42,8 +43,7 @@ async function main () {
     throw new Error('engine not fetched — run: bash vendor/fetch.sh')
   }
   const { server, port } = await startServer()
-  const args = ['--disable-gpu-sandbox']
-  if (process.platform === 'darwin') args.push('--use-angle=metal')
+  const args = chromiumLaunchArgs()
   const browser = await chromium.launch({ headless: true, args })
   try {
     const page = await browser.newPage({ viewport: { width: 1120, height: 1000 }, deviceScaleFactor: 2 })

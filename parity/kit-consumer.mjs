@@ -33,6 +33,7 @@
 // and the removal left no tree. results.json (per-leg measurements, screenshot hashes,
 // inventory and engine hashes, gate verdict) lands in <outDir>.
 import { chromium } from '@playwright/test'
+import { chromiumLaunchArgs } from './launch-args.mjs'
 import { createHash } from 'node:crypto'
 import http from 'node:http'
 import { mkdirSync, existsSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
@@ -152,7 +153,7 @@ const server = http.createServer((req, res) => {
 await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
 const base = `http://127.0.0.1:${server.address().port}`
 
-const browser = await chromium.launch({ args: process.platform === 'darwin' ? ['--use-angle=metal'] : [] })
+const browser = await chromium.launch({ args: chromiumLaunchArgs() })
 out.host = { platform: process.platform, arch: process.arch, browserVersion: browser.version() }
 const page = await browser.newPage({ viewport: { width: 960, height: 600 } })
 const consoleErrors = { valid: [], invalid: [] }

@@ -5,6 +5,7 @@ import { createServer } from 'node:http'
 import { dirname, extname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { chromium } from '@playwright/test'
+import { chromiumLaunchArgs } from '../parity/launch-args.mjs'
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const mime = {
@@ -39,8 +40,7 @@ function startServer () {
 
 test('Three frame export reads real WebGL2 pixels asynchronously', async () => {
   const { server, port } = await startServer()
-  const args = ['--disable-gpu-sandbox']
-  if (process.platform === 'darwin') args.push('--use-angle=metal')
+  const args = chromiumLaunchArgs()
   const browser = await chromium.launch({ headless: true, args })
   try {
     const page = await browser.newPage()
