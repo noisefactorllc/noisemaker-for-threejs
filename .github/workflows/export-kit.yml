@@ -98,6 +98,12 @@ jobs:
           name: post-test-${{ matrix.os }}-${{ github.sha }}
           path: parity/out/
           if-no-files-found: ignore
+      - name: Chromium WebGL2 launch probe
+        run: |
+          mkdir -p parity/out
+          node parity/win-probe.mjs > parity/out/launch-probe.log 2>&1; rc=$?
+          sed 's/%/%25/g' parity/out/launch-probe.log | while IFS= read -r line; do echo "::notice::$line"; done
+          exit $rc
       - name: Programs gate
         run: node parity/sweep-programs.mjs 2>&1 | tee parity/out/programs.log
       - name: Stateful gate
