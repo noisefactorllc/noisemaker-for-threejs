@@ -75,7 +75,14 @@ jobs:
           mkdir -p parity/out
           npm test > parity/out/npm-test.log 2>&1; rc=$?
           tail -n 30 parity/out/npm-test.log
-          if [ $rc -ne 0 ]; then tail -c 3000 parity/out/npm-test.log | sed 's/%/%25/g' | while IFS= read -r line; do echo "::error::$line"; done; fi
+          if [ $rc -ne 0 ]; then
+            START=$(grep -n '✖' parity/out/npm-test.log | head -1 | cut -d: -f1)
+            if [ -n "$START" ]; then
+              sed -n "${START},\$p" parity/out/npm-test.log | head -n 40 | sed 's/%/%25/g' | while IFS= read -r line; do echo "::error::$line"; done
+            else
+              tail -c 3000 parity/out/npm-test.log | sed 's/%/%25/g' | while IFS= read -r line; do echo "::error::$line"; done
+            fi
+          fi
           exit $rc
       # The windows-2025 leg lost its hosted runner twice at this boundary
       # (runs 36376821131, 36386857021 — "runner lost communication", both
