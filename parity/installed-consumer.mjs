@@ -272,7 +272,9 @@ window.__ready = true
 const browser = await chromium.launch({
   headless: true,
   args: [
-    '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader',
+    ...(process.platform === 'darwin'
+      ? ['--use-angle=metal']
+      : ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader']),
     '--no-sandbox', '--disable-gpu-sandbox',
   ],
 })

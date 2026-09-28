@@ -36,10 +36,10 @@ import { chromium } from '@playwright/test'
 import { createHash } from 'node:crypto'
 import http from 'node:http'
 import { mkdirSync, existsSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
-import { extname, join } from 'node:path'
+import { extname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const outDir = process.argv[2] ? join(process.cwd(), process.argv[2]) : null
+const outDir = process.argv[2] ? resolve(process.argv[2]) : null
 if (!outDir) {
   console.error('usage: PLAYWRIGHT_BROWSERS_PATH=<dir> node parity/kit-consumer.mjs <outDir>')
   process.exit(1)
@@ -152,7 +152,8 @@ const server = http.createServer((req, res) => {
 await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
 const base = `http://127.0.0.1:${server.address().port}`
 
-const browser = await chromium.launch()
+const browser = await chromium.launch({ args: process.platform === 'darwin' ? ['--use-angle=metal'] : [] })
+out.host = { platform: process.platform, arch: process.arch, browserVersion: browser.version() }
 const page = await browser.newPage({ viewport: { width: 960, height: 600 } })
 const consoleErrors = { valid: [], invalid: [] }
 const pageErrors = { valid: [], invalid: [] }
@@ -189,7 +190,9 @@ try {
         if (v < min) min = v
         if (v > max) max = v
       }
-      return { min, max, mean: sum / (buf.length / 4) }
+      const debug = gl.getExtension('WEBGL_debug_renderer_info')
+      return { min, max, mean: sum / (buf.length / 4),
+        gpuRenderer: debug ? gl.getParameter(debug.UNMASKED_RENDERER_WEBGL) : null }
     })
     step('valid-render', out.valid.readback.max !== undefined && out.valid.readback.min !== out.valid.readback.max,
       `readback ${JSON.stringify(out.valid.readback)}`)

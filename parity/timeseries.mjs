@@ -25,7 +25,7 @@ const repoRoot = resolve(__dirname, '..')
 const argv = process.argv.slice(2)
 const opt = (f, d) => { const i = argv.indexOf(f); return i >= 0 ? Number(argv[i + 1]) : d }
 const pyIdx = argv.indexOf('--py')
-const PY = pyIdx >= 0 ? argv[pyIdx + 1] : join(repoRoot, 'parity', '.venv', 'bin', 'python')
+const PY = pyIdx >= 0 ? argv[pyIdx + 1] : (process.env.NM_PARITY_PYTHON || join(repoRoot, 'parity', '.venv', 'bin', 'python'))
 const batchIdx = argv.indexOf('--batch-manifest')
 
 function loadCase(raw) {
@@ -131,7 +131,7 @@ async function runCase(browser, port, testCase) {
       const cPng = join(outDir, `f${fr}.candidate.png`)
       writeFileSync(gPng, toPng(golden[k].data, size))
       writeFileSync(cPng, toPng(candidate[k].data, size))
-      const r = spawnSync(PY, [join(repoRoot, 'parity', 'compare.py'), gPng, cPng, '--name', `${name}@f${fr}`, '--tolerance', '0', '--ssim-min', '1'], { encoding: 'utf8' })
+      const r = spawnSync(PY, [join(repoRoot, 'parity', 'compare.py'), gPng, cPng, `--name=${name}@f${fr}`, '--tolerance', '0', '--ssim-min', '1'], { encoding: 'utf8' })
       const line = (r.stdout || r.stderr || '').trim().split('\n').pop()
       process.stdout.write(line + '\n')
       if (r.status !== 0) failed = true
