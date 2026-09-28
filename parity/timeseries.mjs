@@ -101,11 +101,27 @@ async function runMode(browser, port, mode, testCase) {
   page.on('pageerror', (e) => msgs.push(`[pageerror] ${e.message}`))
   await page.goto(`http://127.0.0.1:${port}/parity/page-timeseries.html`)
   await page.waitForFunction(() => window.__nm_ts_ready === true, { timeout: 30000 })
-  const res = await page.evaluate(
-    async (a) => { try { return await window.__nm_timeseries(a) } catch (e) { return { error: (e && e.message) || JSON.stringify(e) || String(e), stack: e && e.stack } } },
-    { dsl, mode, size, frames, captureEvery: capture, loopFrames, inject }
-  )
-  await page.close()
+  // Per-mode watchdog: a case that never finishes must not hang the whole
+  // batched run (an earlier windows CI leg lost its runner after ~55 minutes
+  // with no timeout in place). The timeout marks the case ERR, not a pass.
+  const evalTimeoutMs = Number(process.env.NM_TS_TIMEOUT_MS || 180000)
+  const timeoutMsgs = () => msgs.slice(-8).join('\n')
+  let timer
+  let res
+  try {
+    res = await Promise.race([
+      page.evaluate(
+        async (a) => { try { return await window.__nm_timeseries(a) } catch (e) { return { error: (e && e.message) || JSON.stringify(e) || String(e), stack: e && e.stack } } },
+        { dsl, mode, size, frames, captureEvery: capture, loopFrames, inject }
+      ),
+      new Promise((resolve, reject) => {
+        timer = setTimeout(() => reject(new Error(`${mode}: timed out after ${evalTimeoutMs}ms\n${timeoutMsgs()}`)), evalTimeoutMs)
+      }),
+    ])
+  } finally {
+    clearTimeout(timer)
+    await page.close()
+  }
   if (res?.error || !Array.isArray(res)) {
     const why = res?.error || `${mode}: no captures returned`
     process.stderr.write(`[${mode}] ERROR: ${why}\n${res?.stack || ''}\n${msgs.slice(-8).join('\n')}\n`)

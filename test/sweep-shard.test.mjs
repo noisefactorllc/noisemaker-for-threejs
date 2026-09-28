@@ -20,7 +20,7 @@ const argv = process.argv.slice(2)
 const i = argv.indexOf('--batch-manifest')
 const manifest = JSON.parse(readFileSync(argv[i + 1], 'utf8'))
 for (const c of manifest.cases) {
-  const name = c.dslPath.split('/').pop().replace(/\\.dsl$/, '')
+  const name = c.dslPath.split(/[\\\\/]/).pop().replace(/\\.dsl$/, '')
   console.log('[PASS] ' + name + '@f1: max-abs-diff=0.000 mean-abs-diff=0.0000 ssim=1.00000 (tol=0.0, ssim_min=1.0)')
   console.log('[ts] ' + name + ': worst max-abs-diff across 1 samples = 0')
 }

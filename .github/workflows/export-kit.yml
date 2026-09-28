@@ -51,7 +51,7 @@ jobs:
         with:
           artifact-suffix: ${{ matrix.os }}
       - name: Programs gate
-        run: node parity/sweep-programs.mjs 2>&1 | tee parity/out/programs.log
+        run: bash scripts/gate-step.sh parity/out/programs.log node parity/sweep-programs.mjs
       - name: Stateful gate
         if: ${{ !cancelled() }}
         run: bash parity/sweep-stateful.sh 2>&1 | tee parity/out/stateful.log
@@ -95,7 +95,7 @@ jobs:
         with:
           artifact-suffix: windows-programs-0of6
       - name: Programs gate shard 0/6
-        run: node parity/sweep-programs.mjs --shard 0/6 2>&1 | tee parity/out/programs.log
+        run: bash scripts/gate-step.sh parity/out/programs.log node parity/sweep-programs.mjs --shard 0/6
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -119,7 +119,7 @@ jobs:
           skip-unit-tests: 'true'
           artifact-suffix: windows-programs-1of6
       - name: Programs gate shard 1/6
-        run: node parity/sweep-programs.mjs --shard 1/6 2>&1 | tee parity/out/programs.log
+        run: bash scripts/gate-step.sh parity/out/programs.log node parity/sweep-programs.mjs --shard 1/6
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -143,7 +143,7 @@ jobs:
           skip-unit-tests: 'true'
           artifact-suffix: windows-programs-2of6
       - name: Programs gate shard 2/6
-        run: node parity/sweep-programs.mjs --shard 2/6 2>&1 | tee parity/out/programs.log
+        run: bash scripts/gate-step.sh parity/out/programs.log node parity/sweep-programs.mjs --shard 2/6
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -167,7 +167,7 @@ jobs:
           skip-unit-tests: 'true'
           artifact-suffix: windows-programs-3of6
       - name: Programs gate shard 3/6
-        run: node parity/sweep-programs.mjs --shard 3/6 2>&1 | tee parity/out/programs.log
+        run: bash scripts/gate-step.sh parity/out/programs.log node parity/sweep-programs.mjs --shard 3/6
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -191,7 +191,7 @@ jobs:
           skip-unit-tests: 'true'
           artifact-suffix: windows-programs-4of6
       - name: Programs gate shard 4/6
-        run: node parity/sweep-programs.mjs --shard 4/6 2>&1 | tee parity/out/programs.log
+        run: bash scripts/gate-step.sh parity/out/programs.log node parity/sweep-programs.mjs --shard 4/6
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -215,7 +215,7 @@ jobs:
           skip-unit-tests: 'true'
           artifact-suffix: windows-programs-5of6
       - name: Programs gate shard 5/6
-        run: node parity/sweep-programs.mjs --shard 5/6 2>&1 | tee parity/out/programs.log
+        run: bash scripts/gate-step.sh parity/out/programs.log node parity/sweep-programs.mjs --shard 5/6
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -239,7 +239,7 @@ jobs:
           skip-unit-tests: 'true'
           artifact-suffix: windows-stateful
       - name: Stateful gate
-        run: bash parity/sweep-stateful.sh 2>&1 | tee parity/out/stateful.log
+        run: bash scripts/gate-step.sh parity/out/stateful.log bash parity/sweep-stateful.sh
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -263,7 +263,7 @@ jobs:
           skip-unit-tests: 'true'
           artifact-suffix: windows-corpus
       - name: Corpus gate
-        run: npm run parity 2>&1 | tee parity/out/corpus.log
+        run: bash scripts/gate-step.sh parity/out/corpus.log npm run parity
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
