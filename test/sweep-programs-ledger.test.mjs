@@ -114,7 +114,7 @@ test('a nonzero batched time-series exit cannot be reported as a passing sweep',
       env: { ...process.env, NM_TIMESERIES_SCRIPT: fake },
     })
     assert.notEqual(result.status, 0, `${result.stdout}\n${result.stderr}`)
-    assert.match(result.stdout + result.stderr, /batched time-series runner exited 7/)
+    assert.match(result.stdout + result.stderr, /chunk at 0 exited 7 after retry/)
   } finally {
     rmSync(program, { force: true })
     rmSync(partialLedger, { force: true })

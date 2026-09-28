@@ -162,10 +162,20 @@ async function runCase(browser, port, testCase) {
 async function main() {
   const { server, port } = await startServer()
   const launchArgs = chromiumLaunchArgs()
-  const browser = await chromium.launch({ headless: true, args: launchArgs })
+  // A long-lived chromium accumulates memory across hundreds of page loads and
+  // eventually gets SIGKILLed or hangs (CI evidence: ubuntu programs sweep and
+  // windows shard 4of6 died mid-run; windows shard 5of6 lost its runner after
+  // ~55 minutes). Restart the browser every BROWSER_RESTART_EVERY cases so no
+  // single browser instance serves more than a bounded number of loads.
+  const BROWSER_RESTART_EVERY = 25
+  let browser = await chromium.launch({ headless: true, args: launchArgs })
   try {
     let failed = 0
-    for (const testCase of cases) {
+    for (const [index, testCase] of cases.entries()) {
+      if (index > 0 && index % BROWSER_RESTART_EVERY === 0) {
+        await browser.close()
+        browser = await chromium.launch({ headless: true, args: launchArgs })
+      }
       try {
         if (!await runCase(browser, port, testCase)) failed++
       } catch (error) {

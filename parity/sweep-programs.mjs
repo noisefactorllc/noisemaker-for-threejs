@@ -70,15 +70,30 @@ let pass = 0, fail = 0, err = 0, worst = 0
 let batchOut = ''
 let batchFailure = null
 if (files.length > 0) {
+  // Chunk the batch: one chromium serving hundreds of page loads accumulates
+  // memory until the child is SIGKILLed mid-run (CI runs 36477534981 ubuntu +
+  // windows-4of6). Each chunk gets a fresh timeseries child (which also
+  // restarts its browser every 25 cases); a chunk that fails is retried once,
+  // and a still-failing chunk marks only its own cases ERR via the missing
+  // results below.
+  const CHUNK = 25
   const temp = mkdtempSync(join(tmpdir(), 'noisemaker-for-threejs-sweep-'))
-  const manifestPath = join(temp, 'manifest.json')
-  writeFileSync(manifestPath, `${JSON.stringify({
-    cases: files.map((f) => ({ dslPath: join(progDir, f), frames: Number(frames), capture: Number(capture), size: Number(size), loopFrames: 600 }))
-  }, null, 2)}\n`)
   const timeseriesScript = process.env.NM_TIMESERIES_SCRIPT || join(repoRoot, 'parity', 'timeseries.mjs')
-  const r = spawnSync('node', [timeseriesScript, '--batch-manifest', manifestPath], { encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 })
-  batchOut = `${r.stdout || ''}${r.stderr || ''}`
-  if (r.status !== 0) batchFailure = `batched time-series runner exited ${r.status ?? r.signal ?? 'unknown'}`
+  for (let start = 0; start < files.length; start += CHUNK) {
+    const chunk = files.slice(start, start + CHUNK)
+    const manifestPath = join(temp, `manifest.${start}.json`)
+    writeFileSync(manifestPath, `${JSON.stringify({
+      cases: chunk.map((f) => ({ dslPath: join(progDir, f), frames: Number(frames), capture: Number(capture), size: Number(size), loopFrames: 600 }))
+    }, null, 2)}\n`)
+    let rc = null
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const r = spawnSync('node', [timeseriesScript, '--batch-manifest', manifestPath], { encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 })
+      batchOut += `${r.stdout || ''}${r.stderr || ''}`
+      rc = r.status
+      if (rc === 0) break
+    }
+    if (rc !== 0) batchFailure = `chunk at ${start} exited ${rc ?? 'signal'} after retry`
+  }
   rmSync(temp, { recursive: true, force: true })
 }
 
