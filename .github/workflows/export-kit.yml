@@ -66,7 +66,9 @@ jobs:
           writeFileSync('parity/out/engine-meta.json', JSON.stringify(metadata, null, 2))
           JS
       - run: bash vendor/fetch.sh
-      - run: npm run lint
+      # npm ci uses --bin-links=false, so node_modules/.bin shims do not exist;
+      # invoke package CLIs through their JS entry points.
+      - run: node node_modules/eslint/bin/eslint.js .
       - run: npm test
       - name: Programs gate
         run: node parity/sweep-programs.mjs 2>&1 | tee parity/out/programs.log
