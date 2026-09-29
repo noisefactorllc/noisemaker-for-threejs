@@ -95,6 +95,35 @@ test('multiple fixtures use one batched time-series runner invocation', () => {
   }
 })
 
+test('a FAIL case line carries the raw compare line with its measured ssim', () => {
+  const temp = mkdtempSync(join(tmpdir(), 'noisemaker-for-threejs-fail-detail-test-'))
+  const name = `${filter}_fail_detail`
+  const program = join(root, 'parity', 'programs', `${name}.dsl`)
+  const partialLedger = join(root, 'parity', 'out', `mode-ledger.${filter}.json`)
+  const fake = join(temp, 'fake-timeseries.mjs')
+  writeFileSync(fake, [
+    `console.log('[FAIL] ${name}@f1: max-abs-diff=0.000 mean-abs-diff=0.0000 ssim=0.98765 (tol=0.0, ssim_min=1.0)')`,
+    `console.log('[ts] ${name}: worst max-abs-diff across 1 samples = 0')`,
+  ].join('\n'))
+  writeFileSync(program, 'noise().write(o0)\n')
+
+  try {
+    const result = spawnSync(process.execPath, [join(root, 'parity', 'sweep-programs.mjs'), '--filter', filter], {
+      encoding: 'utf8',
+      env: { ...process.env, NM_TIMESERIES_SCRIPT: fake },
+    })
+    assert.notEqual(result.status, 0, `${result.stdout}\n${result.stderr}`)
+    const line = result.stdout.split('\n').find((l) => l.startsWith(`FAIL ${name} `))
+    assert.ok(line, result.stdout)
+    assert.ok(line.includes('ssim=0.98765'), line)
+    assert.ok(!line.includes('\n'), line)
+  } finally {
+    rmSync(program, { force: true })
+    rmSync(partialLedger, { force: true })
+    rmSync(temp, { recursive: true, force: true })
+  }
+})
+
 test('a nonzero batched time-series exit cannot be reported as a passing sweep', () => {
   const temp = mkdtempSync(join(tmpdir(), 'noisemaker-for-threejs-batch-exit-test-'))
   const name = `${filter}_child_exit`

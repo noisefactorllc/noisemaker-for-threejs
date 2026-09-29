@@ -114,7 +114,8 @@ for (const f of files) {
     continue
   }
   const maxDiff = Number(worstLine[1])
-  const status = samples.some((sample) => sample[1] === 'FAIL') || maxDiff !== 0 ? 'FAIL' : 'PASS'
+  const failSample = samples.find((sample) => sample[1] === 'FAIL')
+  const status = (failSample || maxDiff !== 0) ? 'FAIL' : 'PASS'
   const frameNum = samples[0][2]
   const golden = join('parity', 'out', `ts_${name}`, `f${frameNum}.golden.png`)
   const candidate = join('parity', 'out', `ts_${name}`, `f${frameNum}.candidate.png`)
@@ -122,7 +123,11 @@ for (const f of files) {
   if (status === 'PASS') pass++
   else fail++
   worst = Math.max(worst, maxDiff)
-  console.log(`${status} ${name} (max-abs-diff=${maxDiff})`)
+  // On a FAIL, repeat the raw compare line so the annotation channel carries
+  // the measured ssim/tolerance (windows-only diagnosis, run 36505981849).
+  const failLine = failSample ? batchOut.split('\n').find((line) => line.includes(`[FAIL] ${name}@f`)) : null
+  const detail = failLine ? `; ${failLine}` : ''
+  console.log(`${status} ${name} (max-abs-diff=${maxDiff})${detail}`)
 }
 
 if (batchFailure) {
