@@ -99,7 +99,7 @@ async function runMode(browser, port, mode, testCase) {
   const msgs = []
   page.on('console', (m) => msgs.push(`[${m.type()}] ${m.text()}`))
   page.on('pageerror', (e) => msgs.push(`[pageerror] ${e.message}`))
-  await page.goto(`http://127.0.0.1:${port}/parity/page-timeseries.html`)
+  await page.goto(`http://127.0.0.1:${port}/parity/page-timeseries.html`, { timeout: 60000 })
   await page.waitForFunction(() => window.__nm_ts_ready === true, { timeout: 30000 })
   // Per-mode watchdog: a case that never finishes must not hang the whole
   // batched run (an earlier windows CI leg lost its runner after ~55 minutes
@@ -164,19 +164,20 @@ async function runCase(browser, port, testCase) {
 async function main() {
   const { server, port } = await startServer()
   const launchArgs = chromiumLaunchArgs()
-  // A long-lived chromium accumulates memory across hundreds of page loads and
-  // eventually gets SIGKILLed or hangs (CI evidence: ubuntu programs sweep and
-  // windows shard 4of6 died mid-run; windows shard 5of6 lost its runner after
-  // ~55 minutes). Restart the browser every BROWSER_RESTART_EVERY cases so no
-  // single browser instance serves more than a bounded number of loads.
+  // launch timeout: a hung chromium launch must fail fast (it previously hung
+  // a windows gate until the runner died at ~55-68 min; run 36536453382,
+  // shard 47of48, died with 7 cases) instead of hanging past the spawnSync
+  // backstop and the hosted VM's observed ~55-minute survival ceiling.
+  // A long-lived chromium also accumulates memory across hundreds of page
+  // loads (SIGKILL/hang, runs 36477534981+), so it restarts every 25 cases.
   const BROWSER_RESTART_EVERY = 25
-  let browser = await chromium.launch({ headless: true, args: launchArgs })
+  let browser = await chromium.launch({ headless: true, args: launchArgs, timeout: 120000 })
   try {
     let failed = 0
     for (const [index, testCase] of cases.entries()) {
       if (index > 0 && index % BROWSER_RESTART_EVERY === 0) {
         await browser.close()
-        browser = await chromium.launch({ headless: true, args: launchArgs })
+        browser = await chromium.launch({ headless: true, args: launchArgs, timeout: 120000 })
       }
       try {
         if (!await runCase(browser, port, testCase)) failed++
