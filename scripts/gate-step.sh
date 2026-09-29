@@ -15,6 +15,10 @@ if [ "$rc" -ne 0 ]; then
   {
     grep -E '^==== ' "$log" | tail -n 2
     grep -E '^(FAIL|ERR) ' "$log" | head -n 5
+    # Failing-test detail: node:test's spec reporter prints the error message
+    # and stack under each ✖ entry — put it ahead of the bare tail so a
+    # Windows-only unit-test failure is diagnosed in the annotation budget.
+    grep -A4 '^✖ ' "$log" | head -n 30
     tail -n 12 "$log"
   } | awk '!seen[$0]++' | head -n 10 | while IFS= read -r line; do
     printf '::error::%s\n' "$line"
