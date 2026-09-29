@@ -35,8 +35,12 @@ async function ensureBooted () {
 
 async function getManifest () {
   if (!_manifest) {
-    const res = await fetch(new URL('manifest.json', EFFECTS_BASE).href)
-    _manifest = res.ok ? await res.json() : {}
+    const url = new URL('manifest.json', EFFECTS_BASE).href
+    const res = await fetch(url)
+    // A missing or failed manifest would otherwise degrade to empty effect
+    // coverage with no visible cause (every loadEffects call becomes a no-op).
+    if (!res.ok) throw new Error(`effects manifest fetch failed: ${res.status} ${url}`)
+    _manifest = await res.json()
   }
   return _manifest
 }
