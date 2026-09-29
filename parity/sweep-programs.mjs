@@ -88,8 +88,9 @@ if (files.length > 0) {
     let rc = null
     for (let attempt = 0; attempt < 2; attempt++) {
       // A hung child (hung page load or browser) must not hang the sweep until
-      // the runner dies; 15 minutes bounds each 25-case chunk generously.
-      const r = spawnSync('node', [timeseriesScript, '--batch-manifest', manifestPath], { encoding: 'utf8', maxBuffer: 256 * 1024 * 1024, timeout: 15 * 60 * 1000 })
+      // the runner dies; 30 minutes bounds each 25-case chunk generously
+      // (octaveWarp alone needs ~75 s per mode locally, slower on CI).
+      const r = spawnSync('node', [timeseriesScript, '--batch-manifest', manifestPath], { encoding: 'utf8', maxBuffer: 256 * 1024 * 1024, timeout: 30 * 60 * 1000 })
       batchOut += `${r.stdout || ''}${r.stderr || ''}`
       rc = r.status
       if (rc === 0) break

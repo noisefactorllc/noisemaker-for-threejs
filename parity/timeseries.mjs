@@ -104,7 +104,9 @@ async function runMode(browser, port, mode, testCase) {
   // Per-mode watchdog: a case that never finishes must not hang the whole
   // batched run (an earlier windows CI leg lost its runner after ~55 minutes
   // with no timeout in place). The timeout marks the case ERR, not a pass.
-  const evalTimeoutMs = Number(process.env.NM_TS_TIMEOUT_MS || 180000)
+  // octaveWarp legitimately renders ~75 s per mode locally and slower on CI
+  // (run 36499447086: golden timed out at 180 s), so the default is generous.
+  const evalTimeoutMs = Number(process.env.NM_TS_TIMEOUT_MS || 600000)
   const timeoutMsgs = () => msgs.slice(-8).join('\n')
   let timer
   let res
