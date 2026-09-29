@@ -95,8 +95,22 @@ function toPng(flat, size) {
 
 async function runMode(browser, port, mode, testCase) {
   const { dsl, size, frames, capture, loopFrames, inject } = testCase
-  const page = await browser.newPage()
+  // newPage is the last unbounded browser call: a wedged browser (poisoned
+  // Windows SwiftShader GPU process, shard 47of48 runner losses) can hang it
+  // forever — beyond the evaluate watchdog, the launch/goto timeouts, and the
+  // chunk spawn backstop, so the job hung until the runner died. Race it with
+  // 60 s; on timeout the caller restarts the browser and marks the case ERR.
+  // Race newPage with a 60 s bound; the timer is cleared on settlement so it
+  // never holds the chunk child alive past its last page creation.
   const msgs = []
+  let newPageTimer
+  const page = await Promise.race([
+    browser.newPage(),
+    new Promise((resolve, reject) => {
+      newPageTimer = setTimeout(() => reject(new Error(`${mode}: browser.newPage timed out after 60000ms`)), 60000)
+    }),
+  ])
+  clearTimeout(newPageTimer)
   page.on('console', (m) => msgs.push(`[${m.type()}] ${m.text()}`))
   page.on('pageerror', (e) => msgs.push(`[pageerror] ${e.message}`))
   await page.goto(`http://127.0.0.1:${port}/parity/page-timeseries.html`, { timeout: 60000 })

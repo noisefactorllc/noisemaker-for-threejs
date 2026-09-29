@@ -94,6 +94,10 @@ if (files.length > 0) {
       batchOut += `${r.stdout || ''}${r.stderr || ''}`
       rc = r.status
       if (rc === 0) break
+      // Killing the chunk child orphans its chromium processes; a wedged GPU
+      // process would poison the retry, so reap them (same targets as the
+      // setup composite's orphaned-browser reaper).
+      spawnSync('bash', ['-c', 'pkill -f chrome-headles[s]-shell; pkill -f headless_shel[l]; pkill -f chromiu[m]; command -v taskkill >/dev/null 2>&1 && taskkill //F //IM chrome-headless-shell.exe //T; command -v taskkill >/dev/null 2>&1 && taskkill //F //IM headless_shell.exe //T; true'], { timeout: 60000 })
     }
     if (rc !== 0) batchFailure = `chunk at ${start} exited ${rc ?? 'signal'} after retry`
   }
