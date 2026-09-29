@@ -391,6 +391,11 @@ jobs:
         with:
           pattern: rendered-parity-windows-programs-*-${{ github.sha }}
           path: shard-artifacts
+      # current-programs (via scripts/verify-shards.mjs) reads the vendored
+      # upstream effects manifest, which is produced by vendor/fetch.sh —
+      # vendor/ is not committed (run 36611586678: verify-shards ENOENT).
+      - name: Fetch vendor
+        run: bash vendor/fetch.sh
       - name: Verify shard ledger coverage
         env:
           NM_BLOCKED_CASES: octaveWarp
