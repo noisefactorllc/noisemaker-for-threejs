@@ -52,7 +52,17 @@ def global_ssim(a: np.ndarray, b: np.ndarray) -> float:
     Computed in float64 with matched variance/covariance formulas so that
     BIT-IDENTICAL images yield exactly 1.0 (a float32 --ssim-min 1 gate reports
     0.99999994 on identical inputs, a pure arithmetic artifact).
+
+    Identical inputs also short-circuit to exactly 1.0: even in float64 the
+    numerator factor (2*mu_a*mu_b, one rounding) and the denominator factor
+    (mu_a**2 + mu_b**2, two roundings) can differ by 1 ULP through a
+    platform-dependent summation order (windows-only relief_notePaper failure,
+    runs 36505981849/36512318010: ssim printed 1.00000 yet below the ==1 gate).
+    Bit-identical images are perfectly similar by definition; the general path
+    below is unchanged.
     """
+    if a.shape == b.shape and np.array_equal(a, b):
+        return 1.0
     # Rec. 601 luma, matching the harness's luma weighting.
     def luma(x):
         return 0.299 * x[..., 0] + 0.587 * x[..., 1] + 0.114 * x[..., 2]
