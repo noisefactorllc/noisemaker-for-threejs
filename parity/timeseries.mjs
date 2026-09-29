@@ -161,6 +161,27 @@ async function runCase(browser, port, testCase) {
     return !failed
 }
 
+// Bounded browser teardown: after a wedged case (e.g. a poisoned Windows
+// SwiftShader GPU process), browser.close() itself can hang forever — that
+// hung the whole chunked run until the runner died (runs 36536453382,
+// 36542869365, shard 47of48). Race close() with 30 s, then SIGKILL the
+// browser process so the next case starts clean.
+async function closeBrowser(browser) {
+  try {
+    await Promise.race([
+      browser.close(),
+      new Promise((resolve) => setTimeout(resolve, 30000)),
+    ])
+  } catch {
+    // fall through to the SIGKILL below
+  }
+  try {
+    browser.process()?.kill('SIGKILL')
+  } catch {
+    // already gone
+  }
+}
+
 async function main() {
   const { server, port } = await startServer()
   const launchArgs = chromiumLaunchArgs()
@@ -175,20 +196,28 @@ async function main() {
   try {
     let failed = 0
     for (const [index, testCase] of cases.entries()) {
+      // Restart the browser on the periodic schedule AND after any failed case:
+      // a wedged case can poison the shared browser/GPU process, and the next
+      // case must not inherit it.
       if (index > 0 && index % BROWSER_RESTART_EVERY === 0) {
-        await browser.close()
+        await closeBrowser(browser)
         browser = await chromium.launch({ headless: true, args: launchArgs, timeout: 120000 })
       }
+      let ok = false
       try {
-        if (!await runCase(browser, port, testCase)) failed++
+        ok = await runCase(browser, port, testCase)
       } catch (error) {
-        failed++
         process.stderr.write(`[ts] ${testCase.name}: ERROR ${error?.stack || error}\n`)
+      }
+      if (!ok) {
+        failed++
+        await closeBrowser(browser)
+        browser = await chromium.launch({ headless: true, args: launchArgs, timeout: 120000 })
       }
     }
     if (failed > 0) process.exitCode = 1
   } finally {
-    await browser.close()
+    await closeBrowser(browser)
     server.close()
   }
 }
