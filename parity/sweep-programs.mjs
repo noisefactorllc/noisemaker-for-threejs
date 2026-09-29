@@ -36,6 +36,7 @@ const frames = opt('--frames', '1')
 const capture = opt('--capture', '1')
 const size = opt('--size', '128')
 const filterSub = opt('--filter', null)
+const excludeSub = opt('--exclude', null)
 const shard = opt('--shard', null)
 
 const progDir = join(repoRoot, 'parity', 'programs')
@@ -57,8 +58,13 @@ if (shard) {
   shardCount = +m[2]
   files = files.filter((f, idx) => idx % shardCount === shardIdx)
 }
+// --exclude applies AFTER shard selection so excluded-and-isolated cases (e.g.
+// octaveWarp rendered in its own generously-bounded windows job) do not change
+// any shard's index math: shard i/N keeps its cases minus the excluded set,
+// and the union over all jobs still covers every fixture exactly once.
+if (excludeSub) files = files.filter((f) => !f.includes(excludeSub))
 if (files.length === 0) {
-  console.error(`ERR  no parity fixtures matched${filterSub ? ` filter ${JSON.stringify(filterSub)}` : ''}${shard ? ` shard ${shard}` : ''}`)
+  console.error(`ERR  no parity fixtures matched${filterSub ? ` filter ${JSON.stringify(filterSub)}` : ''}${excludeSub ? ` exclude ${JSON.stringify(excludeSub)}` : ''}${shard ? ` shard ${shard}` : ''}`)
   process.exit(1)
 }
 
@@ -86,17 +92,25 @@ if (files.length > 0) {
       cases: chunk.map((f) => ({ dslPath: join(progDir, f), frames: Number(frames), capture: Number(capture), size: Number(size), loopFrames: 600 }))
     }, null, 2)}\n`)
     let rc = null
+    let signaled
     for (let attempt = 0; attempt < 2; attempt++) {
       // A hung child (hung page load or browser) must not hang the sweep until
-      // the runner dies; 30 minutes bounds each 25-case chunk generously
-      // (octaveWarp alone needs ~75 s per mode locally, slower on CI).
-      const r = spawnSync('node', [timeseriesScript, '--batch-manifest', manifestPath], { encoding: 'utf8', maxBuffer: 256 * 1024 * 1024, timeout: 30 * 60 * 1000 })
+      // the runner dies; the timeout bounds each chunk generously (default
+      // 30 minutes; a single heavy-case job may raise it via NM_CHUNK_TIMEOUT_MS).
+      const chunkTimeoutMs = Number(process.env.NM_CHUNK_TIMEOUT_MS || 30 * 60 * 1000)
+      const r = spawnSync('node', [timeseriesScript, '--batch-manifest', manifestPath], { encoding: 'utf8', maxBuffer: 256 * 1024 * 1024, timeout: chunkTimeoutMs })
       batchOut += `${r.stdout || ''}${r.stderr || ''}`
       rc = r.status
+      signaled = r.status === null && r.signal !== null
       if (rc === 0) break
+      // Retry only a KILLED chunk (hang/timeout — potentially transient).
+      // A chunk that exited 1 with case ERRs is deterministic; re-rendering
+      // it just burns the hosted runner's ~55-minute survival window.
+      if (!signaled) break
       // Killing the chunk child orphans its chromium processes; a wedged GPU
       // process would poison the retry, so reap them (same targets as the
-      // setup composite's orphaned-browser reaper).
+      // setup composite's orphaned-browser reaper, with self-excluding pkill
+      // patterns so the invoking shell is not SIGTERMed).
       spawnSync('bash', ['-c', 'pkill -f chrome-headles[s]-shell; pkill -f headless_shel[l]; pkill -f chromiu[m]; command -v taskkill >/dev/null 2>&1 && taskkill //F //IM chrome-headless-shell.exe //T; command -v taskkill >/dev/null 2>&1 && taskkill //F //IM headless_shell.exe //T; true'], { timeout: 60000 })
     }
     if (rc !== 0) batchFailure = `chunk at ${start} exited ${rc ?? 'signal'} after retry`
@@ -140,8 +154,9 @@ if (batchFailure) {
 }
 
 const ledgerSuffix = filterSub ? `.${filterSub.replace(/[^a-zA-Z0-9_.-]/g, '_')}` : ''
+const excludeSuffix = excludeSub ? `.no_${excludeSub.replace(/[^a-zA-Z0-9_.-]/g, '_')}` : ''
 const shardSuffix = shard ? `.shard${shardIdx}of${shardCount}` : ''
-const ledgerPath = join(outDir, `mode-ledger${ledgerSuffix}${shardSuffix}.json`)
+const ledgerPath = join(outDir, `mode-ledger${ledgerSuffix}${excludeSuffix}${shardSuffix}.json`)
 writeFileSync(ledgerPath, `${JSON.stringify(ledger, null, 1)}\n`)
 console.log('')
 console.log(`==== PROGRAMS SWEEP: PASS=${pass} FAIL=${fail} ERR=${err} worst=${worst} (frames=${frames} capture=${capture} size=${size}${shard ? ` shard=${shard}` : ''}) ====`)

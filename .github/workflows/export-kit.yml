@@ -271,7 +271,7 @@ jobs:
           path: parity/out/
           if-no-files-found: error
 
-  parity-windows-programs-47of48:
+  parity-windows-programs-octaveWarp:
     if: github.ref == 'refs/heads/main'
     permissions:
       contents: read
@@ -285,13 +285,39 @@ jobs:
       - uses: ./.github/actions/parity-setup
         with:
           skip-unit-tests: 'true'
-          artifact-suffix: windows-programs-47of48
-      - name: Programs gate shard 47/48
-        run: bash scripts/gate-step.sh parity/out/programs.log node parity/sweep-programs.mjs --shard 47/48
+          artifact-suffix: windows-programs-octaveWarp
+      - name: Programs gate octaveWarp
+        env:
+          NM_CHUNK_TIMEOUT_MS: '3600000'
+        run: bash scripts/gate-step.sh parity/out/programs.log node parity/sweep-programs.mjs --filter octaveWarp
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
-          name: rendered-parity-windows-programs-47of48-${{ github.sha }}
+          name: rendered-parity-windows-programs-octaveWarp-${{ github.sha }}
+          path: parity/out/
+          if-no-files-found: error
+
+  parity-windows-programs-47of48-no-octaveWarp:
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+    runs-on: windows-2022
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+      - uses: ./.github/actions/parity-setup
+        with:
+          skip-unit-tests: 'true'
+          artifact-suffix: windows-programs-47of48-no-octaveWarp
+      - name: Programs gate 47of48-no-octaveWarp
+        run: bash scripts/gate-step.sh parity/out/programs.log node parity/sweep-programs.mjs --shard 47/48 --exclude octaveWarp
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: rendered-parity-windows-programs-47of48-no-octaveWarp-${{ github.sha }}
           path: parity/out/
           if-no-files-found: error
 
@@ -347,7 +373,7 @@ jobs:
     if: github.ref == 'refs/heads/main'
     permissions:
       contents: read
-    needs: [parity-windows-programs-0of6, parity-windows-programs-1of6, parity-windows-programs-2of6, parity-windows-programs-3of6, parity-windows-programs-4of6, parity-windows-programs-5of12, parity-windows-programs-11of24, parity-windows-programs-23of48, parity-windows-programs-47of48]
+    needs: [parity-windows-programs-0of6, parity-windows-programs-1of6, parity-windows-programs-2of6, parity-windows-programs-3of6, parity-windows-programs-4of6, parity-windows-programs-5of12, parity-windows-programs-11of24, parity-windows-programs-23of48, parity-windows-programs-octaveWarp, parity-windows-programs-47of48-no-octaveWarp]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     defaults:
@@ -360,7 +386,7 @@ jobs:
           pattern: rendered-parity-windows-programs-*-${{ github.sha }}
           path: shard-artifacts
       - name: Verify shard ledger coverage
-        run: bash scripts/gate-step.sh shard-artifacts/verify.log bash -c 'ls shard-artifacts/; find shard-artifacts -maxdepth 2 -name "mode-ledger*" | sort; node scripts/verify-shards.mjs shard-artifacts/*/mode-ledger.shard*.json'
+        run: bash scripts/gate-step.sh shard-artifacts/verify.log bash -c 'ls shard-artifacts/; find shard-artifacts -maxdepth 2 -name "mode-ledger*" | sort; node scripts/verify-shards.mjs shard-artifacts/*/mode-ledger*.json'
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -369,7 +395,7 @@ jobs:
           if-no-files-found: error
 
   dispatch:
-    needs: [parity-windows-programs-verify, parity, parity-windows-programs-0of6, parity-windows-programs-1of6, parity-windows-programs-2of6, parity-windows-programs-3of6, parity-windows-programs-4of6, parity-windows-programs-5of12, parity-windows-programs-11of24, parity-windows-programs-23of48, parity-windows-programs-47of48, parity-windows-stateful, parity-windows-corpus]
+    needs: [parity-windows-programs-verify, parity, parity-windows-programs-0of6, parity-windows-programs-1of6, parity-windows-programs-2of6, parity-windows-programs-3of6, parity-windows-programs-4of6, parity-windows-programs-5of12, parity-windows-programs-11of24, parity-windows-programs-23of48, parity-windows-programs-octaveWarp, parity-windows-programs-47of48-no-octaveWarp, parity-windows-stateful, parity-windows-corpus]
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:

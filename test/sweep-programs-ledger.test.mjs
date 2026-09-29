@@ -30,6 +30,62 @@ test('a filtered sweep with no matching fixtures fails without writing evidence'
   }
 })
 
+test('an excluded fixture is left out of the ledger and named in it for others', () => {
+  const temp = mkdtempSync(join(tmpdir(), 'noisemaker-for-threejs-exclude-test-'))
+  const keep = `${filter}_keep`
+  const gone = `${filter}_gone`
+  const programs = [keep, gone].map((name) => join(root, 'parity', 'programs', `${name}.dsl`))
+  const partialLedger = join(root, 'parity', 'out', `mode-ledger.${filter}.no_${gone}.json`)
+  const fake = join(temp, 'fake-timeseries.mjs')
+  writeFileSync(fake, [
+    "import { readFileSync } from 'node:fs'",
+    "import { basename } from 'node:path'",
+    "const i = process.argv.indexOf('--batch-manifest')",
+    "const manifest = JSON.parse(readFileSync(process.argv[i + 1], 'utf8'))",
+    "for (const item of manifest.cases) {",
+    "  const name = basename(item.dslPath, '.dsl')",
+    "  console.log(`[PASS] ${name}@f1: max-abs-diff=0 mean-abs-diff=0 ssim=1`)",
+    "  console.log(`[ts] ${name}: worst max-abs-diff across 1 samples = 0`)",
+    "}",
+  ].join('\n'))
+  for (const program of programs) writeFileSync(program, 'noise().write(o0)\n')
+
+  try {
+    const result = spawnSync(process.execPath, [join(root, 'parity', 'sweep-programs.mjs'), '--filter', filter, '--exclude', gone], {
+      encoding: 'utf8',
+      env: { ...process.env, NM_TIMESERIES_SCRIPT: fake },
+    })
+    assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`)
+    const ledger = JSON.parse(readFileSync(partialLedger, 'utf8'))
+    assert.deepEqual(Object.keys(ledger), [keep])
+    assert.ok(result.stdout.includes('PASS=1'), result.stdout)
+  } finally {
+    for (const program of programs) rmSync(program, { force: true })
+    rmSync(partialLedger, { force: true })
+    rmSync(temp, { recursive: true, force: true })
+  }
+})
+
+test('an exclude that empties the selection fails without writing evidence', () => {
+  const hadCanonical = existsSync(canonical)
+  const previous = hadCanonical ? readFileSync(canonical) : null
+  const sentinel = '{"full":"ledger"}\n'
+  writeFileSync(canonical, sentinel)
+  rmSync(partial, { force: true })
+
+  try {
+    const result = spawnSync(process.execPath, [join(root, 'parity', 'sweep-programs.mjs'), '--filter', filter, '--exclude', filter], { encoding: 'utf8' })
+    assert.notEqual(result.status, 0, `${result.stdout}\n${result.stderr}`)
+    assert.match(result.stdout + result.stderr, /exclude/)
+    assert.equal(readFileSync(canonical, 'utf8'), sentinel)
+    assert.equal(existsSync(partial), false)
+  } finally {
+    rmSync(partial, { force: true })
+    if (hadCanonical) writeFileSync(canonical, previous)
+    else rmSync(canonical, { force: true })
+  }
+})
+
 test('a comparator PASS line with a nonzero byte delta fails the sweep', () => {
   const temp = mkdtempSync(join(tmpdir(), 'noisemaker-for-threejs-exactness-test-'))
   const name = `${filter}_nonzero_delta`
