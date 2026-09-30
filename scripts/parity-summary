@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# parity-summary — executable entrypoint named by the published
+# parity-summary contract (the supervisor runs this exact path). Delegates to
+# scripts/parity-summary.mjs, which stays the importable implementation.
+set -euo pipefail
+exec node "$(cd "$(dirname "$0")" && pwd)/parity-summary.mjs" "$@"
