@@ -17,9 +17,9 @@ test('programs and stateful: bit-exact PASS is exact, anything else is a fail', 
   assert.equal(classify({ name: 'fractal', worst: null, errLine: true, kind: 'programs' }), 'fail')
 })
 
-test('corpus: worst 0 exact, nonzero within the published band strict, any comparator FAIL is a fail', () => {
+test('corpus: worst 0 exact, ANY nonzero difference is a fail (tolerance-0 contract)', () => {
   assert.equal(classify({ name: 'AbCdEf', worst: '0', failLine: false, errLine: false, kind: 'corpus' }), 'exact')
-  assert.equal(classify({ name: 'AbCdEf', worst: '1.5', failLine: false, errLine: false, kind: 'corpus' }), 'strict')
+  assert.equal(classify({ name: 'AbCdEf', worst: '1.5', failLine: false, errLine: false, kind: 'corpus' }), 'fail')
   assert.equal(classify({ name: 'AbCdEf', worst: '1.5', failLine: true, errLine: false, kind: 'corpus' }), 'fail')
   assert.equal(classify({ name: 'AbCdEf', worst: '3', failLine: true, errLine: false, kind: 'corpus' }), 'fail')
   assert.equal(classify({ name: 'AbCdEf', worst: '3', failLine: false, errLine: false, kind: 'corpus' }), 'fail')

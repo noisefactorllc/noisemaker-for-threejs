@@ -19,10 +19,10 @@
 //
 //   programs + stateful + corpus: the enforced contract is bit-exactness —
 //     the dual-backend harness runs compare.py at --tolerance 0 --ssim-min 1,
-//     so any nonzero diff exits nonzero (classified fail) and every PASS has
-//     max-abs-diff 0 (classified exact). 'strict' and 'near' exist only for
-//     completeness: a comparator FAIL within a published numeric band (none
-//     is currently enforced) would be near; beyond any band is fail.
+//     so every pass has max-abs-diff 0 (exact) and ANY nonzero diff is a
+//     fail. 'strict' and 'near' exist only for completeness: a comparator
+//     FAIL within a published numeric band (none is currently enforced)
+//     would be near; beyond any band is fail.
 //   The 7 documented golden-side S001 compile failures (parity/sweep-corpus.sh
 //   TOLERATED_GOLDEN_S001; upstream defect — the GOLDEN side cannot compile)
 //   classify as defer: the case is not renderable on the authority side.
@@ -73,8 +73,9 @@ export function classify({ name, worst, failLine, errLine, kind }) {
     // make an in-band miss 'near'.
     return 'fail'
   }
+  // The enforced contract is bit-exact (compare.py at tolerance 0, ssim-min
+  // 1): every pass has max-abs-diff 0; ANY nonzero diff is a fail.
   if (w === 0) return 'exact'
-  if (kind === 'corpus' && w <= 2.001) return 'strict'
   return 'fail'
 }
 
