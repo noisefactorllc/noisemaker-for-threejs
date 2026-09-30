@@ -53,7 +53,7 @@ The containing commit identifies this register's publication revision. The share
 
 ## 3. Methods and evidence
 
-Review CI boundary: No workflow run exists at the inspected source SHA. A passing export dispatch does not qualify rendered parity. Current complete-render enforcement remains an open verification requirement. [Exact-source responses and workflows](/Users/alex/.codex/automations/noisemaker-port-completion-audit/review-20260925-053200/noisemaker-for-threejs-remote-evidence.json).
+Review CI boundary: No workflow run exists at the inspected source SHA. A passing export dispatch does not qualify rendered parity. Current complete-render enforcement remains an open verification requirement. Exact-source responses and workflows (audit evidence `review-20260925-053200/noisemaker-for-threejs-remote-evidence.json`).
 
 ### Completion audit, 2026-09-26
 
@@ -99,12 +99,12 @@ Raw evidence: `/series/review-20260926-133500/result.json`.
 
 ### Daily review, 2026-09-25 (superseded by the 2026-09-26 qualification and audit)
 
-65 unit tests pass and the packed artifact contains 465 files. Neither result establishes complete browser rendering or a consumer install across the declared Three.js peer range. The prior compatibility measurements remain historical. GAP-001 remains open. Current full parity is stale and unverified. [Raw evidence](/Users/alex/.codex/automations/noisemaker-port-completion-audit/review-20260925-053200/threejs-current-tests.json).
+65 unit tests pass and the packed artifact contains 465 files. Neither result establishes complete browser rendering or a consumer install across the declared Three.js peer range. The prior compatibility measurements remain historical. GAP-001 remains open. Current full parity is stale and unverified. Raw evidence (audit evidence `review-20260925-053200/threejs-current-tests.json`).
 The review checked source changes, worker evidence, source-bound CI where present, and current served inventories. Full installed-host and platform qualification remains incomplete.
 
 Environment: macOS 26.5, Darwin arm64.
-[Source SHA-256 records](/Users/alex/.codex/automations/noisemaker-port-completion-audit/evidence-20260924-remaining-gap-documents/noisemaker-for-threejs-source-hashes.json) bind these checks to the reviewed revision.
-[Raw command evidence](/Users/alex/.codex/automations/noisemaker-port-completion-audit/evidence-20260924-remaining-gap-documents/threejs-tests.json). [Remote evidence](/Users/alex/.codex/automations/noisemaker-port-completion-audit/evidence-20260924-remaining-gap-documents/noisemaker-for-threejs-remote.json).
+Source SHA-256 records (audit evidence `evidence-20260924-remaining-gap-documents/noisemaker-for-threejs-source-hashes.json`) bind these checks to the reviewed revision.
+Raw command evidence (audit evidence `evidence-20260924-remaining-gap-documents/threejs-tests.json`). Remote evidence (audit evidence `evidence-20260924-remaining-gap-documents/noisemaker-for-threejs-remote.json`).
 
 Executed command:
 
@@ -226,7 +226,7 @@ Implementation belongs to the separate job. Do not port additional effects or ad
 
 2026-09-26 GAP-004 partial at `da1849915bdbdfee221d59bacc8f5cc83e69ad3d` (this register's containing commit at run time; see `git log`): the gap's Linux host-version leg was executed — `parity/installed-consumer.mjs` in an isolated npm consumer at three.js `0.186.1` (npm `dist-tags.latest`) passed the driver gate, exit 0, zero console/page errors, enforced vendor hashes `8b9f9eee…`/`05c4d7b7…`, 210/210 mini-bundles; STATUS.md Known limits "Platform" bullet corrected to scope the historical Apple Silicon/Metal claim. GAP-004 remains blocked: no macOS/Apple Silicon or Windows host exists in this environment, so the per-platform sweep and consumer-driver legs are unmeasured. `npm test` 66/66 and lint clean at the candidate. Evidence: STATUS.md "Installed consumer at three.js `0.186.1` 2026-09-26".
 
-2026-09-25 daily review at `05f599274ed11e6d0778b7a21978f058f2b47c06`: source freshness and bounded evidence reviewed. Open qualification limits retained. [Retained review evidence](/Users/alex/.codex/automations/noisemaker-port-completion-audit/review-20260925-053200/threejs-current-tests.json). No new closure claimed.
+2026-09-25 daily review at `05f599274ed11e6d0778b7a21978f058f2b47c06`: source freshness and bounded evidence reviewed. Open qualification limits retained. Retained review evidence (audit evidence `review-20260925-053200/threejs-current-tests.json`). No new closure claimed.
 
 2026-09-26 daily review at `bbef9990b3515acf16213a6c5a088a9edd702b1c`: every gate and both consumer drivers re-executed independently, all exit 0. GAP-001, GAP-002, and GAP-003 closures verified and retained. GAP-004 (platform and host-version qualification, blocked) and GAP-005 (source-update rendered-parity CI gate, open) added. Evidence: `/series/review-20260926-133500/result.json`.
 
@@ -240,4 +240,4 @@ Implementation belongs to the separate job. Do not port additional effects or ad
 | 2026-09-24 | `815d35fb3365d66a078f0eee155b14709e9ae9f2` | Created six-section register and README link. No closures. | 51 Node tests passed. The full browser image sweep and installed consumer workflow were not executed. | Full audit, installed workflows, current rendered parity, platforms, and releases remain unqualified. |
 
 Run ID: `audit-20260926-101500` (worker), `review-20260926-133500` (review). Earlier run: `20260924-remaining-gap-documents`.
-[Operational evidence](/Users/alex/.codex/automations/noisemaker-port-completion-audit/evidence-20260924-remaining-gap-documents) (historical provenance, source host). Current audit evidence: `/series/evidence-audit-20260926-101500/`. Creating this register does not advance successful-audit timestamps or the rotation.
+Operational evidence (audit evidence `evidence-20260924-remaining-gap-documents`) (historical provenance, source host). Current audit evidence: `/series/evidence-audit-20260926-101500/`. Creating this register does not advance successful-audit timestamps or the rotation.
