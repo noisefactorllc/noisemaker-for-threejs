@@ -39,6 +39,53 @@
       })()
       const MESH_SHAPES = { cube: CUBE }
 
+      // Pack mesh vertices into square RGBA texture grids (xyz+valid / normal / uv)
+      // and upload to mesh0 on the current backend. Shared by the injected mesh
+      // fixture and the live OBJ fixture.
+      function applyMeshData(pipeline, shape) {
+        const { positions, normals, vertexCount } = shape
+        const w = Math.max(1, Math.ceil(Math.sqrt(vertexCount)))
+        const h = Math.max(1, Math.ceil(vertexCount / w))
+        const N = w * h
+        const pos = new Float32Array(N * 4)
+        const nrm = new Float32Array(N * 4)
+        const uv = new Float32Array(N * 4)
+        for (let i = 0; i < vertexCount; i++) {
+          pos[i * 4] = positions[i * 3]; pos[i * 4 + 1] = positions[i * 3 + 1]; pos[i * 4 + 2] = positions[i * 3 + 2]; pos[i * 4 + 3] = 1
+          nrm[i * 4] = normals[i * 3]; nrm[i * 4 + 1] = normals[i * 3 + 1]; nrm[i * 4 + 2] = normals[i * 3 + 2]
+        }
+        pipeline.backend.uploadMeshData('mesh0', pos, nrm, uv, w, h, vertexCount)
+      }
+
+      // Minimal OBJ parser for the LIVE mesh fixture (fetch a fixed .obj URL, parse,
+      // upload). The published bundle's parseOBJ is internal-only, so the harness
+      // parses; the acquisition is the real fetch path. Supports v lines and tri/quad
+      // face lines with any corner form (f v, f v/vt, f v//vn, f v/vt/vn); vn/vt data
+      // is ignored (normals/uvs upload as zeros), comments and empties skipped.
+      function parseObj(text) {
+        const verts = []
+        const positions = []
+        const normals = []
+        for (const rawLine of text.split(/\r?\n/)) {
+          const line = rawLine.trim()
+          if (!line || line.startsWith('#')) continue
+          const parts = line.split(/\s+/)
+          if (parts[0] === 'v' && parts.length >= 4) verts.push([Number(parts[1]), Number(parts[2]), Number(parts[3])])
+          else if (parts[0] === 'f' && parts.length >= 4) {
+            const idx = parts.slice(1).map((corner) => Math.abs(parseInt(corner, 10)) - 1)
+            for (let i = 1; i + 1 < idx.length; i++) {
+              for (const vi of [idx[0], idx[i], idx[i + 1]]) {
+                const v = verts[vi]
+                if (!v) throw new Error('OBJ face references missing vertex ' + (vi + 1))
+                positions.push(v[0], v[1], v[2]); normals.push(0, 0, 0)
+              }
+            }
+          }
+        }
+        if (!positions.length) throw new Error('OBJ has no triangulated faces')
+        return { positions, normals, vertexCount: positions.length / 3 }
+      }
+
       // Read the golden (the CDN engine's own WebGL2Backend) render surface as linear float
       // (FBO on the surface texture, RGBA/FLOAT) — same readback the candidate uses.
       function readGolden(pipeline, size) {
@@ -167,22 +214,12 @@
         pipeline.setAudioState({ waveform, spectrum, low: 0, mid: 0, high: 0, vol: 0, fft: new Float32Array(16) })
       }
       if (inject.mesh) {
-          // Pack the precomputed mesh vertices into a square RGBA texture grid (xyz+valid /
-          // normal / uv) and upload to mesh0 surfaces on BOTH backends. Identical bytes ->
-          // identical raster. count drawn = w*h (padding verts are zero -> degenerate, no frags).
-          const { positions, normals, vertexCount } = MESH_SHAPES[inject.mesh.shape || 'cube']
-          const w = Math.max(1, Math.ceil(Math.sqrt(vertexCount)))
-          const h = Math.max(1, Math.ceil(vertexCount / w))
-          const N = w * h
-          const pos = new Float32Array(N * 4)
-          const nrm = new Float32Array(N * 4)
-          const uv = new Float32Array(N * 4)
-          for (let i = 0; i < vertexCount; i++) {
-            pos[i * 4] = positions[i * 3]; pos[i * 4 + 1] = positions[i * 3 + 1]; pos[i * 4 + 2] = positions[i * 3 + 2]; pos[i * 4 + 3] = 1
-            nrm[i * 4] = normals[i * 3]; nrm[i * 4 + 1] = normals[i * 3 + 1]; nrm[i * 4 + 2] = normals[i * 3 + 2]
-          }
-          pipeline.backend.uploadMeshData('mesh0', pos, nrm, uv, w, h, vertexCount)
-        }
+        applyMeshData(pipeline, MESH_SHAPES[inject.mesh.shape || 'cube'])
+      }
+      if (inject.meshLive) {
+        const text = await (await fetch(inject.meshLive.url)).text()
+        applyMeshData(pipeline, parseObj(text))
+      }
       }
 
       window.__nm_timeseries = async ({ dsl, mode, size, frames, captureEvery, loopFrames, inject }) => {
@@ -218,7 +255,7 @@
         // zero prior renders is never a moment the engine's own authors consider meaningful to
         // sample. Scoped to mesh specifically: audio/image injection (setAudioState /
         // updateTextureFromSource) has no such settle frame and is already bit-exact at frame 1.
-        if (inject?.mesh) pipeline.render(0)
+        if (inject?.mesh || inject?.meshLive) pipeline.render(0)
 
         const captures = []
         for (let i = 0; i < frames; i++) {

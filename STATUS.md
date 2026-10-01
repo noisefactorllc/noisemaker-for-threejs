@@ -664,13 +664,16 @@ Beyond the injected fixtures above, `parity/sweep-live-inputs.mjs`
 `new Image()` and bound with `updateTextureFromSource`, a fixed WebM decoded by a real
 `<video>` element (seeked to t=0.5s), and a fixed WAV decoded via
 `OfflineAudioContext.decodeAudioData` (the 128-point waveform/spectrum are derived from the
-decoded samples by shared deterministic page code). Both harness modes decode the same fixed
-bytes in the same browser, so the comparison is still a backend-vs-backend diff at tolerance 0.
-First run on Linux/headless SwiftShader: all four cases (media image-live, media video-live,
-scope audio-live, spectrum audio-live) worst max-abs-diff 0, exit 0; confirmed identically on
-native Apple M4/Metal via the macOS GPU host broker (chromium-headless-shell with
-`--use-angle=metal`; probe: `ANGLE (Apple, ANGLE Metal Renderer: Apple M4)`). Live mic/camera
-streams (nondeterministic) and real `.obj` URL loading remain unqualified.
+decoded samples by shared deterministic page code). A fifth case fetches a fixed `.obj` URL
+through the real fetch path and parses it with the harness's own `parseObj` (the published
+bundle's `parseOBJ` is internal-only) before `uploadMeshData`. Both harness modes decode the
+same fixed bytes in the same browser, so the comparison is still a backend-vs-backend diff at
+tolerance 0. Measured on Linux/headless SwiftShader: all five cases (media image-live,
+media video-live, scope audio-live, spectrum audio-live, mesh OBJ-live) worst max-abs-diff 0,
+exit 0; confirmed identically on native Apple M4/Metal via the macOS GPU host broker
+(chromium-headless-shell with `--use-angle=metal`; probe: `ANGLE (Apple, ANGLE Metal Renderer:
+Apple M4)`). Live mic/camera streams (nondeterministic) and engine-side `.obj` parsing remain
+unqualified.
 
 ## Known limits
 
@@ -683,11 +686,13 @@ Coverage is measured against the published 210-effect catalog.
   is OS/font-dependent, so cross-machine byte-stability is not claimed, and no corpus program
   calls `text()`. (The sibling Babylon port also drops `text`.)
 - **External inputs are decoded from fixed fixture bytes, not live streams.** `scope`/`spectrum`
-  have no live `AnalyserNode`/mic decode; `media` has no live camera stream; `meshLoader`/`meshRender`
-  cannot load a real `.obj` URL because the engine's `parseOBJ` is internal-only in the published
-  bundle (not exported). The binding/upload + shader path is verified with both page-synthesized
+  have no live `AnalyserNode`/mic decode; `media` has no live camera stream; the engine's
+  `parseOBJ` is internal-only in the published bundle, so the adapter itself cannot parse OBJ
+  (the live sweep fetches a fixed `.obj` URL and parses it harness-side before `uploadMeshData`).
+  The binding/upload + shader path is verified with both page-synthesized
   injected inputs and, since the live-decode sweep (GAP-004), with browser-decoded image/video/
-  audio fixture bytes; only live mic/camera acquisition and `.obj` URL loading are missing.
+  audio fixture bytes and a fetched `.obj`; only live mic/camera acquisition and engine-side
+  `.obj` parsing are missing.
 - **Param aliases.** `registerParamAliases` is internal-only in the published bundle (not exported),
   so the adapter accepts the **canonical** argument names the noisedeck UI emits, not alternate
   aliases (e.g. `backgroundColor` → `bgColor`). The live corpus is unaffected.
@@ -719,10 +724,11 @@ Coverage is measured against the published 210-effect catalog.
   font raster, worst=0 on the 2026-09-26 Linux/SwiftShader runs). Remaining risk is font-raster
   variance across machines: gate with SSIM instead of byte-equality, or use a pre-rasterized atlas.
 - **Live host inputs** — real feed paths partially qualified (GAP-004): browser-decoded image
-  (`new Image()`), video (`<video>` seek), and audio (`decodeAudioData`) now run through
-  `parity/sweep-live-inputs.mjs` byte-exact. Remaining: live mic/camera streams
-  (`AnalyserNode`/`getUserMedia` — nondeterministic) and `meshLoader` fetching a real `.obj`
-  URL (needs `parseOBJ` exported upstream, or a small local OBJ parser).
+  (`new Image()`), video (`<video>` seek), audio (`decodeAudioData`), and a fetched-and-parsed
+  `.obj` URL (harness-side `parseObj`, since the engine's `parseOBJ` is not exported) now run
+  through `parity/sweep-live-inputs.mjs` byte-exact. Remaining: live mic/camera streams
+  (`AnalyserNode`/`getUserMedia` — nondeterministic) and engine-side OBJ parsing inside the
+  adapter (needs `parseOBJ` exported upstream).
 - **Param aliases** — add a local alias map (or consume `registerParamAliases` if a future CDN bundle
   exports it) so alternate arg names resolve.
 - **Corpus 88/88** — reached automatically if the remaining unpublished community effects are ever
