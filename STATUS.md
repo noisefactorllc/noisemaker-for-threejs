@@ -497,6 +497,62 @@ tree with that refreshed bundle in place, and the adapter's `import * as core` l
 vendored bytes, so the recorded hash pins the engine the sweeps ran against; the three.js adapter
 code under `src/` and `test/` is unchanged and byte-identical to the prior published commit.*
 
+*Incrementally synced 2026-10-01 to upstream reference `ed478159` (Tearoff trigger
+`a912749fab5c..73c15be00d68`, force-pushed/non-contiguous delivery), audited by diffing a fresh
+clone of noisefactorllc/noisemaker. The trigger's declared end `73c15be0` is a real upstream
+commit, but the served CDN artifact had already republished past it: `bash vendor/fetch.sh` now
+serves `Build: ed478159` (core bundle 903581 bytes, SHA-256
+`e406603e2aa9c3bb202264b74968e5c55c13df655c7e5fe968a299757f3ecb02`, CDN Last-Modified
+2026-09-30T21:42:16Z matching the bundle's `Date:` header), so the audit window is the prior
+audited reference `296e0138` → served `ed478159`. A clean local build at `ed478159`
+(`scripts/bundle-shaders.js`, esbuild 0.28.2 per the upstream lockfile) is byte-identical to the
+served bundle past the two header lines, and `effects/manifest.json` is unchanged at SHA-256
+`05c4d7b7744837ae90a3bb4c89e5403ff09448a74d9d7e824abb3d719ad3314e` — 210/210 mini-bundles,
+catalog unchanged, no new or removed effects, no parameter-contract change.
+
+Shader deltas in the window (`296e0138..ed478159`), by commit — no catalog change anywhere:
+- `04e8582c`: docs-only.
+- `c28e8fdb` (GAP-019 follow-up): engine webgl2 rebinds the mesh FBO after `ensureDepthBuffer`
+  (initial depth allocation unbinds the framebuffer). Not adapter-visible: ThreeBackend's
+  `ensureMeshDepth` binds the target FBO itself at entry and `executeTriangles` rebinds before
+  the depth detach — the unbind-then-render hazard cannot occur on this port.
+- `7aff843a` (GAP-024): harness/tests only (`shaders/tests/session-identity.js` etc.).
+- `73c15be0` (GAP-026): production renderer invokes `onInit`/`onUpdate`/`onDestroy` lifecycle
+  hooks and overlays hook-returned uniforms under pass-resolved ones. Runs inside the served
+  bundle's `Pipeline`; no new `backend.*` call — the only new backend touch in the window is a
+  guarded `typeof this.backend.getName === 'function'` probe, already implemented on ThreeBackend.
+- `3e21906e..68273906`, `4d47b3fd`, `4f5e0d28` (GAP-032): audio capture state/readiness inside
+  `shaders/src/runtime/external-input.js`; the adapter implements no audio surface.
+- `dd4606ea`, `a0e9bbff`, `e24c844f` (GAP-007): engine-backend structured diagnostics internal
+  to the engine's own backends; the served bundle contains no `backend.diagnostics` reference.
+- `16c1997c`, `ed478159` (GAP-010): harness/tests only.
+- remainder docs/ledger/deps only.
+
+Bundle hygiene re-verified: zero occurrences of validator symbols in the core bundle; grep over
+all 210 mini-bundles finds `mipmaps` only in the pre-existing prose comments (`filter/smooth.js`,
+`filter/corrupt.js`) and no `persistent` — no new texture-spec fields on this catalog.
+
+Checks at the pre-commit working tree (Linux 6.8.0-134-generic, Node v26, Chrome Headless Shell
+149 / SwiftShader; `PLAYWRIGHT_BROWSERS_PATH` set inline per environment convention): `npm test`
+101/101 PASS exit 0; `npm run lint` clean exit 0; `node parity/sweep-programs.mjs` **PASS=304
+FAIL=0 ERR=0, worst max-abs-diff=0** exit 0; `bash parity/sweep-stateful.sh` **worst
+max-abs-diff=0** exit 0; `npm run parity` corpus **PASS=81 FAIL=0 ERR=7 worst=0** exit 0 (same 7
+documented golden-side S001 community-effect ERR rows: `4bm9AA`, `8KMvAg`, `B5oBsA`, `PmJyUQ`,
+`WyalUg`, `fKPUww`, `liTYEg`; denominator unchanged at 88). No adapter, `src/`, or `test/` file
+changed in this round.
+
+*Provenance: the committed delta of this round is the STATUS.md entry alone. `vendor/noisemaker/`
+is gitignored by repo policy — "commit the fetch script + loader, never the engine bytes"
+(`vendor/fetch.sh` header; `.gitignore`) — the same posture every prior entry documents its bundle
+under. The documented 903581-byte / SHA-256 `e406603e…` core bundle is the CDN artifact served at
+`https://shaders.noisedeck.app/1/` with Last-Modified 2026-09-30T21:42:16Z; it is reproducible
+byte-for-byte by any consumer via `bash vendor/fetch.sh` (the script's only input is the pinned
+CDN base — verify the recorded SHA-256 after fetching). All checks above were executed in this
+working tree with that refreshed bundle in place, and the adapter's `import * as core` loads
+exactly those vendored bytes, so the recorded hash pins the engine the sweeps ran against; the
+three.js adapter code under `src/` and `test/` is unchanged and byte-identical to the prior
+published commit.*
+
 > **The programs sweep runs at frame 1, where normalized time is 0** (`t_i = i / loopFrames`).
 > That makes it a compile/link/uniform-binding gate, not a temporal one: any effect whose output
 > is scaled by `time` renders its static form there. `filter/pondRipples`' `speed` control is the
