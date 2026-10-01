@@ -1,0 +1,4 @@
+{
+  "_comment": "LIVE external-input audio fixture (GAP-004). The harness page fetches this fixed WAV, decodes it with the browser's own audio decoder (OfflineAudioContext.decodeAudioData at the file's native 44100 Hz), and derives the 128-point waveform/spectrum from the decoded samples with shared deterministic code before setAudioState.",
+  "audioLive": { "url": "/parity/assets/live-audio.wav" }
+}

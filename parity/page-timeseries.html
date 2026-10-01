@@ -98,7 +98,75 @@
               if (typeof v === 'string' && /_step_\d+$/.test(v)) ids.add(v)
           for (const id of ids) pipeline.backend.updateTextureFromSource(id, cv, { flipY: true })
         }
-        if (inject.mesh) {
+        // LIVE external-input sources (GAP-004). Unlike the injected fixtures above,
+        // these do NOT synthesize pixels or samples in the page: the browser's own
+      // decoders (PNG image decode, WebM video decode, WAV audio decode) produce
+      // the data that reaches updateTextureFromSource / setAudioState. The fixture
+      // assets are fixed bytes served same-origin by the harness server, so both
+      // modes (which run in the same browser) decode byte-identical sources; the
+      // derivation of the 128-point audio waveform/spectrum from the decoded
+      // samples is shared deterministic code below.
+      async function externalInputIds(pipeline) {
+        const ids = new Set()
+        for (const pass of pipeline.graph?.passes || [])
+          for (const v of Object.values(pass.inputs || {}))
+            if (typeof v === 'string' && /_step_\d+$/.test(v)) ids.add(v)
+        return ids
+      }
+      if (inject.imageLive) {
+        const img = new Image()
+        img.src = inject.imageLive.url
+        await img.decode()
+        for (const id of await externalInputIds(pipeline))
+          pipeline.backend.updateTextureFromSource(id, img, { flipY: true })
+      }
+      if (inject.videoLive) {
+        const video = document.createElement('video')
+        video.muted = true
+        video.src = inject.videoLive.url
+        await new Promise((res, rej) => {
+          video.onloadeddata = res
+          video.onerror = () => rej(new Error('video failed to load: ' + inject.videoLive.url))
+        })
+        await new Promise((res, rej) => {
+          video.onseeked = res
+          video.onerror = () => rej(new Error('video failed to seek: ' + inject.videoLive.url))
+          video.currentTime = inject.videoLive.seek ?? 0
+        })
+        for (const id of await externalInputIds(pipeline))
+          pipeline.backend.updateTextureFromSource(id, video, { flipY: true })
+      }
+      if (inject.audioLive) {
+        const bytes = await (await fetch(inject.audioLive.url)).arrayBuffer()
+        // Decode at the file's own rate (no resample): an OfflineAudioContext at
+        // 44100 Hz decodes the 44100 Hz fixture 1:1.
+        const ctx = new OfflineAudioContext(1, 128, 44100)
+        const decoded = await ctx.decodeAudioData(bytes)
+        const ch = decoded.getChannelData(0)
+        // Waveform: 128 samples evenly spaced across the whole decoded clip.
+        const N = 128
+        const waveform = new Float32Array(N)
+        for (let i = 0; i < N; i++) waveform[i] = ch[Math.floor((i * (ch.length - 1)) / (N - 1))]
+        // Spectrum: magnitude of a fixed 1024-sample rectangular-window DFT at 128
+        // evenly spaced bins, normalized to peak — deterministic, identical for
+        // both modes (same code, same decoded bytes).
+        const W = Math.min(1024, ch.length)
+        const spectrum = new Float32Array(N)
+        let peak = 0
+        for (let k = 0; k < N; k++) {
+          let re = 0, im = 0
+          for (let w = 0; w < W; w++) {
+            const a = (2 * Math.PI * k * w) / W
+            re += ch[w] * Math.cos(a)
+            im -= ch[w] * Math.sin(a)
+          }
+          spectrum[k] = Math.hypot(re, im) / W
+          if (spectrum[k] > peak) peak = spectrum[k]
+        }
+        if (peak > 0) for (let k = 0; k < N; k++) spectrum[k] /= peak
+        pipeline.setAudioState({ waveform, spectrum, low: 0, mid: 0, high: 0, vol: 0, fft: new Float32Array(16) })
+      }
+      if (inject.mesh) {
           // Pack the precomputed mesh vertices into a square RGBA texture grid (xyz+valid /
           // normal / uv) and upload to mesh0 surfaces on BOTH backends. Identical bytes ->
           // identical raster. count drawn = w*h (padding verts are zero -> degenerate, no frags).

@@ -656,6 +656,22 @@ shader path, the same way the rest of the catalog is validated.
 The binding/upload infrastructure exists (`setExternalTexture`, `updateTextureFromSource`,
 `uploadDataTexture`, pipeline `setAudioState`) — only live data acquisition is out of scope.
 
+### External-input effects — live decoder coverage (GAP-004)
+
+Beyond the injected fixtures above, `parity/sweep-live-inputs.mjs`
+(`parity/live-inputs.manifest.json`, assets in `parity/assets/`) runs `media`, `scope`, and
+`spectrum` with external data produced by the browser's OWN decoders: a fixed PNG decoded via
+`new Image()` and bound with `updateTextureFromSource`, a fixed WebM decoded by a real
+`<video>` element (seeked to t=0.5s), and a fixed WAV decoded via
+`OfflineAudioContext.decodeAudioData` (the 128-point waveform/spectrum are derived from the
+decoded samples by shared deterministic page code). Both harness modes decode the same fixed
+bytes in the same browser, so the comparison is still a backend-vs-backend diff at tolerance 0.
+First run on Linux/headless SwiftShader: all four cases (media image-live, media video-live,
+scope audio-live, spectrum audio-live) worst max-abs-diff 0, exit 0; confirmed identically on
+native Apple M4/Metal via the macOS GPU host broker (chromium-headless-shell with
+`--use-angle=metal`; probe: `ANGLE (Apple, ANGLE Metal Renderer: Apple M4)`). Live mic/camera
+streams (nondeterministic) and real `.obj` URL loading remain unqualified.
+
 ## Known limits
 
 Coverage is measured against the published 210-effect catalog.
@@ -666,10 +682,12 @@ Coverage is measured against the published 210-effect catalog.
   runs. The 2026-07-23 Apple Silicon run measured it as the lone non-zero result. Glyph rendering
   is OS/font-dependent, so cross-machine byte-stability is not claimed, and no corpus program
   calls `text()`. (The sibling Babylon port also drops `text`.)
-- **External inputs are injected, not live.** `scope`/`spectrum` have no live `AnalyserNode`/mic
-  decode; `media` has no live `<video>`/camera/image-URL decode; `meshLoader`/`meshRender` cannot
-  load a real `.obj` URL because the engine's `parseOBJ` is internal-only in the published bundle (not
-  exported). The binding/upload + shader path is verified; only the live data acquisition is missing.
+- **External inputs are decoded from fixed fixture bytes, not live streams.** `scope`/`spectrum`
+  have no live `AnalyserNode`/mic decode; `media` has no live camera stream; `meshLoader`/`meshRender`
+  cannot load a real `.obj` URL because the engine's `parseOBJ` is internal-only in the published
+  bundle (not exported). The binding/upload + shader path is verified with both page-synthesized
+  injected inputs and, since the live-decode sweep (GAP-004), with browser-decoded image/video/
+  audio fixture bytes; only live mic/camera acquisition and `.obj` URL loading are missing.
 - **Param aliases.** `registerParamAliases` is internal-only in the published bundle (not exported),
   so the adapter accepts the **canonical** argument names the noisedeck UI emits, not alternate
   aliases (e.g. `backgroundColor` → `bgColor`). The live corpus is unaffected.
@@ -685,19 +703,26 @@ Coverage is measured against the published 210-effect catalog.
   mishandled, the default case would already show a diff) and were not separately enumerated per
   choice — doing so exhaustively (e.g. the 56-entry shared palette enum, reused across ~8 effects)
   would not test anything the define-mode sweep and the default fixtures don't already cover.
-- **Platform.** The historical Apple Silicon / ANGLE + Metal (WebGL2) run predates the
-  2026-09-26 Linux qualification; every currently measured gate, sweep, and consumer driver
-  ran on Linux/headless SwiftShader only. macOS, Windows, and real-GPU hosts are unmeasured
-  (GAP-004, blocked on host availability).
+- **Platform.** Measured hosts (GAP-004): Linux/headless SwiftShader (this repo's own runs);
+  hosted ubuntu-24.04, macos-15-arm64, and windows-2022 through the exact-source CI matrix
+  (run 36785169252 at `31ffbbc` — Programs 304/304 worst=0, Stateful 13 bit-exact, Corpus
+  81 PASS + 7 named golden-side ERR on ubuntu/macos; windows renders 303/304 with the recorded
+  `octaveWarp` windows-hosted render block and passes Stateful and Corpus identically); and
+  native Apple M4 / ANGLE+Metal (2026-09-27, GAP-004 record: Programs 304/304 and Stateful 13
+  byte-exact, installed three.js 0.186.1 and served kit 0.1.6 consumer gates pass). Still
+  unmeasured: hosted-Windows consumer drivers (no CI job runs them) and live mic/camera/OBJ
+  inputs.
 
 ## Follow-up work
 
 - **`text` cross-machine stability** — the existing `text.dsl` fixture passes in-suite (same-browser
   font raster, worst=0 on the 2026-09-26 Linux/SwiftShader runs). Remaining risk is font-raster
   variance across machines: gate with SSIM instead of byte-equality, or use a pre-rasterized atlas.
-- **Live host inputs** — wire real feeds for `scope`/`spectrum` (`AnalyserNode`), `media`
-  (`<video>`/image element), and `meshLoader` (fetch + parse OBJ — needs `parseOBJ` exported
-  upstream, or a small local OBJ parser).
+- **Live host inputs** — real feed paths partially qualified (GAP-004): browser-decoded image
+  (`new Image()`), video (`<video>` seek), and audio (`decodeAudioData`) now run through
+  `parity/sweep-live-inputs.mjs` byte-exact. Remaining: live mic/camera streams
+  (`AnalyserNode`/`getUserMedia` — nondeterministic) and `meshLoader` fetching a real `.obj`
+  URL (needs `parseOBJ` exported upstream, or a small local OBJ parser).
 - **Param aliases** — add a local alias map (or consume `registerParamAliases` if a future CDN bundle
   exports it) so alternate arg names resolve.
 - **Corpus 88/88** — reached automatically if the remaining unpublished community effects are ever

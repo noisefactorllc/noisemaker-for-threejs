@@ -1,0 +1,4 @@
+{
+  "_comment": "LIVE external-input media fixture (GAP-004). The harness page loads this fixed PNG through the browser's own image decoder (new Image() + decode()) and binds the decoded element to media's external imageTex_step_N via updateTextureFromSource. No synthesized canvas is involved.",
+  "imageLive": { "url": "/parity/assets/live-media.png" }
+}

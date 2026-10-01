@@ -65,7 +65,7 @@ if (batchIdx >= 0) {
   })]
 }
 
-const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.json': 'application/json', '.glsl': 'text/plain', '.vert': 'text/plain', '.frag': 'text/plain', '.wgsl': 'text/plain' }
+const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.json': 'application/json', '.glsl': 'text/plain', '.vert': 'text/plain', '.frag': 'text/plain', '.wgsl': 'text/plain', '.png': 'image/png', '.wav': 'audio/wav', '.webm': 'video/webm' }
 function startServer() {
   return new Promise((res) => {
     const server = createServer((req, rq) => {
@@ -74,7 +74,10 @@ function startServer() {
       rq.setHeader('Content-Type', MIME[extname(p)] || 'application/octet-stream')
       createReadStream(p).pipe(rq)
     })
-    server.listen(0, '127.0.0.1', () => res({ server, port: server.address().port }))
+    // NM_TS_PORT: some sandboxed hosts (e.g. the macOS GPU host broker) only
+    // permit an explicit loopback port from a fixed range — listen(0) is EPERM.
+    const fixedPort = process.env.NM_TS_PORT ? Number(process.env.NM_TS_PORT) : 0
+    server.listen(fixedPort, '127.0.0.1', () => res({ server, port: server.address().port }))
   })
 }
 

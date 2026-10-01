@@ -1,0 +1,9 @@
+{
+  "_comment": "GAP-004 live external-input parity cases: the same effect programs as the injected external-input fixtures (media, scope, spectrum), but the external data comes from the browser's own decoders (PNG image decode, WebM video decode via a real <video> element, WAV audio decode via decodeAudioData) instead of page-synthesized canvas/synth inputs. Graded at tolerance 0 / ssim-min 1 by parity/timeseries.mjs.",
+  "cases": [
+    { "dslPath": "parity/programs/media.dsl", "injectPath": "parity/assets/live-image.inject.json", "frames": 20, "capture": 10, "size": 128, "loopFrames": 600 },
+    { "dslPath": "parity/programs/media.dsl", "injectPath": "parity/assets/live-video.inject.json", "frames": 20, "capture": 10, "size": 128, "loopFrames": 600 },
+    { "dslPath": "parity/programs/scope.dsl", "injectPath": "parity/assets/live-audio.inject.json", "frames": 20, "capture": 10, "size": 128, "loopFrames": 600 },
+    { "dslPath": "parity/programs/spectrum.dsl", "injectPath": "parity/assets/live-audio.inject.json", "frames": 20, "capture": 10, "size": 128, "loopFrames": 600 }
+  ]
+}
