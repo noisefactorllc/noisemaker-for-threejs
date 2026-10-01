@@ -9,7 +9,7 @@
 // ES modules are singletons: this `core` instance and any direct core import in a harness page
 // resolve to the same URL, so the effect registry is shared.
 import * as core from '../vendor/noisemaker/noisemaker-shaders-core.esm.js'
-import { bootCore, registerEffectInstance, finalizeEnums } from './effects/register-effect.js'
+import { bootCore, registerEffectInstance, finalizeEnums, registerPortableEffect } from './effects/register-effect.js'
 
 export const {
   Backend,
@@ -66,4 +66,13 @@ export async function loadEffects (ids) {
     }
   }
   await finalizeEnums(core, allChoices)
+}
+
+// Register a raw Portable definition (Portable JSON + shaders[program].glsl/wgsl) into the
+// user.* namespace — the adapter equivalent of upstream CanvasRenderer.registerPortableEffect.
+// The registry is realm-global (see the note at the top of this file), so duplicate names must
+// not change accepted effects; validation rejects them before any registration.
+export async function registerPortableEffectInstance (definition) {
+  await ensureBooted()
+  return registerPortableEffect(core, definition)
 }

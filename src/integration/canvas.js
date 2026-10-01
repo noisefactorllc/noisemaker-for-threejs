@@ -6,7 +6,7 @@
  * effects, runs the reused compileGraph, and builds a Pipeline on ThreeBackend.
  */
 import * as THREE from 'three'
-import { compileGraph, loadEffectsForDsl } from '../engine-browser.js'
+import { compileGraph, loadEffectsForDsl, registerPortableEffectInstance } from '../engine-browser.js'
 import { createThreePipeline } from '../runtime/create-three-pipeline.js'
 
 export class NoisemakerCanvas {
@@ -45,6 +45,16 @@ export class NoisemakerCanvas {
       }
     }
     return graph
+  }
+
+  /**
+   * Register a raw Portable definition (Portable JSON + shaders[program].glsl/wgsl) into the
+   * user.* namespace — the adapter equivalent of upstream CanvasRenderer.registerPortableEffect.
+   * Validation-only surface: it checks registration inputs, not shader compilation or backend
+   * support. Compile a program referencing `user.<func>` afterwards with compile().
+   */
+  registerPortableEffect(definition) {
+    return registerPortableEffectInstance(definition)
   }
 
   addSink(sink) {
