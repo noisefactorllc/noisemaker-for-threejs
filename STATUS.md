@@ -553,6 +553,31 @@ exactly those vendored bytes, so the recorded hash pins the engine the sweeps ra
 three.js adapter code under `src/` and `test/` is unchanged and byte-identical to the prior
 published commit.*
 
+*Incrementally synced 2026-10-01 to upstream reference `cb22a05e` (Tearoff trigger
+`73c15be00d68..cb22a05eff9a`, force-pushed/non-contiguous delivery), audited by diffing a fresh
+clone of noisefactorllc/noisemaker. The delta past the prior audited reference `ed478159` is
+`cb22a05e` ("Register Portable effects through the shared canvas renderer") plus eight
+docs/ledger-only commits (`a02f73e7`..`f5ca07cd`) — `cb22a05e` adds
+`CanvasRenderer.registerPortableEffect(definition)` (schema validation, prototype-key poisoning
+guards, user.* namespace registration) and `shaders/tests/test_portable_registration.js`; no
+effect catalog, DSL, or shader-code change. Not adapter-visible: `bash vendor/fetch.sh` still
+serves the byte-identical `ed478159` build (core bundle 903581 bytes, SHA-256
+`e406603e2aa9c3bb202264b74968e5c55c13df655c7e5fe968a299757f3ecb02`, CDN Last-Modified
+2026-09-30T21:42:16Z — byte-identity with the prior audited bundle pins bundle hygiene),
+`effects/manifest.json` unchanged at SHA-256
+`05c4d7b7744837ae90a3bb4c89e5403ff09448a74d9d7e824abb3d719ad3314e` (210/210 mini-bundles), and
+the served core bundle contains zero occurrences of `registerPortableEffect` — the new API
+method has not yet been republished to the CDN and makes no `backend.*` call. No adapter,
+`src/`, or `test/` change required. Checks at the pre-commit working tree (same environment
+conventions as the prior entry): `npm test` 101/101 PASS exit 0; `npm run lint` clean exit 0;
+`node parity/sweep-programs.mjs` **PASS=304 FAIL=0 ERR=0, worst max-abs-diff=0** exit 0;
+`bash parity/sweep-stateful.sh` **PASS=13 FAIL=0 ERR=0, worst max-abs-diff=0** exit 0;
+`npm run parity` corpus **PASS=81 FAIL=0 ERR=7 worst=0** exit 0 (same 7 documented golden-side
+S001 community-effect ERR rows: `4bm9AA`, `8KMvAg`, `B5oBsA`, `PmJyUQ`, `WyalUg`, `fKPUww`,
+`liTYEg`; denominator unchanged at 88). The committed delta of this round is this STATUS.md
+entry alone; the adapter code under `src/` and `test/` is unchanged and byte-identical to the
+prior published commit.*
+
 > **The programs sweep runs at frame 1, where normalized time is 0** (`t_i = i / loopFrames`).
 > That makes it a compile/link/uniform-binding gate, not a temporal one: any effect whose output
 > is scaled by `time` renders its static form there. `filter/pondRipples`' `speed` control is the
