@@ -82,6 +82,22 @@ test('A user.* portable effect compiles through the adapter DSL path with choice
   assert.equal(pass.uniforms.modeUniform, 3, JSON.stringify(pass.uniforms))
 })
 
+test('A registered Portable paramAlias resolves to its canonical parameter', { skip }, async () => {
+  // Upstream registers instance.paramAliases via registerParamAliases (vendor bundle's
+  // CanvasRenderer.registerEffectWithRuntime); the adapter reaches the same internal registry
+  // through that method, so an alias must resolve to its canonical parameter at compile time.
+  await registerPortableEffect(core, definition('portableAlias', {
+    globals: {
+      mode: { type: 'int', default: 0, uniform: 'modeUniform', choices: { 'Modes:': -1, 'Soft Light': 3 } }
+    },
+    paramAliases: { oldMode: 'mode' }
+  }))
+  const graph = eng.compileGraph('search user\nportableAlias(oldMode: SoftLight).write(o0)\nrender(o0)')
+  const pass = graph.passes.find((p) => p.effectKey === 'user.portableAlias')
+  assert.ok(pass, JSON.stringify(graph.diagnostics || graph))
+  assert.equal(pass.uniforms.modeUniform, 3, 'alias resolved to canonical modeUniform: ' + JSON.stringify(pass.uniforms))
+})
+
 test('Invalid Portable packages fail before registration and leave a valid name available', { skip }, async () => {
   const invalid = [null, [], definition('bad-name'), definition('portableInvalid', { namespace: 'synth' }),
     definition('portableInvalid', { passes: [] }), definition('portableInvalid', { passes: [null] }),

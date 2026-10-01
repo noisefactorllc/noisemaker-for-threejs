@@ -87,8 +87,10 @@ export async function finalizeEnums (core, allChoices) {
 // user.*: 4 lookup aliases (bare name restored/unregistered afterwards so a Portable effect never
 // shadows an existing bare built-in), registerOp args from globals with choice-enum collection,
 // starter inference over the full pipeline-input list with explicit override, and choice-enum
-// merge. Like manifest mini-bundles, paramAliases are validated but NOT registered — the
-// published bundle does not export registerParamAliases (see the NOTE above; canonical names only).
+// merge. paramAliases are registered through the published bundle's own registration path
+// (registerParamAliases is module-internal, so the adapter reaches it via
+// CanvasRenderer.registerEffectWithRuntime); manifest mini-bundles keep the historical
+// canonical-names-only note below because their loader path predates this surface.
 export async function registerPortableEffect (core, definition) {
   const isRecord = (value) => value !== null && typeof value === 'object' && !Array.isArray(value)
   const fail = (message) => { throw new Error(`Portable effect: ${message}`) }
@@ -159,41 +161,59 @@ export async function registerPortableEffect (core, definition) {
     Object.values(pass.inputs || {}).some((input) => pipelineInputs.includes(input)))
   const effect = { namespace: 'user', name: func, instance }
 
-  const allChoices = {}
-  const args = Object.entries(instance.globals || {}).map(([key, spec]) => {
-    let enumPath = spec.enum || spec.enumPath
-    if (spec.choices && !enumPath) {
-      enumPath = `user.${func}.${key}`
-      allChoices.user = allChoices.user || {}
-      allChoices.user[func] = allChoices.user[func] || {}
-      allChoices.user[func][key] = allChoices.user[func][key] || {}
-      for (const [nm, val] of Object.entries(spec.choices)) {
-        if (typeof nm === 'string' && nm.endsWith(':')) continue
-        allChoices.user[func][key][nm] = { type: 'Number', value: val }
-        const san = core.sanitizeEnumName ? core.sanitizeEnumName(nm) : nm
-        if (san && san !== nm) allChoices.user[func][key][san] = { type: 'Number', value: val }
-      }
-    }
-    return {
-      name: key,
-      type: spec.type === 'vec4' ? 'color' : spec.type,
-      default: spec.default,
-      enum: enumPath,
-      enumPath,
-      min: spec.min,
-      max: spec.max,
-      uniform: spec.uniform,
-      choices: spec.choices,
-    }
-  })
-
-  // Portable effects belong to user.*; preserve a built-in's bare lookup.
+  // Portable effects belong to user.*; preserve a built-in's bare lookup. Registration goes
+  // through the published bundle's own CanvasRenderer.registerEffectWithRuntime when available
+  // (it registers the lookup aliases, the op, AND paramAliases + hidden/deprecatedBy aliases —
+  // registerParamAliases itself is module-internal and not exported), with the manual equivalent
+  // below kept as fallback if a future bundle stops exposing it.
   const previousBare = core.getEffect(func)
+  let choices
+  const runtimeRegistrar = core.CanvasRenderer?.prototype?.registerEffectWithRuntime
   try {
-    core.registerEffect(func, instance)
-    core.registerEffect(`user.${func}`, instance)
-    core.registerEffect(`user/${func}`, instance)
-    if (core.registerOp) core.registerOp(`user.${func}`, { name: func, args })
+    if (runtimeRegistrar) {
+      choices = runtimeRegistrar.call(null, effect)
+    } else {
+      const allChoices = {}
+      const args = Object.entries(instance.globals || {}).map(([key, spec]) => {
+        let enumPath = spec.enum || spec.enumPath
+        if (spec.choices && !enumPath) {
+          enumPath = `user.${func}.${key}`
+          allChoices.user = allChoices.user || {}
+          allChoices.user[func] = allChoices.user[func] || {}
+          allChoices.user[func][key] = allChoices.user[func][key] || {}
+          for (const [nm, val] of Object.entries(spec.choices)) {
+            if (typeof nm === 'string' && nm.endsWith(':')) continue
+            allChoices.user[func][key][nm] = { type: 'Number', value: val }
+            const san = core.sanitizeEnumName ? core.sanitizeEnumName(nm) : nm
+            if (san && san !== nm) allChoices.user[func][key][san] = { type: 'Number', value: val }
+          }
+        }
+        return {
+          name: key,
+          type: spec.type === 'vec4' ? 'color' : spec.type,
+          default: spec.default,
+          enum: enumPath,
+          enumPath,
+          min: spec.min,
+          max: spec.max,
+          uniform: spec.uniform,
+          choices: spec.choices,
+        }
+      })
+      core.registerEffect(func, instance)
+      core.registerEffect(`user.${func}`, instance)
+      core.registerEffect(`user/${func}`, instance)
+      if (core.registerOp) core.registerOp(`user.${func}`, { name: func, args })
+      choices = Object.keys(allChoices).length ? allChoices : null
+    }
+  } catch (error) {
+    // A registrar failure after the aliases landed would leave a half-registered effect whose
+    // duplicate-name guard then blocks every retry; roll the user.* aliases back and rethrow.
+    try {
+      core.unregisterEffect(`user.${func}`)
+      core.unregisterEffect(`user/${func}`)
+    } catch { /* best effort */ }
+    throw error
   } finally {
     if (previousBare === undefined) {
       if (core.unregisterEffect) core.unregisterEffect(func)
@@ -201,7 +221,7 @@ export async function registerPortableEffect (core, definition) {
       core.registerEffect(func, previousBare)
     }
   }
-  if (core.mergeIntoEnums && Object.keys(allChoices).length) await core.mergeIntoEnums(allChoices)
+  if (choices && core.mergeIntoEnums) await core.mergeIntoEnums(choices)
   if (instance.starter && core.registerStarterOps) core.registerStarterOps([`user.${func}`])
   return effect
 }

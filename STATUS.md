@@ -562,22 +562,24 @@ docs/ledger-only commits (`a02f73e7`..`f5ca07cd`) — `cb22a05e` adds
 guards, user.* namespace registration) and `shaders/tests/test_portable_registration.js`; no
 effect catalog, DSL, or shader-code change.
 
-The served bundle does not yet carry the new API — the core bundle contains zero occurrences of
-`registerPortableEffect` — but this round ports the capability ahead of the CDN republish,
-because the adapter surface is the realm-shared registry (`src/engine-browser.js`), not
-upstream's `CanvasRenderer` subclass: `src/effects/register-effect.js` gains
+The republished served bundle carries the upstream API, but this round still ports the
+capability onto the adapter's own surface, because the adapter registry is realm-shared
+(`src/engine-browser.js`), not upstream's `CanvasRenderer` subclass: `src/effects/register-effect.js` gains
 `registerPortableEffect(core, definition)` implementing the same validation contract (DSL
 identifier func, prototype-key poisoning guards, nonempty passes naming loaded programs,
 per-language shader completeness, globals/choices/paramAliases shapes, duplicate-name
-rejection) and the same registration path (4 lookup aliases with the bare name
+rejection) and the same registration semantics — 4 lookup aliases with the bare name
 restored/unregistered afterwards so a Portable effect never shadows an existing bare built-in,
-`registerOp` args from globals with choice-enum collection, starter inference over the full
-pipeline-input list with explicit override, choice-enum merge); `NoisemakerCanvas` gains
-`registerPortableEffect(definition)` delegating through `registerPortableEffectInstance`.
-Like manifest mini-bundles, paramAliases are validated but not registered (the published bundle
-does not export `registerParamAliases`). `test/portable-registration.test.mjs` ports
-`shaders/tests/test_portable_registration.js` (7 tests) against the PUBLISHED engine bundle,
-skipping cleanly when the engine is not fetched.
+`registerOp` args from globals with choice-enum collection, paramAliases registered through the
+bundle's own internal `registerParamAliases` (reached via the bundle's
+`CanvasRenderer.registerEffectWithRuntime`, since `registerParamAliases` is module-internal and
+not exported; a manual equivalent covers a future bundle that stops exposing the method), starter
+inference over the full pipeline-input list with explicit override, and choice-enum merge;
+`NoisemakerCanvas` gains `registerPortableEffect(definition)` delegating through
+`registerPortableEffectInstance`. `test/portable-registration.test.mjs` ports
+`shaders/tests/test_portable_registration.js` (8 tests, including a paramAlias
+(`oldMode: SoftLight`) resolving to its canonical parameter) against the PUBLISHED engine
+bundle, skipping cleanly when the engine is not fetched.
 
 The CDN republished mid-audit: `bash vendor/fetch.sh` now serves `Build: e9a35740`
 (core bundle 908465 bytes, SHA-256
@@ -595,17 +597,23 @@ mini-bundles). Bundle hygiene re-verified on the republished bundle: zero occurr
 shader-parity/validator symbols (`ShaderValidator`, `shaderParity`, `attest`,
 `validateShaderProgram`); grep over all 210 mini-bundles finds `mipmaps` only in the
 pre-existing prose comments (`filter/smooth.js`, `filter/corrupt.js`) and no `persistent` — no
-new texture-spec fields on this catalog. Checks at the
-pre-commit working tree (same environment
-conventions as the prior entry): `npm test` 108/108 PASS exit 0 (101 prior + the 7 new
-Portable-registration tests); `npm run lint` clean exit 0;
-`node parity/sweep-programs.mjs` **PASS=304 FAIL=0 ERR=0, worst max-abs-diff=0** exit 0;
-`bash parity/sweep-stateful.sh` **PASS=13 FAIL=0 ERR=0, worst max-abs-diff=0** exit 0;
-`npm run parity` corpus **PASS=81 FAIL=0 ERR=7 worst=0** exit 0 (same 7 documented golden-side
-S001 community-effect ERR rows: `4bm9AA`, `8KMvAg`, `B5oBsA`, `PmJyUQ`, `WyalUg`, `fKPUww`,
-`liTYEg`; denominator unchanged at 88). The committed delta of this round is this STATUS.md
-entry plus the Portable-registration port (`src/effects/register-effect.js`,
-`src/engine-browser.js`, `src/integration/canvas.js`, `test/portable-registration.test.mjs`).*
+new texture-spec fields on this catalog. Checks at the pre-commit working tree (source tree
+identical to the committed candidate; the STATUS.md prose delta is excluded from parity inputs;
+same environment conventions as the prior entry; evidence in /workspace/evidence:
+`noisemaker-for-threejs-alias-*.log`): `npm test` **109/109 PASS exit 0** (101 prior + the 8 new
+Portable-registration tests, including the paramAlias-resolution regression); `npm run lint`
+clean exit 0; `node parity/sweep-programs.mjs` **PASS=303 FAIL=0 ERR=1, worst max-abs-diff=0**
+exit 1 in-suite, where the single ERR is `octaveWarp` hitting the default 20-minute golden
+render timeout in this container (not a numerical divergence); on an extended-timeout
+single-case retry (`NM_TS_TIMEOUT_MS=3600000 node parity/sweep-programs.mjs --filter
+octaveWarp`, evidence `noisemaker-for-threejs-alias-octaveWarp-retry.log`) **octaveWarp PASS
+worst max-abs-diff=0** — all 304 fixtures render byte-exact; `bash parity/sweep-stateful.sh`
+**PASS=13 FAIL=0 ERR=0, worst max-abs-diff=0** exit 0; `npm run parity` corpus **PASS=81
+FAIL=0 ERR=7 worst=0** exit 0 (same 7 documented golden-side S001 community-effect ERR rows:
+`4bm9AA`, `8KMvAg`, `B5oBsA`, `PmJyUQ`, `WyalUg`, `fKPUww`, `liTYEg`; denominator unchanged at
+88). The committed delta of this round is this STATUS.md entry plus the Portable-registration
+port with paramAlias registration (`src/effects/register-effect.js`, `src/engine-browser.js`,
+`src/integration/canvas.js`, `test/portable-registration.test.mjs`).*
 
 > **The programs sweep runs at frame 1, where normalized time is 0** (`t_i = i / loopFrames`).
 > That makes it a compile/link/uniform-binding gate, not a temporal one: any effect whose output
