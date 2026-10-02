@@ -81,3 +81,47 @@ test('aggregateOk enforces the PARITY-SUMMARY exit contract', () => {
     assert.equal(mod.aggregateOk(bad), false, JSON.stringify(bad))
   }
 })
+
+// Authority coverage audit: a renderable manifest program with no parity case
+// must surface as missing instead of being silently omitted from the scope.
+function auditWith(manifest, { programIds = new Set(), corpusIds = [], text = {} } = {}) {
+  return mod.auditAuthority({
+    manifest,
+    programIds,
+    corpusIds,
+    fixtureText: (id) => text[id] ?? null,
+  })
+}
+
+test('auditAuthority: direct fixture, composite map, and corpus invocation each cover', () => {
+  const manifest = { 'filter/adjust': { glsl: { adjust: 'combined' } }, 'synth3d/cell3d': { glsl: { precompute: 'combined' } }, 'render/loopBegin': { glsl: { loopBegin: 'combined' } } }
+  const a = auditWith(manifest, {
+    programIds: new Set(['adjust', 'synth3d_cell3d']),
+    corpusIds: ['cw1'],
+    text: { cw1: 'noise().subchain() {\n    .loopBegin(alpha: 95)\n  }\n' },
+  })
+  assert.deepEqual(a.missing, [])
+  assert.equal(a.keys, 3)
+  assert.ok(a.covered.some((c) => c.key === 'filter/adjust' && c.via === 'adjust'))
+  assert.ok(a.covered.some((c) => c.key === 'synth3d/cell3d' && c.via === 'synth3d_cell3d'))
+  assert.ok(a.covered.some((c) => c.key === 'render/loopBegin' && c.via === 'cw1'))
+})
+
+test('auditAuthority: a renderable manifest program without any case is missing', () => {
+  const manifest = { 'filter/newEffect': { glsl: { newEffect: 'combined' } } }
+  const a = auditWith(manifest, {})
+  assert.deepEqual(a.missing, ['filter/newEffect'])
+})
+
+test('auditAuthority: a stale composite map entry is missing, not silently covered', () => {
+  const manifest = { 'render/renderCubemap3d': { glsl: { renderCubemap3d: 'combined' } } }
+  const a = auditWith(manifest, { programIds: new Set(['unrelated']) })
+  assert.deepEqual(a.missing, ['render/renderCubemap3d'])
+})
+
+test('auditAuthority: a program retired from the current engine is not counted', () => {
+  const manifest = {}
+  const a = auditWith(manifest, { programIds: new Set(['bc']) })
+  assert.deepEqual(a.missing, [])
+  assert.equal(a.keys, 0)
+})

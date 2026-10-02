@@ -31,7 +31,7 @@
 //
 // Exit status is 0 only when executed == expected, exact + strict == executed,
 // and near/defer/skip/fail/missing are all 0.
-import { readdirSync, existsSync } from 'node:fs'
+import { readdirSync, readFileSync, existsSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import { dirname, join, basename } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -91,6 +91,72 @@ function programExpected() {
   return currentPrograms(readdirSync(progDir).filter((f) => f.endsWith('.dsl')).sort().map((f) => basename(f, '.dsl')))
 }
 
+// Programs whose parity case id differs from the manifest basename (a
+// composite fixture exercises them, or the fixture carries a distinguishing
+// suffix). Every entry must point at an existing fixture or the case is
+// missing — the map is a coverage contract, not an exclusion.
+const PROGRAM_CASE_BY_KEY = {
+  'synth3d/cell3d': 'synth3d_cell3d',
+  'synth3d/cellularAutomata3d': 'synth3d_cellularAutomata3d',
+  'synth3d/flythrough3d': 'synth3d_flythrough3d',
+  'synth3d/fractal3d': 'synth3d_fractal3d',
+  'synth3d/heightmap3d': 'heightmap3d_landscape',
+  'synth3d/reactionDiffusion3d': 'synth3d_reactionDiffusion3d',
+  'synth3d/shape3d': 'synth3d_shape3d',
+  'filter3d/palette3d': 'filter3d_palette3d',
+  'filter3d/flow3d': 'filter3d_flow3d',
+  'points/buddhabrot': 'agent_buddhabrot',
+  'points/dla': 'agent_dla',
+  'points/physarum': 'agent_physarum',
+  'points/physical': 'agent_physical',
+  'points/heightGrid': 'heightGrid_pointsRender_perspective',
+  'render/renderCubemap3d': 'synth3d_renderCubemap3d',
+  'render/renderCubemapSurface': 'synth3d_renderCubemapSurface',
+  'render/renderLit3d': 'synth3d_renderLit3d',
+  'render/renderLandscape3d': 'heightmap3d_landscape',
+  'render/render3d': 'synth3d_cell3d',
+  'render/meshLoader': 'mesh',
+  'render/meshRender': 'mesh',
+  'render/pointsEmit': 'agent_buddhabrot',
+  'render/pointsRender': 'agent_buddhabrot',
+  'render/pointsBillboardRender': 'heightGrid_billboard',
+}
+
+// Coverage audit over the AUTHORITY manifest: every renderable manifest
+// program must map to a parity case that actually exercises it — a direct
+// fixture (basename), a mapped composite fixture, or a fixture (programs or
+// corpus) whose DSL text invokes the program. A manifest program with none of
+// these is reported missing so a renderable authority addition can never be
+// silently omitted from the whole-port scope.
+export function auditAuthority({
+  manifest = JSON.parse(readFileSync(join(root, 'vendor', 'noisemaker', 'effects', 'manifest.json'), 'utf8')),
+  programIds = new Set(readdirSync(progDir).filter((f) => f.endsWith('.dsl')).map((f) => basename(f, '.dsl'))),
+  fixtureText = (id) => {
+    for (const dir of [progDir, corpusDir]) {
+      const p = join(dir, `${id}.dsl`)
+      if (existsSync(p)) return readFileSync(p, 'utf8')
+    }
+    return null
+  },
+  corpusIds = existsSync(corpusDir) ? readdirSync(corpusDir).filter((f) => f.endsWith('.dsl')).map((f) => basename(f, '.dsl')) : [],
+  retired = currentPrograms,
+} = {}) {
+  const covered = []
+  const missing = []
+  const keys = Object.keys(manifest).filter((k) => manifest[k].glsl)
+  for (const key of keys.sort()) {
+    const name = key.split('/')[1]
+    if (!retired([name], manifest, () => {}).includes(name)) continue // retired from the current engine
+    const mapped = PROGRAM_CASE_BY_KEY[key]
+    if (mapped && programIds.has(mapped)) { covered.push({ key, via: mapped }); continue }
+    if (programIds.has(name)) { covered.push({ key, via: name }); continue }
+    const corpusHit = corpusIds.find((id) => { const t = fixtureText(id); return t && new RegExp(`\\.${name}\\(`).test(t) })
+    if (corpusHit) { covered.push({ key, via: corpusHit }); continue }
+    missing.push(key)
+  }
+  return { keys: keys.length, covered, missing }
+}
+
 // Whole-port scope: current programs EXCLUDING the 13 stateful effects (they
 // are counted as separate time-series cases — a single-frame render would not
 // exercise their contract), the stateful set itself in time-series mode, and
@@ -143,6 +209,14 @@ async function main() {
   const scope = wholePortIds()
   const expectedIds = ids.length ? ids : [...scope.programs, ...scope.stateful, ...scope.corpus]
   const counts = { expected: expectedIds.length, executed: 0, exact: 0, strict: 0, near: 0, defer: 0, skip: 0, fail: 0, missing: 0 }
+  if (!ids.length) {
+    // Authority coverage audit: a renderable manifest program with no parity
+    // case is missing, so the summary can never pass while the authority
+    // gains an unrendered program.
+    const audit = auditAuthority()
+    for (const c of audit.covered) process.stdout.write(`covered ${c.key} via ${c.via}\n`)
+    for (const key of audit.missing) { process.stdout.write(`missing ${key}\n`); counts.missing++ }
+  }
   for (const id of expectedIds) {
     const kind = ids.length ? kindOf(id) : (STATEFUL.has(id) && existsSync(join(progDir, `${id}.dsl`)) ? 'stateful' : (existsSync(join(corpusDir, `${id}.dsl`)) ? 'corpus' : (programExpected().includes(id) ? 'programs' : null)))
     if (!kind) { counts.missing++; continue }
