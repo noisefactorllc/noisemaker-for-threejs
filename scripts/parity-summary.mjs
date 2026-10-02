@@ -150,7 +150,7 @@ export function auditAuthority({
     const mapped = PROGRAM_CASE_BY_KEY[key]
     if (mapped && programIds.has(mapped)) { covered.push({ key, via: mapped }); continue }
     if (programIds.has(name)) { covered.push({ key, via: name }); continue }
-    const corpusHit = corpusIds.find((id) => { const t = fixtureText(id); return t && new RegExp(`\\.${name}\\(`).test(t) })
+    const corpusHit = corpusIds.find((id) => { const t = fixtureText(id); return t && new RegExp(`\\.${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\(`).test(t) })
     if (corpusHit) { covered.push({ key, via: corpusHit }); continue }
     missing.push(key)
   }

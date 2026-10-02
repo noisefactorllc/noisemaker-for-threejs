@@ -4,6 +4,7 @@
 // band=near, beyond=fail), the golden-side S001 set defers, and unresolved
 // cases fail.
 import assert from 'node:assert/strict'
+import { existsSync } from 'node:fs'
 import test from 'node:test'
 
 const mod = await import('../scripts/parity-summary.mjs')
@@ -124,4 +125,21 @@ test('auditAuthority: a program retired from the current engine is not counted',
   const a = auditWith(manifest, { programIds: new Set(['bc']) })
   assert.deepEqual(a.missing, [])
   assert.equal(a.keys, 0)
+})
+
+test('auditAuthority: corpus invocation matching survives regex metacharacters in a name', () => {
+  const manifest = { 'filter/o.d.d': { glsl: { odd: 'combined' } } }
+  const a = auditWith(manifest, { corpusIds: ['cw1'], text: { cw1: 'noise().o.d.d().write(o0)\n' } })
+  assert.deepEqual(a.missing, [])
+  assert.ok(a.covered.some((c) => c.key === 'filter/o.d.d' && c.via === 'cw1'))
+})
+
+// The audit must hold against the real vendored manifest, not only synthetic
+// fixtures: when the authority manifest is fetched (vendor/fetch.sh), every
+// renderable glsl program must map to a parity case. Skips when the manifest
+// is not vendored so the suite stays runnable without vendor/.
+test('auditAuthority: the vendored authority manifest has zero uncovered programs', { skip: !existsSync(new URL('../vendor/noisemaker/effects/manifest.json', import.meta.url)) }, () => {
+  const a = mod.auditAuthority()
+  assert.deepEqual(a.missing, [], `uncovered authority programs: ${a.missing.join(', ')}`)
+  assert.ok(a.keys > 200, `unexpectedly small manifest: ${a.keys} glsl programs`)
 })
