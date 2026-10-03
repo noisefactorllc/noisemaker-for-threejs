@@ -613,7 +613,86 @@ FAIL=0 ERR=7 worst=0** exit 0 (same 7 documented golden-side S001 community-effe
 `4bm9AA`, `8KMvAg`, `B5oBsA`, `PmJyUQ`, `WyalUg`, `fKPUww`, `liTYEg`; denominator unchanged at
 88). The committed delta of this round is this STATUS.md entry plus the Portable-registration
 port with paramAlias registration (`src/effects/register-effect.js`, `src/engine-browser.js`,
-`src/integration/canvas.js`, `test/portable-registration.test.mjs`).*
+`src/integration/canvas.js`, `test/portable-registration.test.mjs`.*
+
+*Incrementally synced 2026-10-03 to upstream reference `e30f09e6` (Tearoff trigger
+`73c15be00d68..e30f09e62704`, force-pushed/non-contiguous delivery consolidating 4 observed
+ranges), audited by diffing a fresh clone of noisefactorllc/noisemaker. The delta past the
+prior audited reference `cb22a05e` is `cb22a05e..e30f09e62704` — eight commits touching
+`shaders/`, no catalog change anywhere:
+- `41d1ead1`: tests/ledger only (testNoPassthrough source guard).
+- `29e76468`: DSL validator — a parameter's own choice names (inline choices or enum members)
+  resolve before shadowing state values (`isOwnChoice`; `geometry: seed`, `channel: a` read
+  back as written). Engine-internal DSL resolution, no new surface.
+- `bd773801`: pass-level uniform aliases — the expander records renamed shader uniforms as
+  `pass.uniformAliases` (`{ shaderUniform: globalName }`), a new runtime module
+  `runtime/uniform-aliases.js` writes a changed parameter to the aliased shader uniforms, and
+  the renderer's live-parameter paths call it. Engine-internal: alias writes land on
+  `pass.uniforms` before the backend binds; no new `backend.*` call.
+- `3c1e47e5`: `resetOnChange` UI key (effect-validator `UI_KEYS` + docs) and `render/pointsEmit`
+  `layout`/`seed`, `synth3d/cellularAutomata3d` `density` marked `resetOnChange` — UI metadata
+  on two existing parameters, not a parameter-contract change.
+- `71d805eb` + `109c00ac`: single-effect alias writes restricted to the effect's own passes via
+  a shared `_isEffectPass` (func + namespace test). Engine-internal.
+- `058ca32e`: parity-attestation source-hash re-attestation only (upstream repo files, same
+  rendered frames).
+- `e30f09e6`: tests/ledger only.
+
+The CDN republished: `bash vendor/fetch.sh` serves `Build: e30f09e6` — exactly the trigger end
+(core bundle 910200 bytes, SHA-256
+`45777642a13804a100dfdeefd7e3b94f5b5128048fa2dff646c3b64b04eeb12d`, CDN Last-Modified
+2026-10-02T21:50:44Z matching the bundle's embedded `Date:` header 2026-10-02T21:50:44.376Z).
+A clean local build at `e30f09e6` (upstream `scripts/bundle-shaders.js`, esbuild 0.28.2 per the
+upstream lockfile, binary run from an exec-mounted path because `$HOME` is a noexec tmpfs) is
+byte-identical to the served bundle past the header lines, and all 210 mini-bundles are
+byte-identical; `effects/manifest.json` is unchanged at SHA-256
+`05c4d7b7744837ae90a3bb4c89e5403ff09448a74d9d7e824abb3d719ad3314e` (210/210 mini-bundles, no
+new or removed effects).
+
+Adapter visibility: no delta introduces a `backend.*` call or a texture-spec field; the
+validator/expander/runtime deltas execute inside the served bundle, whose alias writes land on
+`pass.uniforms` before `ThreeBackend` binds them. The adapter's realm-shared registration
+surface (`src/effects/register-effect.js`) validates definition shapes but enumerates no UI
+keys, so the new `resetOnChange` hint needs no adapter change. This round pins the served
+bundle's two new engine contracts with adapter tests ported from upstream
+`shaders/tests/test_uniform_aliases.mjs` and `shaders/tests/test_reserved_choice_names.mjs`,
+running against the vendored bytes through the same loader production uses
+(`test/bundle-uniform-aliases.test.mjs`: the expander records `pass.uniformAliases`
+`{layoutMode: "layout"}`, `applyStepParameterValues`/`applyParameterValues`/`ProgramState.setValue`
+reach the aliased shader uniform, and an alias write stays on the effect's own passes;
+`test/bundle-reserved-choice-names.test.mjs`: an inline choice named `seed` and an enum member
+named `a` resolve to the choice/member rather than the shadowing state value, the unparsed
+program compiles back to the same choices, and a state value still binds a parameter with no
+such choice).
+
+Bundle hygiene re-verified on the republished bundle: zero occurrences of the
+shader-parity/validator symbols (`ShaderValidator`, `shaderParity`, `attest`,
+`validateShaderProgram`); grep over all 210 mini-bundles finds `mipmaps` only in the
+pre-existing prose comments (`filter/smooth.js`, `filter/corrupt.js`) and no `persistent`;
+`registerPortableEffect` still present (one occurrence).
+
+Checks at the pre-commit working tree (Linux 6.8.0-134-generic, Node v26.5.1, Chrome Headless
+Shell via `PLAYWRIGHT_BROWSERS_PATH=/state/cache/pw-browsers`; evidence in /workspace/evidence:
+`noisemaker-for-threejs-reset-*.log`): `npm test` **123/123 PASS exit 0** (109 prior + the 8
+new bundle-contract tests); `npm run lint` clean exit 0; `node parity/sweep-programs.mjs`
+**PASS=304 FAIL=0 ERR=0, worst max-abs-diff=0** exit 0; `bash parity/sweep-stateful.sh`
+**PASS=13 FAIL=0 ERR=0, worst max-abs-diff=0** exit 0; `npm run parity` corpus **PASS=81
+FAIL=0 ERR=7 worst=0** exit 0 (same 7 documented golden-side S001 community-effect ERR rows:
+`4bm9AA`, `8KMvAg`, `B5oBsA`, `PmJyUQ`, `WyalUg`, `fKPUww`, `liTYEg`; denominator unchanged at
+88). The committed delta of this round is this STATUS.md entry plus the two bundle-contract
+test ports (`test/bundle-uniform-aliases.test.mjs`,
+`test/bundle-reserved-choice-names.test.mjs`) and the suite's fresh-checkout self-sufficiency
+fix: `scripts/test.sh` now fetches the vendored engine when absent (same posture as CI's
+vendor fetch and its own browser auto-install — without it a fresh checkout's engine-dependent
+tests crash with ERR_MODULE_NOT_FOUND/ENOENT instead of skipping) and prefers the
+exec-mounted `/state/cache/pw-browsers` browser path over noexec `$HOME` (a browser installed
+under noexec `$HOME` fails at launch); `test/sweep-programs-ledger.test.mjs` creates the
+gitignored `parity/out` ledger directory before its sentinel writes (the sweeps already
+mkdir it; a fresh checkout has neither). A fresh-checkout re-run (`vendor/noisemaker/` and
+`parity/out/` removed first, no `PLAYWRIGHT_BROWSERS_PATH`, engine auto-fetched, browser
+installed under `/state/cache/pw-browsers`; evidence
+`noisemaker-for-threejs-freshtest2.log`) passes **123/123, 0 skipped, exit 0**. The adapter
+code under `src/` is unchanged and byte-identical to the prior published commit.*
 
 > **The programs sweep runs at frame 1, where normalized time is 0** (`t_i = i / loopFrames`).
 > That makes it a compile/link/uniform-binding gate, not a temporal one: any effect whose output

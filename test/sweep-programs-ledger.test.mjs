@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { spawnSync } from 'node:child_process'
@@ -10,6 +10,11 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const canonical = join(root, 'parity', 'out', 'mode-ledger.json')
 const filter = '__ledger_path_contract_no_match__'
 const partial = join(root, 'parity', 'out', `mode-ledger.${filter}.json`)
+
+// parity/out is a gitignored run-artifact directory the sweeps create for
+// themselves; a fresh checkout has neither it nor the sentinel's parent, so
+// create it before writing (the tests restore/remove only the ledger file).
+mkdirSync(join(root, 'parity', 'out'), { recursive: true })
 
 test('a filtered sweep with no matching fixtures fails without writing evidence', () => {
   const hadCanonical = existsSync(canonical)
