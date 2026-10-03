@@ -44,4 +44,4 @@ mkdir -p "$BROWSERS"
 if [ -z "$(ls -d "$BROWSERS"/chromium_headless_shell-* 2>/dev/null)" ]; then
   PLAYWRIGHT_BROWSERS_PATH="$BROWSERS" node node_modules/@playwright/test/cli.js install chromium-headless-shell
 fi
-exec env PLAYWRIGHT_BROWSERS_PATH="$BROWSERS" node --test test/*.test.mjs
+exec env PLAYWRIGHT_BROWSERS_PATH="$BROWSERS" node --test --test-concurrency=1 test/*.test.mjs
