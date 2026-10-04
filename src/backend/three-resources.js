@@ -95,7 +95,7 @@ const GLSL_UNIFORM_COMPONENTS = {
  */
 export function parseUniformSizes(source) {
   const sizes = {}
-  const re = /\buniform\s+(?:highp\s+|mediump\s+|lowp\s+)?(\w+)\s+(\w+)\s*(\[[^\]]*\])?\s*;/g
+  const re = /\buniform\s+(?:highp\s+|mediump\s+|lowp\s+)?(\w+)\s+(\w+)\s*(?:(\[[^\]]*\])\s*)?;/g
   let m
   while ((m = re.exec(source))) {
     const [, type, name, isArray] = m

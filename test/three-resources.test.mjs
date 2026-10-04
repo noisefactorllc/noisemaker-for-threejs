@@ -5,6 +5,7 @@ import {
   formatToType,
   fullscreenTriangle,
   stripVersion,
+  parseUniformSizes,
   DEFAULT_VERTEX_SHADER,
 } from '../src/backend/three-resources.js'
 
@@ -37,4 +38,17 @@ test('DEFAULT_VERTEX_SHADER carries no #version line (three.js adds it)', () => 
   assert.ok(!DEFAULT_VERTEX_SHADER.includes('#version'))
   assert.ok(DEFAULT_VERTEX_SHADER.includes('position'))
   assert.ok(DEFAULT_VERTEX_SHADER.includes('v_texCoord'))
+})
+
+test('parseUniformSizes reads scalar/vector uniforms and skips arrays', () => {
+  const src = 'uniform float a;\nuniform highp vec3 b ;\nuniform vec4 c [ 2 ] ;\nuniform mediump vec2 d [3];\nuniform sampler2D t;'
+  assert.deepEqual(parseUniformSizes(src), { a: 1, b: 3 })
+})
+
+test('parseUniformSizes stays linear on long whitespace runs (js/polynomial-redos)', () => {
+  const start = process.hrtime.bigint()
+  parseUniformSizes('uniform float a' + ' '.repeat(200000) + 'x')
+  parseUniformSizes('uniform float a' + ' '.repeat(200000) + '[3]' + ' '.repeat(200000) + 'x')
+  const ms = Number(process.hrtime.bigint() - start) / 1e6
+  assert.ok(ms < 1000, `whitespace run took ${ms}ms`)
 })
