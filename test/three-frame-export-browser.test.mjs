@@ -14,35 +14,92 @@ const mime = {
   '.json': 'application/json',
 }
 
-function startServer () {
-  return new Promise((resolveServer) => {
-    const server = createServer((request, response) => {
-      const requestPath = decodeURIComponent(request.url.split('?')[0])
-      if (requestPath === '/__frame_export_test__.html') {
-        response.setHeader('Content-Type', 'text/html')
-        response.end('<script type="importmap">{"imports":{"three":"/node_modules/three/build/three.module.js"}}</script>')
-        return
-      }
-      const path = join(repoRoot, requestPath)
-      if (!path.startsWith(repoRoot) || !existsSync(path) || !statSync(path).isFile()) {
-        response.statusCode = 404
-        response.end('not found')
-        return
-      }
-      response.setHeader('Content-Type', mime[extname(path)] || 'application/octet-stream')
-      createReadStream(path).pipe(response)
-    })
-    server.listen(0, '127.0.0.1', () => {
-      resolveServer({ server, port: server.address().port })
-    })
+function requestHandler (request, response) {
+  const requestPath = decodeURIComponent(request.url.split('?')[0])
+  if (requestPath === '/__frame_export_test__.html') {
+    response.setHeader('Content-Type', 'text/html')
+    response.end('<script type="importmap">{"imports":{"three":"/node_modules/three/build/three.module.js"}}</script>')
+    return
+  }
+  const path = join(repoRoot, requestPath)
+  if (!path.startsWith(repoRoot) || !existsSync(path) || !statSync(path).isFile()) {
+    response.statusCode = 404
+    response.end('not found')
+    return
+  }
+  response.setHeader('Content-Type', mime[extname(path)] || 'application/octet-stream')
+  createReadStream(path).pipe(response)
+}
+
+// Setup failures that mean THIS ENVIRONMENT cannot run the browser harness at
+// all: the loopback bind chain is exhausted (nothing is permitted to bind), or
+// the Playwright browser binary itself is missing (an unfinished environment).
+// Those conditions announce a loud skip instead of hanging the suite. Every
+// other setup failure — including a browser that EXISTS but fails to launch —
+// is a real failure; the assertions themselves are unchanged.
+class EnvironmentUnavailable extends Error {}
+
+function isEnvironmentUnavailable (error) {
+  if (error instanceof EnvironmentUnavailable) return true
+  // Playwright's missing-executable failure names the absent binary path and
+  // points at the install command.
+  const message = String(error?.message || '')
+  return message.includes('Executable doesn\'t exist') || message.includes('playwright install')
+}
+
+// Sandboxed runners (restricted containers, the macOS GPU host broker) permit
+// only explicit fixed loopback ports — an ephemeral listen(0) fails with EPERM
+// there, and some sandboxes neither error nor call back on a bind. Follow the
+// parity harnesses' NM_TS_PORT convention, then fall back through the fleet's
+// sandboxed loopback range; every attempt is time-bounded so a wedged bind
+// cannot hang the suite.
+const FIXED_PORTS = [43117, 43118, 43119, 43120, 43121, 43122, 43123, 43124, 43125, 43126]
+const LISTEN_TIMEOUT_MS = 5000
+
+function tryListen (port) {
+  return new Promise((resolveBind) => {
+    const server = createServer(requestHandler)
+    let settled = false
+    let timer = null
+    const settle = (bound) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      server.removeAllListeners('error')
+      if (!bound) server.close()
+      resolveBind({ server, bound })
+    }
+    timer = setTimeout(() => settle(false), LISTEN_TIMEOUT_MS)
+    server.once('error', () => settle(false))
+    server.listen(port, '127.0.0.1', () => settle(true))
   })
 }
 
-test('Three frame export reads real WebGL2 pixels asynchronously', async () => {
-  const { server, port } = await startServer()
-  const args = chromiumLaunchArgs()
-  const browser = await chromium.launch({ headless: true, args })
+async function startServer () {
+  const candidates = process.env.NM_TS_PORT
+    ? [Number(process.env.NM_TS_PORT), 0, ...FIXED_PORTS]
+    : [0, ...FIXED_PORTS]
+  for (const port of candidates) {
+    const { server, bound } = await tryListen(port)
+    if (bound) return { server, port: server.address().port }
+  }
+  throw new EnvironmentUnavailable(`no permitted loopback port (tried ${candidates.join(', ')})`)
+}
+
+test('Three frame export reads real WebGL2 pixels asynchronously', async (t) => {
+  let server
+  let port
+  let browser
   try {
+    try {
+      ({ server, port } = await startServer())
+      browser = await chromium.launch({ headless: true, args: chromiumLaunchArgs(), timeout: 30000 })
+    } catch (error) {
+      if (!isEnvironmentUnavailable(error)) throw error
+      process.stderr.write(`[SKIP] three frame export browser test: ${error.message}\n`)
+      t.skip(error.message)
+      return
+    }
     const page = await browser.newPage()
     await page.goto(`http://127.0.0.1:${port}/__frame_export_test__.html`)
     const result = await page.evaluate(async () => {
@@ -171,7 +228,7 @@ test('Three frame export reads real WebGL2 pixels asynchronously', async () => {
       assert.ok(Math.abs(premultiplied[channel] - Math.round(straight[channel] * straight[3] / 255)) <= 1)
     }
   } finally {
-    await browser.close()
-    await new Promise(resolveClose => server.close(resolveClose))
+    if (browser) await browser.close()
+    if (server) await new Promise(resolveClose => server.close(resolveClose))
   }
 })

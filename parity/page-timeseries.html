@@ -13,7 +13,7 @@
       import * as THREE from 'three'
       // Engine from the CDN bundle (vendor/fetch.sh). Golden = core's createPipeline (WebGL2Backend),
       // candidate = core's Pipeline + ThreeBackend (via createThreePipeline). Same engine both sides.
-      import { compileGraph, createPipeline, loadEffectsForDsl } from '/src/engine-browser.js'
+      import { compileGraph, createPipeline, loadEffectsForDsl, core } from '/src/engine-browser.js'
       import { createThreePipeline } from '/src/runtime/create-three-pipeline.js'
 
       THREE.ColorManagement.enabled = false
@@ -103,6 +103,12 @@
         gl.deleteFramebuffer(fbo)
         return buf
       }
+
+      // Live device-stream pump/stop hooks (see inject.streamLive in applyInject):
+      // set up once, then the pump re-applies the CURRENT stream frame before every
+      // rendered frame — a live stream has no fixed bytes to upload once.
+      let streamPump = null
+      let streamStop = null
 
       // Apply a DETERMINISTIC external input to the pipeline, identically for golden
       // (vendored WebGL2) and candidate (ThreeBackend), so the long-tail external-input
@@ -220,6 +226,91 @@
         const text = await (await fetch(inject.meshLive.url)).text()
         applyMeshData(pipeline, parseObj(text))
       }
+      if (inject.streamLive) {
+        // LIVE device streams (GAP-004 mic/camera leg): the input is a real
+        // getUserMedia stream produced OUTSIDE the page (no injected bytes) —
+        // a camera MediaStream feeding a <video> element that the adapter's
+        // published updateTextureFromSource re-uploads every frame, and a mic
+        // MediaStream analysed by the host-application path the engine's own
+        // AudioInputManager uses (published AudioState + setSpectrum /
+        // setWaveform / bands / raw). Unlike the graded injected fixtures this
+        // is NOT a byte-identical comparison: golden and candidate each open
+        // their own live stream, so frames differ run to run — the driver
+        // grades acquisition (stream bound, output live and distinct from the
+        // no-input fallback), never pixel parity.
+        const spec = inject.streamLive
+        const stream = spec.kind === 'video'
+          ? await navigator.mediaDevices.getUserMedia({
+              video: { width: { ideal: spec.width ?? 640 }, height: { ideal: spec.height ?? 480 } }
+            })
+          : await navigator.mediaDevices.getUserMedia({
+              audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
+            })
+        if (spec.kind === 'video') {
+          const video = document.createElement('video')
+          video.muted = true
+          video.srcObject = stream
+          await video.play()
+          // A stream has no fixed frame to await (unlike the decoded <video>
+          // fixture): wait until the live track has actually delivered its
+          // first frame, else the pump would upload 0x0 sources.
+          const deadline = performance.now() + 10000
+          while (!video.videoWidth) {
+            if (performance.now() >= deadline) throw new Error('live camera stream delivered no frame within 10s')
+            await new Promise((r) => setTimeout(r, 25))
+          }
+          const ids = await externalInputIds(pipeline)
+          streamStop = () => stream.getTracks().forEach((t) => t.stop())
+          streamPump = () => {
+            for (const id of ids) pipeline.backend.updateTextureFromSource(id, video, { flipY: true })
+          }
+        } else {
+          // Mirror the engine's AudioInputManager._updateLoop host path exactly
+          // (fftSize 256, byte frequency/time data, band averages, raw DC offset).
+          const ctx = new AudioContext()
+          await ctx.resume()
+          const analyser = ctx.createAnalyser()
+          analyser.fftSize = 256
+          ctx.createMediaStreamSource(stream).connect(analyser)
+          // The render loop below consumes all its frames within milliseconds,
+          // so wait until the live analyser actually carries signal first (the
+          // capture pipeline needs a moment to start — a real mic included);
+          // otherwise every frame samples startup silence.
+          const deadline = performance.now() + 10000
+          const probeBuf = new Uint8Array(analyser.frequencyBinCount)
+          while (true) {
+            analyser.getByteFrequencyData(probeBuf)
+            if (probeBuf.some((v) => v > 0)) break
+            if (performance.now() >= deadline) throw new Error('live audio analyser stayed silent for 10s')
+            await new Promise((r) => setTimeout(r, 25))
+          }
+          const fftData = new Uint8Array(analyser.frequencyBinCount)
+          const timeData = new Uint8Array(analyser.fftSize)
+          const audioState = new core.AudioState()
+          pipeline.setAudioState(audioState)
+          streamStop = () => {
+            stream.getTracks().forEach((t) => t.stop())
+            // Close the AudioContext too: the probe runs six stream cases in
+            // one browser session, and each live-audio case opens one.
+            ctx.close().catch(() => {})
+          }
+          streamPump = () => {
+            analyser.getByteFrequencyData(fftData)
+            audioState.setSpectrum(fftData)
+            analyser.getByteTimeDomainData(timeData)
+            audioState.setWaveform(timeData)
+            const band = (...idx) => idx.reduce((s, i) => s + fftData[i], 0) / idx.length / 255
+            const low = band(0, 1, 2, 3)
+            const mid = band(4, 6, 8, 10)
+            const high = band(16, 20, 24, 28)
+            audioState.low = low; audioState.mid = mid; audioState.high = high
+            audioState.vol = (low + mid + high) / 3
+            let timeSum = 0
+            for (let i = 0; i < timeData.length; i++) timeSum += timeData[i]
+            audioState.setRaw((timeSum / timeData.length - 128) / 127.5)
+          }
+        }
+      }
       }
 
       window.__nm_timeseries = async ({ dsl, mode, size, frames, captureEvery, loopFrames, inject }) => {
@@ -260,11 +351,14 @@
         const captures = []
         for (let i = 0; i < frames; i++) {
           const t = (i % loopFrames) / loopFrames
+          if (streamPump) streamPump()
           pipeline.render(t)
           if ((i + 1) % captureEvery === 0) {
             captures.push({ frame: i + 1, data: Array.from(readback()) })
           }
         }
+        if (streamStop) { streamStop(); streamStop = null }
+        streamPump = null
         return captures
       }
       window.__nm_ts_ready = true
