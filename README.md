@@ -166,6 +166,9 @@ Design notes and the full build plan: [`docs/IMPLEMENTATION-PLAN.md`](docs/IMPLE
 
 ## Contributing
 
+Contributions follow the Noise Factor [contributing policy](https://github.com/noisefactorllc/.github/blob/main/CONTRIBUTING.md) and
+[Code of Conduct](https://github.com/noisefactorllc/.github/blob/main/CODE_OF_CONDUCT.md). The notes below cover this repository's own tooling.
+
 The adapter drives the fetched CDN engine, so `npm run vendor` is the only setup. Then:
 
 ```bash
