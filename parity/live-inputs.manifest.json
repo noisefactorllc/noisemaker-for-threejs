@@ -5,6 +5,7 @@
     { "dslPath": "parity/programs/media.dsl", "injectPath": "parity/assets/live-video.inject.json", "frames": 20, "capture": 10, "size": 128, "loopFrames": 600 },
     { "dslPath": "parity/programs/scope.dsl", "injectPath": "parity/assets/live-audio.inject.json", "frames": 20, "capture": 10, "size": 128, "loopFrames": 600 },
     { "dslPath": "parity/programs/spectrum.dsl", "injectPath": "parity/assets/live-audio.inject.json", "frames": 20, "capture": 10, "size": 128, "loopFrames": 600 },
-    { "dslPath": "parity/programs/mesh.dsl", "injectPath": "parity/assets/live-mesh.inject.json", "frames": 20, "capture": 10, "size": 128, "loopFrames": 600 }
+    { "dslPath": "parity/programs/mesh.dsl", "injectPath": "parity/assets/live-mesh.inject.json", "frames": 20, "capture": 10, "size": 128, "loopFrames": 600 },
+    { "dslPath": "parity/programs/mesh.dsl", "injectPath": "parity/assets/live-mesh-engine.inject.json", "frames": 20, "capture": 10, "size": 128, "loopFrames": 600 }
   ]
 }

@@ -115,7 +115,7 @@
       // effects (scope/spectrum/media/text/mesh) can be parity-tested without a live —
       // therefore nondeterministic — feed. The spec is plain data so both modes build
       // byte-identical inputs.
-      async function applyInject(pipeline, inject, size) {
+      async function applyInject(pipeline, inject, size, dsl) {
         if (inject.audio) {
           const N = 128
           const waveform = new Float32Array(N)
@@ -226,6 +226,31 @@
         const text = await (await fetch(inject.meshLive.url)).text()
         applyMeshData(pipeline, parseObj(text))
       }
+      if (inject.meshEngineLive) {
+        // ENGINE-side OBJ path (GAP-004): the published bundle's parseOBJ is
+        // internal-only, but CanvasRenderer.loadOBJFromURL is public and runs
+        // the engine's OWN fetch -> parse -> pack -> uploadMeshData path.
+        // Drive it on a throwaway offscreen renderer (its pipeline is never
+        // rendered), then reuse the engine-packed bytes it cached for mesh0 on
+        // BOTH harness pipelines — the public API returns only the vertex
+        // count, the cached packed arrays are exactly what the engine uploaded.
+        const off = document.createElement('canvas')
+        off.width = off.height = 64
+        const engine = new core.CanvasRenderer({ canvas: off, width: 64, height: 64 })
+        try {
+          // Compile the case's own DSL: its effects are already registered in
+          // the shared realm registry, and the engine's pipeline is never
+          // rendered — loadOBJFromURL only needs a live backend to upload to.
+          await engine.compile(dsl)
+          const res = await engine.loadOBJFromURL(inject.meshEngineLive.url)
+          if (!res.success) throw new Error('engine loadOBJFromURL failed: ' + (res.error || 'unknown'))
+          const packed = engine._meshCache.get('mesh0')
+          if (!packed) throw new Error('engine mesh cache has no mesh0 entry after loadOBJFromURL')
+          pipeline.backend.uploadMeshData('mesh0', packed.positionData, packed.normalData, packed.uvData, packed.width, packed.height, packed.vertexCount)
+        } finally {
+          await engine.dispose().catch(() => {})
+        }
+      }
       if (inject.streamLive) {
         // LIVE device streams (GAP-004 mic/camera leg): the input is a real
         // getUserMedia stream produced OUTSIDE the page (no injected bytes) —
@@ -246,6 +271,13 @@
           : await navigator.mediaDevices.getUserMedia({
               audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
             })
+        // Record which track actually bound (the fake provider labels its
+        // tracks "Fake ..."; a real camera/mic carries its hardware name), so
+        // the driver can print positive device identity per case.
+        {
+          const track = stream.getTracks()[0]
+          window.__nm_stream_info = { kind: spec.kind, label: track.label, settings: track.getSettings() }
+        }
         if (spec.kind === 'video') {
           const video = document.createElement('video')
           video.muted = true
@@ -275,15 +307,22 @@
           // The render loop below consumes all its frames within milliseconds,
           // so wait until the live analyser actually carries signal first (the
           // capture pipeline needs a moment to start — a real mic included);
-          // otherwise every frame samples startup silence.
-          const deadline = performance.now() + 10000
+          // otherwise every frame samples startup silence. Real-device mode
+          // (spec.silentOk) waits briefly and proceeds on silence: a genuinely
+          // silent room is a legitimate live state, and the case's
+          // distinctness check then records honestly what it saw.
+          const waitMs = spec.signalTimeoutMs ?? 10000
+          const silentOk = spec.silentOk === true
+          const deadline = performance.now() + waitMs
           const probeBuf = new Uint8Array(analyser.frequencyBinCount)
+          let silent = true
           while (true) {
             analyser.getByteFrequencyData(probeBuf)
-            if (probeBuf.some((v) => v > 0)) break
-            if (performance.now() >= deadline) throw new Error('live audio analyser stayed silent for 10s')
+            if (probeBuf.some((v) => v > 0)) { silent = false; break }
+            if (performance.now() >= deadline) break
             await new Promise((r) => setTimeout(r, 25))
           }
+          if (silent && !silentOk) throw new Error(`live audio analyser stayed silent for ${waitMs}ms`)
           const fftData = new Uint8Array(analyser.frequencyBinCount)
           const timeData = new Uint8Array(analyser.fftSize)
           const audioState = new core.AudioState()
@@ -334,7 +373,7 @@
           readback = () => readGolden(pipeline, size)
         }
 
-        if (inject) await applyInject(pipeline, inject, size)
+        if (inject) await applyInject(pipeline, inject, size, dsl)
         // Mesh data lands via a direct backend upload (uploadMeshData), outside the normal
         // pass-graph write path. The very first pipeline.render() after that upload is where
         // meshRender's "count: input" vertex count first gets threaded through the compiled
@@ -346,7 +385,7 @@
         // zero prior renders is never a moment the engine's own authors consider meaningful to
         // sample. Scoped to mesh specifically: audio/image injection (setAudioState /
         // updateTextureFromSource) has no such settle frame and is already bit-exact at frame 1.
-        if (inject?.mesh || inject?.meshLive) pipeline.render(0)
+        if (inject?.mesh || inject?.meshLive || inject?.meshEngineLive) pipeline.render(0)
 
         const captures = []
         for (let i = 0; i < frames; i++) {

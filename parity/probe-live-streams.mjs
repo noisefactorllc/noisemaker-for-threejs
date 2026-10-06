@@ -30,10 +30,15 @@ const repoRoot = resolve(__dirname, '..')
 
 const argv = process.argv.slice(2)
 const opt = (f, d) => { const i = argv.indexOf(f); return i >= 0 ? Number(argv[i + 1]) : d }
+const hasFlag = (f) => argv.includes(f)
 const FRAMES = opt('--frames', 20)
 const CAPTURE = opt('--capture', 5)
 const SIZE = opt('--size', 128)
 const LOOP = opt('--loop', 600)
+// --real-devices: bind the machine's ACTUAL camera and microphone instead of
+// the fake-device provider (used to measure physical-device acquisition; see
+// the run evidence for the environments where this is possible at all).
+const REAL_DEVICES = hasFlag('--real-devices')
 // A stream-bound frame must differ from the no-input fallback by at least this
 // much in a pixel to count as live, and must not be a constant field.
 const MIN_MAX_DIFF = 0.02
@@ -145,7 +150,10 @@ async function runMode(browser, port, mode, testCase, inject) {
     if (res?.error || !Array.isArray(res)) throw new Error(res?.error || `${mode}: no captures returned`)
     const errors = msgs.filter((m) => m.startsWith('[pageerror]') || m.startsWith('[error]'))
     if (errors.length) throw new Error(`${mode}: page errors:\n${errors.join('\n')}`)
-    return res
+    const device = inject?.streamLive
+      ? await page.evaluate(() => window.__nm_stream_info || null)
+      : null
+    return { captures: res, device }
   } finally {
     await page.close()
   }
@@ -188,19 +196,25 @@ async function main() {
   const args = chromiumLaunchArgs().concat([
     // Deterministic stream provider: the browser's fake camera + fake mic, with
     // permission auto-granted and autoplay unblocked — same provider on every
-    // platform, no physical hardware involved.
-    '--use-fake-device-for-media-stream',
+    // platform, no physical hardware involved. --real-devices drops the fake
+    // provider and file capture so the machine's actual camera/mic bind.
+    ...(REAL_DEVICES ? [] : ['--use-fake-device-for-media-stream']),
     '--use-fake-ui-for-media-stream',
     '--autoplay-policy=no-user-gesture-required',
-    // Chromium's default fake mic is SILENT (spectrum then stays all-zero and
-    // is indistinguishable from the no-audio fallback). Feed the same fixed
-    // PCM the graded live-audio sweep decodes, looped into a long file (see
-    // buildFakeMicWav — the 0.5 s fixture does not reliably loop), so the
-    // analyser sees a real non-silent signal in both modes.
-    `--use-file-for-fake-audio-capture=${buildFakeMicWav(join(outDir, 'fake-mic.wav'))}`,
+    ...(!REAL_DEVICES
+      ? [
+          // Chromium's default fake mic is SILENT (spectrum then stays
+          // all-zero and is indistinguishable from the no-audio fallback).
+          // Feed the same fixed PCM the graded live-audio sweep decodes,
+          // looped into a long file (see buildFakeMicWav — the 0.5 s fixture
+          // does not reliably loop), so the analyser sees a real non-silent
+          // signal in both modes.
+          `--use-file-for-fake-audio-capture=${buildFakeMicWav(join(outDir, 'fake-mic.wav'))}`,
+        ]
+      : []),
   ])
   const browser = await chromium.launch({ headless: true, args, timeout: 120000 })
-  const results = { frames: FRAMES, capture: CAPTURE, size: SIZE, cases: [] }
+  const results = { frames: FRAMES, capture: CAPTURE, size: SIZE, realDevices: REAL_DEVICES, cases: [] }
   let failed = 0
   try {
     results.platform = await gpuRenderer(browser)
@@ -209,17 +223,25 @@ async function main() {
       for (const testCase of CASES) {
         const label = `${mode}/${testCase.name}`
         try {
-          const fallback = await runMode(browser, port, mode, testCase, null)
-          const stream = await runMode(browser, port, mode, testCase, { streamLive: { kind: testCase.kind } })
-          const { captures, worst, stdMin } = captureStats(stream, fallback, label)
+          const fallbackRun = await runMode(browser, port, mode, testCase, null)
+          const streamRun = await runMode(browser, port, mode, testCase, {
+            streamLive: {
+              kind: testCase.kind,
+              // Real devices may legitimately be silent (a quiet room) — wait
+              // briefly and record what was actually seen.
+              signalTimeoutMs: REAL_DEVICES ? 2000 : undefined,
+              silentOk: REAL_DEVICES,
+            },
+          })
+          const { captures, worst, stdMin } = captureStats(streamRun.captures, fallbackRun.captures, label)
           const ok = worst >= MIN_MAX_DIFF && stdMin >= MIN_STD
           const why = !ok
             ? (worst < MIN_MAX_DIFF ? `stream output indistinct from fallback (worst max-abs-diff ${worst})`
                                     : `stream output constant (min std ${stdMin})`)
             : null
           if (!ok) failed++
-          results.cases.push({ label, pass: ok, reason: why, worstMaxAbsDiff: Number(worst.toFixed(6)), minStd: Number(stdMin.toFixed(6)), captures })
-          process.stdout.write(`[${ok ? 'pass' : 'FAIL'}] ${label}: worst max-abs-diff ${worst.toFixed(4)}, min std ${stdMin.toFixed(4)}${why ? ' — ' + why : ''}\n`)
+          results.cases.push({ label, pass: ok, reason: why, device: streamRun.device, worstMaxAbsDiff: Number(worst.toFixed(6)), minStd: Number(stdMin.toFixed(6)), captures })
+          process.stdout.write(`[${ok ? 'pass' : 'FAIL'}] ${label}: worst max-abs-diff ${worst.toFixed(4)}, min std ${stdMin.toFixed(4)}${streamRun.device?.label ? `, device "${streamRun.device.label}"` : ''}${why ? ' — ' + why : ''}\n`)
         } catch (error) {
           failed++
           results.cases.push({ label, pass: false, reason: String(error?.message || error) })
