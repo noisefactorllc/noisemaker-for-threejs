@@ -273,14 +273,11 @@ jobs:
           path: parity/out/
           if-no-files-found: error
 
-  # octaveWarp kills windows-2022 hosted runners (~15 min in, every render
-  # bound in place — runs 36570469321 ERR at the 600 s watchdog, 36582592975
-  # runner loss on this single-case job). windows-2025 is one attempt on a
-  # newer OS; the leg is continue-on-error either way and the case is a
-  # recorded blocked exception in verify-shards (NM_BLOCKED_CASES).
+  # Earlier Windows runs timed out or lost their runner on octaveWarp. The
+  # exact-source ebbea00 run passed this case on windows-2025; keep both
+  # watchdogs bounded and require its ledger in the shard union.
   parity-windows-programs-octaveWarp:
     if: github.ref == 'refs/heads/main'
-    continue-on-error: true
     permissions:
       contents: read
     runs-on: windows-2025
@@ -297,6 +294,7 @@ jobs:
       - name: Programs gate octaveWarp
         env:
           NM_CHUNK_TIMEOUT_MS: '3600000'
+          NM_TS_TIMEOUT_MS: '3600000'
         run: bash scripts/gate-step.sh parity/out/programs.log node parity/sweep-programs.mjs --filter octaveWarp
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: success()
@@ -399,8 +397,6 @@ jobs:
       - name: Fetch vendor
         run: bash vendor/fetch.sh
       - name: Verify shard ledger coverage
-        env:
-          NM_BLOCKED_CASES: octaveWarp
         run: bash scripts/gate-step.sh shard-artifacts/verify.log bash -c 'ls shard-artifacts/; find shard-artifacts -maxdepth 2 -name "mode-ledger*" | sort; node scripts/verify-shards.mjs shard-artifacts/*/mode-ledger*.json'
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
@@ -409,8 +405,40 @@ jobs:
           path: shard-artifacts/
           if-no-files-found: error
 
+  parity-windows-consumer:
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+    runs-on: windows-2022
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+      - uses: ./.github/actions/parity-setup
+        with:
+          skip-unit-tests: 'true'
+          artifact-suffix: windows-consumer
+      - name: Installed consumer gate
+        run: |
+          tarball=$(npm pack --pack-destination "$RUNNER_TEMP")
+          consumer="$RUNNER_TEMP/threejs-consumer"
+          mkdir -p "$consumer"
+          npm install --prefix "$consumer" --no-audit --no-fund --bin-links=false "$RUNNER_TEMP/$tarball" three@0.186.1
+          bash "$consumer/node_modules/noisemaker-for-threejs/vendor/fetch.sh"
+          node parity/installed-consumer.mjs "$consumer" parity/out/installed-consumer 0.186.1
+          npm uninstall --prefix "$consumer" --no-audit --no-fund --bin-links=false noisemaker-for-threejs
+          test ! -d "$consumer/node_modules/noisemaker-for-threejs"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: rendered-parity-windows-consumer-${{ github.sha }}
+          path: parity/out/
+          if-no-files-found: error
+
   dispatch:
-    needs: [parity-windows-programs-verify, parity, parity-windows-programs-0of6, parity-windows-programs-1of6, parity-windows-programs-2of6, parity-windows-programs-3of6, parity-windows-programs-4of6, parity-windows-programs-5of12, parity-windows-programs-11of24, parity-windows-programs-23of48, parity-windows-programs-octaveWarp, parity-windows-programs-47of48-no-octaveWarp, parity-windows-stateful, parity-windows-corpus]
+    needs: [parity-windows-programs-verify, parity, parity-windows-programs-0of6, parity-windows-programs-1of6, parity-windows-programs-2of6, parity-windows-programs-3of6, parity-windows-programs-4of6, parity-windows-programs-5of12, parity-windows-programs-11of24, parity-windows-programs-23of48, parity-windows-programs-octaveWarp, parity-windows-programs-47of48-no-octaveWarp, parity-windows-stateful, parity-windows-corpus, parity-windows-consumer]
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
@@ -432,3 +460,47 @@ jobs:
             --ref main \
             -f kit=threejs \
             -f sha=${{ github.sha }}
+
+  parity-windows-served-kit:
+    needs: dispatch
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+    runs-on: windows-2022
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+      - uses: ./.github/actions/parity-setup
+        with:
+          skip-unit-tests: 'true'
+          artifact-suffix: windows-served-kit
+      - name: Wait for exact-source served kit
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          node --input-type=module - <<'JS'
+          const url = 'https://kits.noisedeck.app/threejs/0/kit.json'
+          const deadline = Date.now() + 30 * 60 * 1000
+          while (Date.now() < deadline) {
+            try {
+              const response = await fetch(url, { cache: 'no-store' })
+              if (response.ok) {
+                const kit = await response.json()
+                if (kit.source?.sha === process.env.EXPECTED_SHA) process.exit(0)
+              }
+            } catch { /* The release may still be in progress. */ }
+            await new Promise(resolve => setTimeout(resolve, 30000))
+          }
+          throw new Error('Exact-source served kit did not appear within 30 minutes')
+          JS
+      - name: Served kit consumer gate
+        run: node parity/kit-consumer.mjs parity/out/kit-consumer
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: rendered-parity-windows-served-kit-${{ github.sha }}
+          path: parity/out/
+          if-no-files-found: error
