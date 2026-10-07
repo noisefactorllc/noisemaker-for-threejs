@@ -32,7 +32,9 @@ on:
 permissions: {}
 
 concurrency:
-  group: export-kit-${{ github.ref }}
+  # The full gate and the push gate queue separately, so a weekly run never
+  # holds up a push.
+  group: export-kit-${{ github.ref }}-${{ github.event_name == 'push' && 'gate' || 'full' }}
   cancel-in-progress: false
 
 env:
