@@ -1,4 +1,4 @@
-// installed-consumer.mjs — installed-developer-workflow qualification driver (GAP-002).
+// installed-consumer.mjs — installed-developer-workflow qualification driver.
 //
 // Packs nothing itself: the caller installs the packed npm tarball into an ISOLATED consumer
 // directory (`npm init -y && npm i <tarball> three@<version>`), runs `bash vendor/fetch.sh`

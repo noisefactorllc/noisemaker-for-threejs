@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// probe-live-streams.mjs — GAP-004 live mic/camera stream acquisition probe.
+// probe-live-streams.mjs — live mic/camera stream acquisition probe.
 //
 // The graded live-input sweep (sweep-live-inputs.mjs) covers the browser's own
 // decoders (fixed PNG/WebM/WAV/OBJ bytes). Live DEVICE streams (getUserMedia

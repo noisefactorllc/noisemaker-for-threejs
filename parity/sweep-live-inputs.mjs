@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// sweep-live-inputs.mjs — GAP-004 live external-input parity sweep.
+// sweep-live-inputs.mjs — live external-input parity sweep.
 //
 // Runs parity/timeseries.mjs over parity/live-inputs.manifest.json: the media /
 // scope / spectrum programs with the external data produced by the browser's own

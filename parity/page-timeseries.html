@@ -151,7 +151,7 @@
               if (typeof v === 'string' && /_step_\d+$/.test(v)) ids.add(v)
           for (const id of ids) pipeline.backend.updateTextureFromSource(id, cv, { flipY: true })
         }
-        // LIVE external-input sources (GAP-004). Unlike the injected fixtures above,
+        // LIVE external-input sources. Unlike the injected fixtures above,
         // these do NOT synthesize pixels or samples in the page: the browser's own
       // decoders (PNG image decode, WebM video decode, WAV audio decode) produce
       // the data that reaches updateTextureFromSource / setAudioState. The fixture
@@ -227,7 +227,7 @@
         applyMeshData(pipeline, parseObj(text))
       }
       if (inject.meshEngineLive) {
-        // ENGINE-side OBJ path (GAP-004): the published bundle's parseOBJ is
+        // ENGINE-side OBJ path: the published bundle's parseOBJ is
         // internal-only, but CanvasRenderer.loadOBJFromURL is public and runs
         // the engine's OWN fetch -> parse -> pack -> uploadMeshData path.
         // Drive it on a throwaway offscreen renderer (its pipeline is never
@@ -252,7 +252,7 @@
         }
       }
       if (inject.streamLive) {
-        // LIVE device streams (GAP-004 mic/camera leg): the input is a real
+        // LIVE device streams (mic/camera): the input is a real
         // getUserMedia stream produced OUTSIDE the page (no injected bytes) —
         // a camera MediaStream feeding a <video> element that the adapter's
         // published updateTextureFromSource re-uploads every frame, and a mic

@@ -5,10 +5,6 @@
 
 # Noisemaker for Three.js
 
-Current measured support: [compatibility report](docs/COMPATIBILITY.md).
-
-Current qualification limits: [completion gaps](docs/COMPLETION_GAPS.md).
-
 > Run **Noisemaker**'s procedural visuals in **three.js**.
 
 > This package supports the "Export Shader Pipeline" feature in Noisedeck.app. The
@@ -148,7 +144,10 @@ Runnable examples: [`examples/texture-on-mesh.html`](examples/texture-on-mesh.ht
 - The only gaps are effects that need a **live external feed** — audio, video, a loaded OBJ mesh, or
   text rendering. (They still render correctly when given a fixed test input.)
 
-Full coverage table and parity numbers: **[STATUS.md](STATUS.md)**.
+How it is checked: every fixture, the stateful sweep and the live corpus are rendered through the
+reference backend and through `ThreeBackend` in the same browser and must match. CI runs the full
+set on Linux, macOS and Windows weekly and on manual dispatch, and only a green full run publishes
+the export kit; a push runs lint and the unit tests.
 
 ## How it works
 
@@ -161,8 +160,6 @@ that needed re-implementing. This adapter supplies one new backend, `ThreeBacken
 engine's GPU calls onto three.js primitives (`WebGLRenderTarget`, `RawShaderMaterial`, a fullscreen
 triangle, double-buffered surfaces). Everything else — the compiler, the effects, the GLSL — is the
 unmodified engine fetched from the CDN.
-
-Design notes and the full build plan: [`docs/IMPLEMENTATION-PLAN.md`](docs/IMPLEMENTATION-PLAN.md).
 
 ## Contributing
 
@@ -183,9 +180,7 @@ Parity works by running the **same** CDN engine two ways — once through its ow
 parity/programs/<effect>.dsl`.
 - For stateful/continuous effects (navier–stokes, reaction-diffusion, agents), run `parity/sweep-stateful.sh`.
 - For the full roster, run `node parity/sweep-programs.mjs`.
-  This covers one fixture per effect, plus one per compile-time mode variant — 300 fixtures.
-
-Methodology and per-effect results: **[STATUS.md](STATUS.md)**.
+  This covers one fixture per effect, plus one per compile-time mode variant — 304 fixtures.
 
 ## Repo layout
 
@@ -194,9 +189,7 @@ src/         the adapter — public API, ThreeBackend, three.js wrappers
 vendor/      fetch script + Node loader (the engine bytes are git-ignored)
 parity/      parity harness, test programs, live corpus
 examples/    runnable HTML examples
-docs/        design spec + implementation plan
 reference/   engine specs shared across all Noisemaker ports
-STATUS.md    coverage table, parity results, known limits
 ```
 
 ## License

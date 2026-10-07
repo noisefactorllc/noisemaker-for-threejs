@@ -1,4 +1,4 @@
 {
-  "_comment": "LIVE external-input video fixture (GAP-004). The harness page loads this fixed WebM in a real <video> element, seeks to a fixed time, awaits 'seeked', and binds the decoded video element to media's external imageTex_step_N via updateTextureFromSource.",
+  "_comment": "LIVE external-input video fixture. The harness page loads this fixed WebM in a real <video> element, seeks to a fixed time, awaits 'seeked', and binds the decoded video element to media's external imageTex_step_N via updateTextureFromSource.",
   "videoLive": { "url": "/parity/assets/live-video.webm", "seek": 0.5 }
 }

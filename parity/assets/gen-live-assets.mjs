@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // gen-live-assets.mjs — regenerate the committed live-input fixtures.
 //
-// These assets feed parity's LIVE external-input cases (GAP-004): unlike the
+// These assets feed parity's LIVE external-input cases: unlike the
 // injected fixtures, the harness page does not draw them — the browser's own
 // decoders (PNG image decode, WAV audio decode) produce the bytes that reach
 // updateTextureFromSource / setAudioState. The contents are still fully

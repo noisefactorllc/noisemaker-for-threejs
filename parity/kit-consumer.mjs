@@ -1,4 +1,4 @@
-// kit-consumer.mjs — served-kit host-workflow qualification driver (GAP-003).
+// kit-consumer.mjs — served-kit host-workflow qualification driver.
 //
 // Assembles the SERVED export kit into an isolated consumer directory, then exercises
 // the kit's own `index.html` host page in headless Chromium:

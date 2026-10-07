@@ -1,4 +1,4 @@
 {
-  "_comment": "LIVE external-input mesh fixture driven through the ENGINE's own OBJ path (GAP-004). The harness page instantiates the published CanvasRenderer and calls its public loadOBJFromURL (real fetch + engine parseOBJ + engine packing + engine uploadMeshData), then uploads the engine-packed bytes to the harness pipeline under test. The published bundle's parseOBJ is internal-only, so this public CanvasRenderer path is the engine-side parse.",
+  "_comment": "LIVE external-input mesh fixture driven through the ENGINE's own OBJ path. The harness page instantiates the published CanvasRenderer and calls its public loadOBJFromURL (real fetch + engine parseOBJ + engine packing + engine uploadMeshData), then uploads the engine-packed bytes to the harness pipeline under test. The published bundle's parseOBJ is internal-only, so this public CanvasRenderer path is the engine-side parse.",
   "meshEngineLive": { "url": "/parity/assets/live-mesh.obj" }
 }

@@ -1,4 +1,4 @@
 {
-  "_comment": "LIVE external-input mesh fixture (GAP-004). The harness page fetches this fixed .obj URL through the browser's real fetch path, parses it (the published bundle's parseOBJ is internal-only) with the shared deterministic parseObj() in parity/page-timeseries.html, and uploads the vertices via uploadMeshData (normals/uvs zero).",
+  "_comment": "LIVE external-input mesh fixture. The harness page fetches this fixed .obj URL through the browser's real fetch path, parses it (the published bundle's parseOBJ is internal-only) with the shared deterministic parseObj() in parity/page-timeseries.html, and uploads the vertices via uploadMeshData (normals/uvs zero).",
   "meshLive": { "url": "/parity/assets/live-mesh.obj" }
 }

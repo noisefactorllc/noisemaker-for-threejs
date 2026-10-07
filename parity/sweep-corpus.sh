@@ -9,7 +9,7 @@
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 FRAMES="${1:-20}"; CAPTURE="${2:-10}"; SIZE="${3:-128}"
-# Documented golden-side S001 compile-failure set (STATUS.md "Corpus 81/88").
+# Golden-side S001 compile-failure set.
 # Only these programs may report a tolerated golden-side S001 ERR; any other
 # ERR fails the gate.
 TOLERATED_GOLDEN_S001="4bm9AA 8KMvAg B5oBsA PmJyUQ WyalUg fKPUww liTYEg"
