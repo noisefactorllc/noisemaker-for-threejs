@@ -110,8 +110,10 @@ if (files.length > 0) {
       // Killing the chunk child orphans its chromium processes; a wedged GPU
       // process would poison the retry, so reap them (same targets as the
       // setup composite's orphaned-browser reaper, with self-excluding pkill
-      // patterns so the invoking shell is not SIGTERMed).
-      spawnSync('bash', ['-c', 'pkill -f chrome-headles[s]-shell; pkill -f headless_shel[l]; pkill -f chromiu[m]; command -v taskkill >/dev/null 2>&1 && taskkill //F //IM chrome-headless-shell.exe //T; command -v taskkill >/dev/null 2>&1 && taskkill //F //IM headless_shell.exe //T; true'], { timeout: 60000 })
+      // patterns so the invoking shell is not SIGTERMed). Only on GitHub-hosted
+      // runners: they are single-use, while on a shared host matching browsers by
+      // name would kill other sessions' browsers too.
+      if (process.env.RUNNER_ENVIRONMENT === 'github-hosted') spawnSync('bash', ['-c', 'pkill -f chrome-headles[s]-shell; pkill -f headless_shel[l]; pkill -f chromiu[m]; command -v taskkill >/dev/null 2>&1 && taskkill //F //IM chrome-headless-shell.exe //T; command -v taskkill >/dev/null 2>&1 && taskkill //F //IM headless_shell.exe //T; true'], { timeout: 60000 })
     }
     if (rc !== 0) batchFailure = `chunk at ${start} exited ${rc ?? 'signal'} after retry`
   }
