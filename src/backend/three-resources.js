@@ -8,18 +8,30 @@
 import * as THREE from 'three'
 
 /**
- * Map a noisemaker texture format string to a three.js texture data type — matching the
- * reference webgl2 resolveFormat EXACTLY. The reference recognizes ONLY rgba16f/rgba32f
- * (+rgba8); ALL other strings (rgba8unorm, rgba16float, rgba32float, undefined) fall back
- * to rgba8 = UnsignedByte. This is load-bearing: bloom declares "rgba16float" intermediates,
- * which the reference renders as RGBA8 — clamping HDR to [0,1]. Using HalfFloat instead
- * preserves HDR and diverges from the reference on HDR input (e.g. lighting → bloom).
+ * Map a noisemaker texture format string to a three.js texture data type, matching the
+ * reference webgl2 resolveFormat: rgba8/rgba16f/rgba32f and the single-channel r8/r16f/r32f
+ * keep their precision (every texture here is RGBA), and the WebGPU spellings of the same
+ * formats resolve to them, as the reference does since engine 1.0.262: bloom declares
+ * "rgba16float" intermediates (half float, so HDR input is not clamped to [0,1]) and
+ * buddhabrot "rgba32float" state. Unknown strings and an absent format fall back to
+ * rgba8 = UnsignedByte, as in the reference.
  */
+const FORMAT_ALIASES = {
+  rgba8unorm: 'rgba8',
+  rgba16float: 'rgba16f',
+  rgba32float: 'rgba32f',
+  r8unorm: 'r8',
+  r16float: 'r16f',
+  r32float: 'r32f'
+}
+
 export function formatToType(fmt) {
-  switch (fmt) {
+  switch (FORMAT_ALIASES[fmt] ?? fmt) {
     case 'rgba16f':
+    case 'r16f':
       return THREE.HalfFloatType
     case 'rgba32f':
+    case 'r32f':
       return THREE.FloatType
     default:
       return THREE.UnsignedByteType
