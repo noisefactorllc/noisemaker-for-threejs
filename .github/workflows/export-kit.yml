@@ -461,8 +461,46 @@ jobs:
           path: parity/out/
           if-no-files-found: error
 
+  # The same installed-package consumer gate on Linux (headless SwiftShader) and
+  # macOS (ANGLE/Metal), beside the Windows job above.
+  parity-consumer:
+    if: github.ref == 'refs/heads/main' && github.event_name != 'push'
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+      - uses: ./.github/actions/parity-setup
+        with:
+          skip-unit-tests: 'true'
+          artifact-suffix: consumer-${{ matrix.os }}
+      - name: Installed consumer gate
+        run: |
+          tarball=$(npm pack --pack-destination "$RUNNER_TEMP")
+          consumer="$RUNNER_TEMP/threejs-consumer"
+          mkdir -p "$consumer"
+          npm install --prefix "$consumer" --no-audit --no-fund --bin-links=false "$RUNNER_TEMP/$tarball" three@0.186.1
+          bash "$consumer/node_modules/noisemaker-for-threejs/vendor/fetch.sh"
+          node parity/installed-consumer.mjs "$consumer" parity/out/installed-consumer 0.186.1
+          npm uninstall --prefix "$consumer" --no-audit --no-fund --bin-links=false noisemaker-for-threejs
+          test ! -d "$consumer/node_modules/noisemaker-for-threejs"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: rendered-parity-consumer-${{ matrix.os }}-${{ github.sha }}
+          path: parity/out/
+          if-no-files-found: error
+
   dispatch:
-    needs: [parity-windows-programs-verify, parity, parity-windows-programs-0of6, parity-windows-programs-1of6, parity-windows-programs-2of6, parity-windows-programs-3of6, parity-windows-programs-4of6, parity-windows-programs-5of12, parity-windows-programs-11of24, parity-windows-programs-23of48, parity-windows-programs-octaveWarp, parity-windows-programs-47of48-no-octaveWarp, parity-windows-stateful, parity-windows-corpus, parity-windows-consumer]
+    needs: [parity-windows-programs-verify, parity, parity-windows-programs-0of6, parity-windows-programs-1of6, parity-windows-programs-2of6, parity-windows-programs-3of6, parity-windows-programs-4of6, parity-windows-programs-5of12, parity-windows-programs-11of24, parity-windows-programs-23of48, parity-windows-programs-octaveWarp, parity-windows-programs-47of48-no-octaveWarp, parity-windows-stateful, parity-windows-corpus, parity-windows-consumer, parity-consumer]
     if: github.ref == 'refs/heads/main' && github.event_name != 'push'
     runs-on: ubuntu-latest
     steps:
@@ -544,5 +582,55 @@ jobs:
         if: always()
         with:
           name: rendered-parity-windows-served-kit-${{ github.sha }}
+          path: parity/out/
+          if-no-files-found: error
+
+  # The same served-kit consumer gate on Linux (headless SwiftShader) and macOS
+  # (ANGLE/Metal), beside the Windows job above.
+  parity-served-kit:
+    needs: dispatch
+    if: github.ref == 'refs/heads/main' && github.event_name != 'push'
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+      - uses: ./.github/actions/parity-setup
+        with:
+          skip-unit-tests: 'true'
+          artifact-suffix: served-kit-${{ matrix.os }}
+      - name: Wait for exact-source served kit
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          node --input-type=module - <<'JS'
+          const url = 'https://kits.noisedeck.app/threejs/0/kit.json'
+          const deadline = Date.now() + 30 * 60 * 1000
+          while (Date.now() < deadline) {
+            try {
+              const response = await fetch(url, { cache: 'no-store' })
+              if (response.ok) {
+                const kit = await response.json()
+                if (kit.source?.sha === process.env.EXPECTED_SHA) process.exit(0)
+              }
+            } catch { /* The release may still be in progress. */ }
+            await new Promise(resolve => setTimeout(resolve, 30000))
+          }
+          throw new Error('Exact-source served kit did not appear within 30 minutes')
+          JS
+      - name: Served kit consumer gate
+        run: node parity/kit-consumer.mjs parity/out/kit-consumer
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: rendered-parity-served-kit-${{ matrix.os }}-${{ github.sha }}
           path: parity/out/
           if-no-files-found: error
