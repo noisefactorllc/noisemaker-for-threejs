@@ -35,6 +35,13 @@ function loadCase(raw) {
   let inject = raw.inject || null
   if (!inject && raw.injectPath) inject = JSON.parse(readFileSync(raw.injectPath, 'utf8'))
   else if (!inject && existsSync(injectSidecar)) inject = JSON.parse(readFileSync(injectSidecar, 'utf8'))
+  // A shared program that calls user.* effects carries their published Portable
+  // definitions in <name>.effects.json (parity/fetch-corpus.mjs). Both modes
+  // register them before compiling: the golden through the reference engine's
+  // CanvasRenderer.registerPortableEffect, the candidate through the adapter.
+  const effectsSidecar = dslPath.replace(/\.dsl$/, '.effects.json')
+  const effects = existsSync(effectsSidecar) ? JSON.parse(readFileSync(effectsSidecar, 'utf8')).effects : []
+  if (!Array.isArray(effects)) throw new Error(`${effectsSidecar}: effects must be an array`)
   return {
     dslPath,
     name: basename(dslPath).replace(/\.dsl$/, ''),
@@ -43,7 +50,8 @@ function loadCase(raw) {
     capture: Number(raw.capture ?? 300),
     size: Number(raw.size ?? 256),
     loopFrames: Number(raw.loopFrames ?? 600),
-    inject
+    inject,
+    effects
   }
 }
 
@@ -97,7 +105,7 @@ function toPng(flat, size) {
 }
 
 async function runMode(browser, port, mode, testCase) {
-  const { dsl, size, frames, capture, loopFrames, inject } = testCase
+  const { dsl, size, frames, capture, loopFrames, inject, effects } = testCase
   // newPage is the last unbounded browser call: a wedged browser (poisoned
   // Windows SwiftShader GPU process, shard 47of48 runner losses) can hang it
   // forever — beyond the evaluate watchdog, the launch/goto timeouts, and the
@@ -132,7 +140,7 @@ async function runMode(browser, port, mode, testCase) {
     res = await Promise.race([
       page.evaluate(
         async (a) => { try { return await window.__nm_timeseries(a) } catch (e) { return { error: (e && e.message) || JSON.stringify(e) || String(e), stack: e && e.stack } } },
-        { dsl, mode, size, frames, captureEvery: capture, loopFrames, inject }
+        { dsl, mode, size, frames, captureEvery: capture, loopFrames, inject, effects }
       ),
       new Promise((resolve, reject) => {
         timer = setTimeout(() => reject(new Error(`${mode}: timed out after ${evalTimeoutMs}ms\n${timeoutMsgs()}`)), evalTimeoutMs)

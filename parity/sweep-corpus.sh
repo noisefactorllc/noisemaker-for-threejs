@@ -9,10 +9,9 @@
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 FRAMES="${1:-20}"; CAPTURE="${2:-10}"; SIZE="${3:-128}"
-# Golden-side S001 compile-failure set.
-# Only these programs may report a tolerated golden-side S001 ERR; any other
-# ERR fails the gate.
-TOLERATED_GOLDEN_S001="4bm9AA 8KMvAg B5oBsA PmJyUQ WyalUg fKPUww liTYEg"
+# Every corpus program must render on both sides: any ERR, golden or candidate,
+# fails the gate. Programs that call user.* effects carry their published
+# definitions in <code>.effects.json, which timeseries.mjs registers.
 mkdir -p "$ROOT/parity/out"
 OUT="$ROOT/parity/out/CORPUS.txt"; : > "$OUT"
 pass=0; fail=0; err=0; worst=0; rc=0
@@ -25,8 +24,7 @@ for prog in "$ROOT"/parity/corpus/*.dsl; do
   if [ "$status" -ne 0 ] || [ -z "$line" ]; then
     printf '%s\n' "$out"
     reason=$(echo "$out" | grep -iE "error|not yet|undefined|register" | head -1 | cut -c1-80)
-    echo "ERR  $name | ${reason:-no result; child exit=$status}" | tee -a "$OUT"; err=$((err+1))
-    if ! echo "$out" | grep -qE '\[golden\] ERROR:.*S001' || ! echo " $TOLERATED_GOLDEN_S001 " | grep -q " $name "; then rc=1; fi
+    echo "ERR  $name | ${reason:-no result; child exit=$status}" | tee -a "$OUT"; err=$((err+1)); rc=1
     continue
   fi
   m=$(echo "$line" | grep -oE "= [0-9]+([.][0-9]+)?$" | cut -d ' ' -f 2)

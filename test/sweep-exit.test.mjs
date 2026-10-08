@@ -31,17 +31,16 @@ for (const sweep of ['stateful', 'corpus']) {
     })
   }
 }
-// Corpus-only: the golden-side S001 compile-failure ERR set is documented and
-// tolerated ONLY for the seven whitelisted programs; the same failure on the
-// candidate side, or on any non-whitelisted program, must fail the gate.
-for (const scenario of ['golden-err-whitelisted', 'golden-err', 'candidate-err']) {
+// Corpus-only: a compile failure on either side fails the gate, including for
+// the programs whose golden side once failed to compile (4bm9AA).
+for (const scenario of ['golden-err-former-exception', 'golden-err', 'candidate-err']) {
   test(`corpus sweep ${scenario} preserves the child gate verdict`, () => {
     const root = mkdtempSync(join(tmpdir(), 'nm-sweep-exit-'))
     try {
       for (const dir of ['parity', 'parity/out', 'parity/corpus']) mkdirSync(join(root, dir), { recursive: true })
       const script = join(root, 'parity', 'sweep-corpus.sh')
       writeFileSync(script, readFileSync(new URL('../parity/sweep-corpus.sh', import.meta.url)))
-      const name = scenario === 'golden-err-whitelisted' ? '4bm9AA' : 'probe'
+      const name = scenario === 'golden-err-former-exception' ? '4bm9AA' : 'probe'
       writeFileSync(join(root, `parity/corpus/${name}.dsl`), 'noise().write(o0)\n')
       writeFileSync(join(root, 'parity/timeseries.mjs'), [
         `console.error('[${scenario === 'candidate-err' ? 'candidate' : 'golden'}] ERROR: {"code":"ERR_COMPILATION_FAILED","diagnostics":[{"code":"S001"}]}')`,
@@ -49,8 +48,7 @@ for (const scenario of ['golden-err-whitelisted', 'golden-err', 'candidate-err']
       ].join('\n'))
       const run = spawnSync('bash', [script, '1', '1', '8'], { encoding: 'utf8', timeout: 10000 })
       assert.equal(run.error, undefined)
-      if (scenario === 'golden-err-whitelisted') assert.equal(run.status, 0, run.stdout + run.stderr)
-      else assert.notEqual(run.status, 0, run.stdout + run.stderr)
+      assert.notEqual(run.status, 0, run.stdout + run.stderr)
     } finally {
       rmSync(root, { recursive: true, force: true })
     }

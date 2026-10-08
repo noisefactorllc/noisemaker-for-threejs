@@ -1,8 +1,8 @@
 // Unit tests for scripts/parity-summary.mjs classification: programs and
 // stateful are bit-exact by contract (nonzero diff = fail), corpus has the
 // published worst<=2.001 band (0=exact, within band=strict, FAIL within
-// band=near, beyond=fail), the golden-side S001 set defers, and unresolved
-// cases fail.
+// band=near, beyond=fail), and unresolved cases, including any compile
+// failure on either side, fail.
 import assert from 'node:assert/strict'
 import { existsSync } from 'node:fs'
 import test from 'node:test'
@@ -26,11 +26,13 @@ test('corpus: worst 0 exact, ANY nonzero difference is a fail (tolerance-0 contr
   assert.equal(classify({ name: 'AbCdEf', worst: '3', failLine: false, errLine: false, kind: 'corpus' }), 'fail')
 })
 
-test('a tolerated golden-side S001 compile failure defers', () => {
-  assert.equal(classify({ name: '4bm9AA', worst: null, errLine: true, kind: 'corpus' }), 'defer')
+test('a corpus compile failure fails, whichever program it is', () => {
+  for (const name of ['4bm9AA', 'B5oBsA', 'AbCdEf']) {
+    assert.equal(classify({ name, worst: null, errLine: true, kind: 'corpus' }), 'fail')
+  }
 })
 
-test('whole-port scope: 291 single-frame programs + 13 stateful + 81 corpus, disjoint, S001 excluded', () => {
+test('whole-port scope: 291 single-frame programs + 13 stateful + 88 corpus, disjoint, none excluded', () => {
   const scope = mod.wholePortIds()
   const total = [...scope.programs, ...scope.stateful, ...scope.corpus]
   // No double count: the 13 stateful fixtures live in parity/programs and are
@@ -38,11 +40,11 @@ test('whole-port scope: 291 single-frame programs + 13 stateful + 81 corpus, dis
   // time-series cases.
   assert.equal(new Set(total).size, total.length, 'duplicate ids in the whole-port scope')
   assert.equal(scope.stateful.length, 13)
-  assert.equal(scope.corpus.length, 81)
-  for (const s001 of '4bm9AA 8KMvAg B5oBsA PmJyUQ WyalUg fKPUww liTYEg'.split(' ')) {
-    assert.ok(!total.includes(s001), `golden-side S001 fixture ${s001} must not be in the whole-port scope`)
+  assert.equal(scope.corpus.length, 88)
+  for (const userEffectProgram of '4bm9AA 7INvow B5oBsA PmJyUQ d-MpwA fKPUww liTYEg'.split(' ')) {
+    assert.ok(total.includes(userEffectProgram), `user-effect corpus program ${userEffectProgram} must be in the whole-port scope`)
   }
-  assert.equal(scope.programs.length + scope.stateful.length + scope.corpus.length, 385)
+  assert.equal(scope.programs.length + scope.stateful.length + scope.corpus.length, 392)
 })
 
 test('parseRender extracts the worst diff, [FAIL] lines, and unusable results', () => {

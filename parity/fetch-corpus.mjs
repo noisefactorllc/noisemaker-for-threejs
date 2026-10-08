@@ -2,6 +2,10 @@
 // fetch-corpus.mjs — pull real DSL programs from the live noisedeck corpus
 // (blaster.noisedeck.app feed -> sharing.noisedeck.app composition DSL) into
 // parity/corpus/<code>.dsl for parity validation. Read-only; public gallery.
+// A program that calls user.* effects is published with their Portable
+// definitions; those are kept in parity/corpus/<code>.effects.json, which the
+// time-series harness registers before it compiles the program. Without them
+// the reference engine cannot compile the program (S001 unknown effect).
 //
 // Usage: node fetch-corpus.mjs [count]   (default: ALL — paginate the whole feed)
 import { writeFileSync, mkdirSync } from 'node:fs'
@@ -38,6 +42,12 @@ async function main() {
       }
       const safe = c.code.replace(/[^a-zA-Z0-9_-]/g, '_')
       writeFileSync(resolve(corpusDir, `${safe}.dsl`), data.dsl)
+      if (Array.isArray(data.effects) && data.effects.length) {
+        const sidecar = { source: `${COMP}/${c.code}`, effects: data.effects }
+        writeFileSync(resolve(corpusDir, `${safe}.effects.json`), JSON.stringify(sidecar, null, 2) + '\n')
+      } else if (data.hasEffects) {
+        process.stdout.write(`[corpus] ${c.code} "${c.title}": hasEffects but no effects served\n`)
+      }
       manifest.push({ code: c.code, file: `${safe}.dsl`, title: c.title })
     } catch (e) {
       process.stdout.write(`[corpus] ${c.code} fetch failed: ${e?.message || e}\n`)

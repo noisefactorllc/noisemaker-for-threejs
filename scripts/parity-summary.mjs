@@ -23,11 +23,10 @@
 //     fail. 'strict' and 'near' exist only for completeness: a comparator
 //     FAIL within a published numeric band (none is currently enforced)
 //     would be near; beyond any band is fail.
-//   The 7 documented golden-side S001 compile failures (parity/sweep-corpus.sh
-//   TOLERATED_GOLDEN_S001; upstream defect — the GOLDEN side cannot compile)
-//   classify as defer: the case is not renderable on the authority side.
-//   An ERR with no result at all is fail; a case id that matches no fixture is
-//   missing.
+//   Every corpus program is in scope; a program that calls user.* effects
+//   renders with its published definitions (parity/corpus/<code>.effects.json).
+//   An ERR with no result at all, on either side, is fail; a case id that
+//   matches no fixture is missing.
 //
 // Exit status is 0 only when executed == expected, exact + strict == executed,
 // and near/defer/skip/fail/missing are all 0.
@@ -60,11 +59,9 @@ export function checkPrerequisites({ needCorpus = true } = {}) {
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
 const progDir = join(root, 'parity', 'programs')
 const corpusDir = join(root, 'parity', 'corpus')
-const TOLERATED_GOLDEN_S001 = new Set('4bm9AA 8KMvAg B5oBsA PmJyUQ WyalUg fKPUww liTYEg'.split(' '))
 const STATEFUL = new Set('navierStokes convolutionFeedback temporalAberration reactionDiffusion cellularAutomata feedback synth3d_cellularAutomata3d synth3d_reactionDiffusion3d filter3d_flow3d agent_buddhabrot agent_dla agent_physarum agent_physical'.split(' '))
 
 export function classify({ name, worst, failLine, errLine, kind }) {
-  if (TOLERATED_GOLDEN_S001.has(name) && errLine) return 'defer'
   if (errLine || worst === null || worst === undefined) return 'fail'
   const w = Number(worst)
   if (failLine) {
@@ -81,10 +78,7 @@ export function classify({ name, worst, failLine, errLine, kind }) {
 
 function corpusExpected() {
   if (!existsSync(corpusDir)) return []
-  const all = readdirSync(corpusDir).filter((f) => f.endsWith('.dsl')).map((f) => basename(f, '.dsl'))
-  // Whole-port scope excludes the golden-side S001 set: those cases are not
-  // renderable on the authority side, so they cannot be executed here.
-  return all.filter((n) => !TOLERATED_GOLDEN_S001.has(n))
+  return readdirSync(corpusDir).filter((f) => f.endsWith('.dsl')).map((f) => basename(f, '.dsl'))
 }
 
 function programExpected() {
@@ -160,8 +154,8 @@ export function auditAuthority({
 // Whole-port scope: current programs EXCLUDING the 13 stateful effects (they
 // are counted as separate time-series cases — a single-frame render would not
 // exercise their contract), the stateful set itself in time-series mode, and
-// the renderable corpus (the 7 golden-side S001 fixtures excluded). 291 + 13
-// + 81 = 385; the stateful fixtures are NOT double-counted.
+// the whole corpus. 291 + 13 + 88 = 392; the stateful fixtures are NOT
+// double-counted.
 export function wholePortIds() {
   const statefulIds = [...STATEFUL].filter((n) => existsSync(join(progDir, `${n}.dsl`)))
   return {

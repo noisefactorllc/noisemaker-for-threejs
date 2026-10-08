@@ -13,7 +13,7 @@
       import * as THREE from 'three'
       // Engine from the CDN bundle (vendor/fetch.sh). Golden = core's createPipeline (WebGL2Backend),
       // candidate = core's Pipeline + ThreeBackend (via createThreePipeline). Same engine both sides.
-      import { compileGraph, createPipeline, loadEffectsForDsl, core } from '/src/engine-browser.js'
+      import { compileGraph, createPipeline, loadEffectsForDsl, registerPortableEffectInstance, core } from '/src/engine-browser.js'
       import { createThreePipeline } from '/src/runtime/create-three-pipeline.js'
 
       THREE.ColorManagement.enabled = false
@@ -352,11 +352,21 @@
       }
       }
 
-      window.__nm_timeseries = async ({ dsl, mode, size, frames, captureEvery, loopFrames, inject }) => {
+      window.__nm_timeseries = async ({ dsl, mode, size, frames, captureEvery, loopFrames, inject, effects = [] }) => {
         const canvas = document.getElementById('c')
         canvas.width = size
         canvas.height = size
         await loadEffectsForDsl(dsl)
+        // User effects published with a shared program (Portable definitions). The golden
+        // registers them the way the apps do for a shared program, through the reference
+        // engine's own CanvasRenderer.registerPortableEffect; the candidate uses the adapter's
+        // registration (src/effects/register-effect.js). Each mode runs in its own page, so
+        // each registers into a fresh realm.
+        const reference = mode === 'candidate' ? null : new core.CanvasRenderer({})
+        for (const definition of effects) {
+          if (reference) await reference.registerPortableEffect(definition)
+          else await registerPortableEffectInstance(definition)
+        }
         const graph = compileGraph(dsl)
 
         let pipeline
