@@ -29,6 +29,7 @@
 // Steps are registered in the page (`window.__steps`) and invoked by name — Playwright cannot
 // serialize function arguments, so each step runs through one `evaluate(key)`.
 import { chromium } from '@playwright/test'
+import { startLoopbackServer } from './loopback-server.mjs'
 import { createHash } from 'node:crypto'
 import { mkdirSync, writeFileSync, readFileSync, readdirSync } from 'node:fs'
 import http from 'node:http'
@@ -79,7 +80,7 @@ const MIME = {
 }
 
 // The qualification page is served from memory — the consumer tree is never mutated.
-const server = http.createServer((req, res) => {
+const { server, port } = await startLoopbackServer(() => http.createServer((req, res) => {
   const url = new URL(req.url, 'http://x')
   if (url.pathname === '/gap002-page.html') {
     res.writeHead(200, { 'content-type': 'text/html' })
@@ -94,9 +95,7 @@ const server = http.createServer((req, res) => {
   } catch {
     res.writeHead(404); res.end('nf')
   }
-})
-await new Promise((ok) => server.listen(0, '127.0.0.1', ok))
-const port = server.address().port
+}))
 const base = `http://127.0.0.1:${port}`
 
 const results = { threeVersion, base, vendor, steps: {}, errors: [] }

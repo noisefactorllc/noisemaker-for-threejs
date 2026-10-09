@@ -34,6 +34,7 @@
 // inventory and engine hashes, gate verdict) lands in <outDir>.
 import { chromium } from '@playwright/test'
 import { chromiumLaunchArgs } from './launch-args.mjs'
+import { startLoopbackServer } from './loopback-server.mjs'
 import { createHash } from 'node:crypto'
 import http from 'node:http'
 import { mkdirSync, existsSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
@@ -138,7 +139,7 @@ writeFileSync(join(consumer, 'index-invalid.html'), fill(invalidDsl))
 
 // ---- 4. run both legs through the kit page --------------------------------------------
 const mime = { '.html': 'text/html', '.js': 'text/javascript', '.json': 'application/json', '.md': 'text/markdown', '.txt': 'text/plain' }
-const server = http.createServer((req, res) => {
+const { server, port } = await startLoopbackServer(() => http.createServer((req, res) => {
   let p = decodeURIComponent(new URL(req.url, 'http://x').pathname)
   if (p.endsWith('/')) p += 'index.html'
   try {
@@ -149,9 +150,8 @@ const server = http.createServer((req, res) => {
     res.writeHead(404)
     res.end('nf')
   }
-})
-await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
-const base = `http://127.0.0.1:${server.address().port}`
+}))
+const base = `http://127.0.0.1:${port}`
 
 const browser = await chromium.launch({ args: chromiumLaunchArgs() })
 out.host = { platform: process.platform, arch: process.arch, browserVersion: browser.version() }
