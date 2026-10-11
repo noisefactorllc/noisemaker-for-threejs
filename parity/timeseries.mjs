@@ -19,6 +19,7 @@ import { deflateSync } from 'node:zlib'
 import { spawnSync } from 'node:child_process'
 import { chromium } from '@playwright/test'
 import { chromiumLaunchArgs } from './launch-args.mjs'
+import { startLoopbackServer } from './loopback-server.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const repoRoot = resolve(__dirname, '..')
@@ -74,19 +75,17 @@ if (batchIdx >= 0) {
 }
 
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.json': 'application/json', '.glsl': 'text/plain', '.vert': 'text/plain', '.frag': 'text/plain', '.wgsl': 'text/plain', '.png': 'image/png', '.wav': 'audio/wav', '.webm': 'video/webm' }
+// Bind through the shared loopback helper: NM_TS_PORT first, then ephemeral,
+// then the sandbox's fixed range — each attempt time-bounded so a wedged or
+// refused bind falls through (same convention as installed-consumer.mjs and
+// kit-consumer.mjs).
 function startServer() {
-  return new Promise((res) => {
-    const server = createServer((req, rq) => {
-      const p = join(repoRoot, decodeURIComponent(req.url.split('?')[0]))
-      if (!p.startsWith(repoRoot) || !existsSync(p) || !statSync(p).isFile()) { rq.statusCode = 404; rq.end('nf'); return }
-      rq.setHeader('Content-Type', MIME[extname(p)] || 'application/octet-stream')
-      createReadStream(p).pipe(rq)
-    })
-    // NM_TS_PORT: some sandboxed hosts (e.g. the macOS GPU host broker) only
-    // permit an explicit loopback port from a fixed range — listen(0) is EPERM.
-    const fixedPort = process.env.NM_TS_PORT ? Number(process.env.NM_TS_PORT) : 0
-    server.listen(fixedPort, '127.0.0.1', () => res({ server, port: server.address().port }))
-  })
+  return startLoopbackServer(() => createServer((req, rq) => {
+    const p = join(repoRoot, decodeURIComponent(req.url.split('?')[0]))
+    if (!p.startsWith(repoRoot) || !existsSync(p) || !statSync(p).isFile()) { rq.statusCode = 404; rq.end('nf'); return }
+    rq.setHeader('Content-Type', MIME[extname(p)] || 'application/octet-stream')
+    createReadStream(p).pipe(rq)
+  }))
 }
 
 function crc32(b){let c=0xffffffff;for(let i=0;i<b.length;i++){c^=b[i];for(let k=0;k<8;k++)c=c&1?0xedb88320^(c>>>1):c>>>1}return(c^0xffffffff)>>>0}
