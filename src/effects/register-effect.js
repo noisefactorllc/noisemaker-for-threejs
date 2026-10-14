@@ -60,10 +60,10 @@ export async function registerEffectInstance (core, ns, eff, instance, allChoice
       choices: spec.choices,
     }
   })
-  // NOTE: param aliases (e.g. media backgroundColor->bgColor) need the reference's
-  // registerParamAliases, which the published bundle does NOT export — so this adapter accepts
-  // CANONICAL param names only (the names the noisedeck UI emits). Faithful for app-authored
-  // programs; hand-authored alias names won't resolve. (Verified: the live corpus is unaffected.)
+  // NOTE: the engine retired parameter aliases outright (upstream a1a3fa2a removed
+  // paramAliases.js and every definition's paramAliases block), so this adapter accepts
+  // CANONICAL param names only (the names the noisedeck UI emits). Hand-authored alias
+  // names now fail the same way they do upstream. (Verified: the live corpus is unaffected.)
   if (core.registerOp) core.registerOp(`${ns}.${func}`, { name: func, args })
 
   const isStarter = !((instance.passes || []).some((p) =>
@@ -82,15 +82,14 @@ export async function finalizeEnums (core, allChoices) {
 // (noisemaker cb22a05e, shaders/src/renderer/canvas.js). Registers a raw Portable definition
 // (Portable JSON + already-loaded shaders[program].glsl/wgsl) into the user.* namespace with the
 // same validation contract: DSL-identifier func, prototype-key poisoning guards, nonempty passes
-// naming loaded programs, per-language shader completeness, globals/choices/paramAliases shapes,
+// naming loaded programs, per-language shader completeness, globals/choices shapes,
 // and duplicate-name rejection. Registration mirrors upstream registerEffectWithRuntime scoped to
 // user.*: 4 lookup aliases (bare name restored/unregistered afterwards so a Portable effect never
 // shadows an existing bare built-in), registerOp args from globals with choice-enum collection,
 // starter inference over the full pipeline-input list with explicit override, and choice-enum
-// merge. paramAliases are registered through the published bundle's own registration path
-// (registerParamAliases is module-internal, so the adapter reaches it via
-// CanvasRenderer.registerEffectWithRuntime); manifest mini-bundles keep the historical
-// canonical-names-only note below because their loader path predates this surface.
+// merge. paramAliases are rejected outright, matching the retired engine contract
+// (upstream a1a3fa2a); manifest mini-bundles keep the historical canonical-names-only
+// note below because their loader path predates this surface.
 export async function registerPortableEffect (core, definition) {
   const isRecord = (value) => value !== null && typeof value === 'object' && !Array.isArray(value)
   const fail = (message) => { throw new Error(`Portable effect: ${message}`) }
@@ -148,10 +147,7 @@ export async function registerPortableEffect (core, definition) {
       fail(`choices for ${key} must map names to ${spec.type === 'string' ? 'strings' : 'numbers'} or null`)
     }
   }
-  if (definition.paramAliases !== undefined && (!isRecord(definition.paramAliases) ||
-    Object.values(definition.paramAliases).some((target) => typeof target !== 'string' || !Object.hasOwn(globals || {}, target)))) {
-    fail('paramAliases must map names to declared globals')
-  }
+  if (definition.paramAliases !== undefined) fail('paramAliases is no longer supported')
   if (core.getEffect(`user.${func}`) || core.getEffect(`user/${func}`)) fail(`user.${func} is already registered`)
 
   const instance = new core.Effect({ ...definition, func, namespace: 'user' })
@@ -163,9 +159,8 @@ export async function registerPortableEffect (core, definition) {
 
   // Portable effects belong to user.*; preserve a built-in's bare lookup. Registration goes
   // through the published bundle's own CanvasRenderer.registerEffectWithRuntime when available
-  // (it registers the lookup aliases, the op, AND paramAliases + hidden/deprecatedBy aliases —
-  // registerParamAliases itself is module-internal and not exported), with the manual equivalent
-  // below kept as fallback if a future bundle stops exposing it.
+  // (it registers the lookup aliases, the op, and hidden/deprecatedBy aliases), with the manual
+  // equivalent below kept as fallback if a future bundle stops exposing it.
   const previousBare = core.getEffect(func)
   let choices
   const runtimeRegistrar = core.CanvasRenderer?.prototype?.registerEffectWithRuntime
