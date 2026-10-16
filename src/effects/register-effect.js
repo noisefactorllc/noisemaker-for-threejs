@@ -60,12 +60,14 @@ export async function registerEffectInstance (core, ns, eff, instance, allChoice
       choices: spec.choices,
     }
   })
-  // NOTE: the published engine bundle keeps parameter aliases (shaders/src/lang/paramAliases.js):
-  // it validates paramAliases as a map from names to declared globals, registers it through
-  // CanvasRenderer.registerEffectWithRuntime -> registerParamAliases, and resolves alias names at
-  // compile time with a removal warning. This adapter mirrors that contract. The port's manual
-  // fallback path cannot reach the bundle's internal alias registry (registerParamAliases is not
-  // exported), so compile-time alias resolution there requires registerEffectWithRuntime.
+  // NOTE: the served engine bundle enforces the parameter-alias retirement (upstream a1a3fa2):
+  // its CanvasRenderer.registerPortableEffect fails any definition carrying paramAliases with
+  // "paramAliases is no longer supported", so this adapter accepts CANONICAL param names only
+  // (the names the noisedeck UI emits). Hand-authored alias names fail the same way they do in
+  // the bundle. (Bundle generations roll at the pinned VERSION=1 URL: 0cb2c16 mirrored a
+  // generation whose probe still showed the alias registry; the currently served bundle —
+  // sha256 3619b0ab4e5fe69b23f20dd6825a7cc19fedb1fbc6b3475f265f46a25d2dc57f, 929281 bytes —
+  // fails paramAliases outright, and that contract is the one mirrored here.)
   if (core.registerOp) core.registerOp(`${ns}.${func}`, { name: func, args })
 
   const isStarter = !((instance.passes || []).some((p) =>
@@ -89,10 +91,10 @@ export async function finalizeEnums (core, allChoices) {
 // user.*: 4 lookup aliases (bare name restored/unregistered afterwards so a Portable effect never
 // shadows an existing bare built-in), registerOp args from globals with choice-enum collection,
 // starter inference over the full pipeline-input list with explicit override, and choice-enum
-// merge. paramAliases follow the published bundle's contract: a valid map from names to declared
-// globals is kept on the instance and registered by registerEffectWithRuntime (registerParamAliases),
-// so alias names resolve at compile time; an invalid shape fails with the same message the bundle
-// emits. (Bundle probe: vendor/noisemaker/noisemaker-shaders-core.esm.js, paramAliases.js block.)
+// merge. paramAliases follow the served bundle's contract: it enforces the parameter-alias
+// retirement (upstream a1a3fa2), so ANY definition carrying paramAliases fails with the same
+// message the bundle emits, regardless of shape. (Bundle probe:
+// vendor/noisemaker/noisemaker-shaders-core.esm.js, registerPortableEffect block.)
 export async function registerPortableEffect (core, definition) {
   const isRecord = (value) => value !== null && typeof value === 'object' && !Array.isArray(value)
   const fail = (message) => { throw new Error(`Portable effect: ${message}`) }
@@ -150,9 +152,9 @@ export async function registerPortableEffect (core, definition) {
       fail(`choices for ${key} must map names to ${spec.type === 'string' ? 'strings' : 'numbers'} or null`)
     }
   }
-  if (definition.paramAliases !== undefined && (!isRecord(definition.paramAliases) || Object.values(definition.paramAliases).some((target) => typeof target !== 'string' || !Object.hasOwn(globals || {}, target)))) {
-    fail('paramAliases must map names to declared globals')
-  }
+  // The served bundle fails ANY paramAliases outright (it enforces the retirement from
+  // upstream a1a3fa2), so the adapter mirrors that contract with the bundle's exact message.
+  if (definition.paramAliases !== undefined) fail('paramAliases is no longer supported')
   if (core.getEffect(`user.${func}`) || core.getEffect(`user/${func}`)) fail(`user.${func} is already registered`)
 
   const instance = new core.Effect({ ...definition, func, namespace: 'user' })
