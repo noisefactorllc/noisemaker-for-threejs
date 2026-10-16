@@ -9,6 +9,8 @@
 // 36422741592 — same renderer stack that already renders byte-exact on the
 // Linux legs). This is a rendering-path selection, not a tolerance change:
 // every gate still enforces its published thresholds.
+import { chromium, firefox } from '@playwright/test'
+
 export function chromiumLaunchArgs () {
   const args = ['--disable-gpu-sandbox']
   if (process.platform === 'darwin') {
@@ -17,4 +19,17 @@ export function chromiumLaunchArgs () {
     args.push('--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader')
   }
   return args
+}
+
+export function parityBrowserConfig (name = process.env.NM_BROWSER || 'chromium') {
+  if (name === 'chromium') {
+    return {
+      browserType: chromium,
+      launchOptions: { headless: true, args: chromiumLaunchArgs(), timeout: 120000 },
+    }
+  }
+  if (name === 'firefox') {
+    return { browserType: firefox, launchOptions: { headless: true, timeout: 120000 } }
+  }
+  throw new Error(`Unsupported NM_BROWSER: ${name}. Use chromium or firefox.`)
 }

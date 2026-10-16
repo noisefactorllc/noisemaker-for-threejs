@@ -17,8 +17,7 @@ import { fileURLToPath } from 'node:url'
 import { createServer } from 'node:http'
 import { deflateSync } from 'node:zlib'
 import { spawnSync } from 'node:child_process'
-import { chromium } from '@playwright/test'
-import { chromiumLaunchArgs } from './launch-args.mjs'
+import { parityBrowserConfig } from './launch-args.mjs'
 import { startLoopbackServer } from './loopback-server.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -208,8 +207,8 @@ async function closeBrowser(browser) {
 }
 
 async function main() {
+  const { browserType, launchOptions } = parityBrowserConfig()
   const { server, port } = await startServer()
-  const launchArgs = chromiumLaunchArgs()
   // launch timeout: a hung chromium launch must fail fast (it previously hung
   // a windows gate until the runner died at ~55-68 min; run 36536453382,
   // shard 47of48, died with 7 cases) instead of hanging past the spawnSync
@@ -217,7 +216,7 @@ async function main() {
   // A long-lived chromium also accumulates memory across hundreds of page
   // loads (SIGKILL/hang, runs 36477534981+), so it restarts every 25 cases.
   const BROWSER_RESTART_EVERY = 25
-  let browser = await chromium.launch({ headless: true, args: launchArgs, timeout: 120000 })
+  let browser = await browserType.launch(launchOptions)
   try {
     let failed = 0
     for (const [index, testCase] of cases.entries()) {
@@ -226,7 +225,7 @@ async function main() {
       // case must not inherit it.
       if (index > 0 && index % BROWSER_RESTART_EVERY === 0) {
         await closeBrowser(browser)
-        browser = await chromium.launch({ headless: true, args: launchArgs, timeout: 120000 })
+        browser = await browserType.launch(launchOptions)
       }
       let ok = false
       try {
@@ -237,7 +236,7 @@ async function main() {
       if (!ok) {
         failed++
         await closeBrowser(browser)
-        browser = await chromium.launch({ headless: true, args: launchArgs, timeout: 120000 })
+        browser = await browserType.launch(launchOptions)
       }
     }
     if (failed > 0) process.exitCode = 1
