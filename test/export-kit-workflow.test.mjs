@@ -45,6 +45,15 @@ test('the served-kit consumer gate runs on Linux, macOS and Windows', () => {
   assert.deepEqual(platformsRunning('parity/kit-consumer.mjs'), ['macos', 'ubuntu', 'windows'])
 })
 
+test('the Safari leg enables safaridriver on hosted macOS and renders through NM_BROWSER=safari', () => {
+  const safariJobs = Object.entries(jobs()).filter(([, body]) => body.some((line) => /NM_BROWSER:\s*safari/.test(line)))
+  assert.deepEqual(safariJobs.map(([name]) => name), ['parity-safari'])
+  const body = safariJobs[0][1]
+  assert.deepEqual(runnersOf(body).map((runner) => runner.split('-')[0]), ['macos'])
+  assert.ok(body.some((line) => line.includes('sudo /usr/bin/safaridriver --enable')), 'Safari automation must be enabled on the runner')
+  assert.ok(body.some((line) => line.includes('scripts/parity-summary noise')), 'the Safari leg must render a sweep case')
+})
+
 test('the kit dispatch waits for every installed-package consumer gate', () => {
   const all = jobs()
   const needs = /needs:\s*\[([^\]]+)\]/.exec(all.dispatch.join('\n'))[1].split(',').map((s) => s.trim())

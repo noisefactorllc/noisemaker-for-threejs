@@ -78,11 +78,20 @@ const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/jav
 // then the sandbox's fixed range — each attempt time-bounded so a wedged or
 // refused bind falls through (same convention as installed-consumer.mjs and
 // kit-consumer.mjs).
-function startServer() {
+// pageInitScript: a browser without a console channel (Safari over WebDriver)
+// gets its console recorder as the first script of the harness page.
+const harnessPage = join(repoRoot, 'parity', 'page-timeseries.html')
+function startServer(pageInitScript) {
   return startLoopbackServer(() => createServer((req, rq) => {
     const p = join(repoRoot, decodeURIComponent(req.url.split('?')[0]))
     if (!p.startsWith(repoRoot) || !existsSync(p) || !statSync(p).isFile()) { rq.statusCode = 404; rq.end('nf'); return }
     rq.setHeader('Content-Type', MIME[extname(p)] || 'application/octet-stream')
+    if (pageInitScript && p === harnessPage) {
+      const html = readFileSync(p, 'utf8')
+      if (!html.includes('<head>')) { rq.statusCode = 500; rq.end('harness page has no <head>'); return }
+      rq.end(html.replace('<head>', `<head>\n    <script>${pageInitScript}</script>`))
+      return
+    }
     createReadStream(p).pipe(rq)
   }))
 }
@@ -147,6 +156,13 @@ async function runMode(browser, port, mode, testCase) {
   } finally {
     clearTimeout(timer)
     await page.close()
+    // Console evidence per mode: counts only (message text stays out of the
+    // parsed output). Recorded, not graded: the comparison decides the case.
+    const count = (prefix) => msgs.filter((m) => m.startsWith(prefix)).length
+    process.stdout.write(`PARITY-CONSOLE ${JSON.stringify({
+      name: testCase.name, mode, browser: browserName, version: browser.version(),
+      errors: count('[error] '), pageErrors: count('[pageerror] '), warnings: count('[warning] '),
+    })}\n`)
   }
   if (res?.error || !Array.isArray(res)) {
     const why = res?.error || `${mode}: no captures returned`
@@ -206,9 +222,12 @@ async function closeBrowser(browser) {
   }
 }
 
+let browserName = 'chromium'
+
 async function main() {
-  const { browserType, launchOptions } = parityBrowserConfig()
-  const { server, port } = await startServer()
+  const { browserType, launchOptions, pageInitScript } = parityBrowserConfig()
+  browserName = browserType.name()
+  const { server, port } = await startServer(pageInitScript)
   // launch timeout: a hung chromium launch must fail fast (it previously hung
   // a windows gate until the runner died at ~55-68 min; run 36536453382,
   // shard 47of48, died with 7 cases) instead of hanging past the spawnSync

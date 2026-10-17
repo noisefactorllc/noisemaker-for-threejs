@@ -23,7 +23,7 @@ for prog in "$ROOT"/parity/corpus/*.dsl; do
   line=$(echo "$out" | grep -E "worst max-abs-diff" | tail -1)
   if [ "$status" -ne 0 ] || [ -z "$line" ]; then
     printf '%s\n' "$out"
-    reason=$(echo "$out" | grep -iE "error|not yet|undefined|register" | head -1 | cut -c1-80)
+    reason=$(echo "$out" | grep -v '^PARITY-CONSOLE ' | grep -iE "error|not yet|undefined|register" | head -1 | cut -c1-80)
     echo "ERR  $name | ${reason:-no result; child exit=$status}" | tee -a "$OUT"; err=$((err+1)); rc=1
     continue
   fi

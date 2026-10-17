@@ -10,6 +10,7 @@
 // Linux legs). This is a rendering-path selection, not a tolerance change:
 // every gate still enforces its published thresholds.
 import { chromium, firefox } from '@playwright/test'
+import { CONSOLE_RECORDER, safari } from './safari-webdriver.mjs'
 
 export function chromiumLaunchArgs () {
   const args = ['--disable-gpu-sandbox']
@@ -31,5 +32,11 @@ export function parityBrowserConfig (name = process.env.NM_BROWSER || 'chromium'
   if (name === 'firefox') {
     return { browserType: firefox, launchOptions: { headless: true, timeout: 120000 } }
   }
-  throw new Error(`Unsupported NM_BROWSER: ${name}. Use chromium or firefox.`)
+  // Real Safari through safaridriver (parity/safari-webdriver.mjs). Safari has
+  // no headless mode, and WebDriver has no console channel, so the harness
+  // injects pageInitScript into the served page to record console output.
+  if (name === 'safari') {
+    return { browserType: safari, launchOptions: { timeout: 120000 }, pageInitScript: CONSOLE_RECORDER }
+  }
+  throw new Error(`Unsupported NM_BROWSER: ${name}. Use chromium, firefox or safari.`)
 }

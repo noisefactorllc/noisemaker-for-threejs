@@ -18,6 +18,16 @@ test('Firefox parity launches without Chromium command-line flags', () => {
   assert.deepEqual(launchOptions, { headless: true, timeout: 120000 })
 })
 
+test('Safari parity drives real Safari through safaridriver with the console recorder', async () => {
+  const { CONSOLE_RECORDER } = await import('../parity/safari-webdriver.mjs')
+  const { browserType, launchOptions, pageInitScript } = launch.parityBrowserConfig('safari')
+  assert.equal(browserType.name(), 'safari')
+  assert.deepEqual(launchOptions, { timeout: 120000 })
+  assert.equal(pageInitScript, CONSOLE_RECORDER)
+  assert.equal(launch.parityBrowserConfig('chromium').pageInitScript, undefined)
+  assert.equal(launch.parityBrowserConfig('firefox').pageInitScript, undefined)
+})
+
 test('the parity browser selector rejects an unsupported browser', () => {
   assert.throws(() => launch.parityBrowserConfig('webkit'), /NM_BROWSER/)
 })

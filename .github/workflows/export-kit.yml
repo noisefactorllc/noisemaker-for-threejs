@@ -505,6 +505,67 @@ jobs:
           path: parity/out/
           if-no-files-found: error
 
+  # Real Safari, not Playwright's WebKit build, through safaridriver
+  # (NM_BROWSER=safari, parity/safari-webdriver.mjs). A hosted macOS runner has
+  # passwordless sudo, so it can enable Safari automation; an office Mac asks
+  # for an admin password at the same step. One sweep case renders golden and
+  # candidate in Safari at tolerance 0. The job fails unless the case is exact
+  # and both modes record zero console errors and zero page errors.
+  parity-safari:
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+    runs-on: macos-15
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+      - uses: ./.github/actions/parity-setup
+        with:
+          skip-unit-tests: 'true'
+          artifact-suffix: safari
+      - name: Enable Safari WebDriver on this ephemeral runner
+        run: |
+          { sw_vers; /usr/bin/safaridriver --version; } | tee parity/out/safari-identity.log
+          sudo /usr/bin/safaridriver --enable
+      - name: Safari WebGL2 probe
+        env:
+          NM_BROWSER: safari
+        run: |
+          set -o pipefail
+          node parity/win-probe.mjs 2>&1 | tee parity/out/safari-probe.log
+          grep -F '"webgl2":true' parity/out/safari-probe.log
+      - name: Safari sweep case
+        env:
+          NM_BROWSER: safari
+          SUMMARY_LOG: parity/out/safari-summary.log
+        run: |
+          set -o pipefail
+          bash scripts/parity-summary noise 2>&1 | tee "$SUMMARY_LOG"
+          node --input-type=module - <<'JS'
+          import { readFileSync } from 'node:fs'
+          const lines = readFileSync(process.env.SUMMARY_LOG, 'utf8').split('\n')
+          const records = (prefix) => lines.filter((l) => l.startsWith(prefix)).map((l) => JSON.parse(l.slice(prefix.length)))
+          const summary = records('PARITY-SUMMARY ')
+          const consoles = records('PARITY-CONSOLE ')
+          if (summary.length !== 1 || summary[0].expected !== 1 || summary[0].executed !== 1 || summary[0].exact !== 1) {
+            throw new Error(`Safari summary: ${JSON.stringify(summary)}`)
+          }
+          const modes = consoles.map((c) => c.mode).sort().join(',')
+          if (modes !== 'candidate,golden' || !consoles.every((c) => c.browser === 'safari' && c.errors === 0 && c.pageErrors === 0)) {
+            throw new Error(`Safari console record: ${JSON.stringify(consoles)}`)
+          }
+          console.log(`Safari ${consoles[0].version}: ${JSON.stringify(summary[0])}; console errors 0, page errors 0 in both modes`)
+          JS
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: rendered-parity-safari-${{ github.sha }}
+          path: parity/out/
+          if-no-files-found: error
+
   dispatch:
     needs: [parity-windows-programs-verify, parity, parity-windows-programs-0of6, parity-windows-programs-1of6, parity-windows-programs-2of6, parity-windows-programs-3of6, parity-windows-programs-4of6, parity-windows-programs-5of12, parity-windows-programs-11of24, parity-windows-programs-23of48, parity-windows-programs-octaveWarp, parity-windows-programs-47of48-no-octaveWarp, parity-windows-stateful, parity-windows-corpus, parity-windows-consumer, parity-consumer]
     if: github.ref == 'refs/heads/main' && github.event_name != 'push'

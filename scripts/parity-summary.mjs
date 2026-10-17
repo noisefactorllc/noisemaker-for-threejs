@@ -226,7 +226,11 @@ export function aggregateOk(c) {
 
 function renderCase(name, kind) {
   const r = spawnSync('node', [join(root, 'parity', 'timeseries.mjs'), join(kind === 'corpus' ? corpusDir : progDir, `${name}.dsl`), ...frames[kind], '--size', '128'], { encoding: 'utf8', maxBuffer: 256 * 1024 * 1024, timeout: 40 * 60 * 1000 })
-  return parseRender(`${r.stdout || ''}${r.stderr || ''}`, r.status, { name, expectedSamples: kind === 'programs' ? 1 : 2 })
+  const out = `${r.stdout || ''}${r.stderr || ''}`
+  // The harness's per-mode console counts pass through as recorded evidence;
+  // they do not change the classification.
+  const consoleLines = out.split('\n').filter((line) => line.startsWith('PARITY-CONSOLE '))
+  return { ...parseRender(out, r.status, { name, expectedSamples: kind === 'programs' ? 1 : 2 }), consoleLines }
 }
 
 async function main() {
@@ -250,6 +254,7 @@ async function main() {
     const status = classify({ name: id, ...res, kind })
     counts.executed++
     counts[status]++
+    for (const line of res.consoleLines) process.stdout.write(`${line}\n`)
     process.stdout.write(`${status} ${id} (worst=${res.worst}${res.failLine ? ' [FAIL]' : ''})\n`)
     if (status === 'defer') process.stdout.write(`NEAR-CANDIDATE ${JSON.stringify({ name: id, bounds: BLOOM_NEAR_BOUNDS, samples: res.samples })}\n`)
   }
