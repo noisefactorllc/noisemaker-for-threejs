@@ -433,6 +433,10 @@ jobs:
     if: github.ref == 'refs/heads/main' && github.event_name != 'push'
     permissions:
       contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        three: ['0.160.0', '0.180.0', '0.186.1']
     runs-on: windows-2022
     timeout-minutes: 60
     defaults:
@@ -443,21 +447,23 @@ jobs:
       - uses: ./.github/actions/parity-setup
         with:
           skip-unit-tests: 'true'
-          artifact-suffix: windows-consumer
+          artifact-suffix: windows-consumer-${{ matrix.three }}
       - name: Installed consumer gate
+        env:
+          THREE_VERSION: ${{ matrix.three }}
         run: |
           tarball=$(npm pack --pack-destination "$RUNNER_TEMP")
           consumer="$RUNNER_TEMP/threejs-consumer"
           mkdir -p "$consumer"
-          npm install --prefix "$consumer" --no-audit --no-fund --bin-links=false "$RUNNER_TEMP/$tarball" three@0.186.1
+          npm install --prefix "$consumer" --no-audit --no-fund --bin-links=false "$RUNNER_TEMP/$tarball" "three@$THREE_VERSION"
           bash "$consumer/node_modules/noisemaker-for-threejs/vendor/fetch.sh"
-          node parity/installed-consumer.mjs "$consumer" parity/out/installed-consumer 0.186.1
+          node parity/installed-consumer.mjs "$consumer" parity/out/installed-consumer "$THREE_VERSION"
           npm uninstall --prefix "$consumer" --no-audit --no-fund --bin-links=false noisemaker-for-threejs
           test ! -d "$consumer/node_modules/noisemaker-for-threejs"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
-          name: rendered-parity-windows-consumer-${{ github.sha }}
+          name: rendered-parity-windows-consumer-${{ matrix.three }}-${{ github.sha }}
           path: parity/out/
           if-no-files-found: error
 
