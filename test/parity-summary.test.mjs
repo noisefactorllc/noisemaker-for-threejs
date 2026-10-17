@@ -1,11 +1,13 @@
-// Unit tests for scripts/parity-summary.mjs classification: programs and
-// stateful are bit-exact by contract (nonzero diff = fail), corpus has the
-// published worst<=2.001 band (0=exact, within band=strict, FAIL within
-// band=near, beyond=fail), and unresolved cases, including any compile
-// failure on either side, fail.
+// Unit tests for scripts/parity-summary.mjs classification: corpus, stateful,
+// and unlisted programs require exact output. Only the bounded bloom frame
+// qualifies as NEAR. Incomplete samples and renderer errors always fail.
 import assert from 'node:assert/strict'
-import { existsSync } from 'node:fs'
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { spawnSync } from 'node:child_process'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import test from 'node:test'
+import { PNG } from 'pngjs'
 
 const mod = await import('../scripts/parity-summary.mjs')
 const { classify } = mod
@@ -47,37 +49,105 @@ test('whole-port scope: 291 single-frame programs + 13 stateful + 88 corpus, dis
   assert.equal(scope.programs.length + scope.stateful.length + scope.corpus.length, 392)
 })
 
-test('parseRender extracts the worst diff, [FAIL] lines, and unusable results', () => {
-  const ok = mod.parseRender([
-    '[PASS] fractal@f1: max-abs-diff=0 mean-abs-diff=0 ssim=1',
-    '[ts] fractal: worst max-abs-diff across 1 samples = 0',
-  ].join('\n'), 0)
-  assert.deepEqual(ok, { worst: '0', failLine: false, errLine: false })
+const bloomSample = {
+  name: 'bloom@f1', shape: [128, 128, 4], max_abs_diff: 1,
+  mean_abs_diff: 0.159454345703125, ssim: 0.9999825271165335,
+  changed_pixels: 8105, changed_rgb_channels: 10450, changed_alpha_channels: 0,
+  tolerance: 0, ssim_min: 1, passed: false,
+}
 
-  const worstFloat = mod.parseRender('noise [ts] x: worst max-abs-diff across 3 samples = 2.5\n', 0)
-  assert.equal(worstFloat.worst, '2.5')
-  assert.equal(worstFloat.errLine, false)
+function renderOutput(samples = [bloomSample], { name = 'bloom', count = samples.length } = {}) {
+  return [
+    `[ts] ${name} golden: ${count} captures`,
+    `[ts] ${name} candidate: ${count} captures`,
+    ...samples.flatMap((sample) => [
+      `[${sample.passed ? 'PASS' : 'FAIL'}] ${sample.name}: max-abs-diff=${sample.max_abs_diff.toFixed(3)} mean-abs-diff=${sample.mean_abs_diff.toFixed(4)} ssim=${sample.ssim.toFixed(5)} (tol=0, ssim_min=1)`,
+      `PARITY-SAMPLE ${JSON.stringify(sample)}`,
+    ]),
+    `[ts] ${name}: worst max-abs-diff across ${count} samples = ${Math.max(...samples.map((sample) => Number(sample.max_abs_diff.toFixed(3))))}`,
+  ].join('\n')
+}
 
-  const failed = mod.parseRender('[FAIL] somecase@f2: ssim=0.98\n[ts] somecase: worst max-abs-diff across 2 samples = 1\n', 0)
-  assert.equal(failed.failLine, true)
-  assert.equal(failed.worst, '1')
+test('parseRender distinguishes complete comparator exit 1 from renderer errors', () => {
+  const mismatch = mod.parseRender(renderOutput(), 1, { name: 'bloom', expectedSamples: 1 })
+  assert.equal(mismatch.worst, '1')
+  assert.equal(mismatch.failLine, true)
+  assert.equal(mismatch.errLine, false)
+  assert.deepEqual(mismatch.samples, [bloomSample])
+  const exact = { ...bloomSample, max_abs_diff: 0, mean_abs_diff: 0, ssim: 1, changed_pixels: 0, changed_rgb_channels: 0, passed: true }
+  assert.equal(mod.parseRender(renderOutput([exact]), 0).errLine, false)
+  for (const status of [2, null]) assert.equal(mod.parseRender(renderOutput(), status).errLine, true)
+  assert.equal(mod.parseRender(`${renderOutput()}\n[ts] bloom: ERROR browser crashed`, 1).errLine, true)
+  assert.equal(mod.parseRender(renderOutput(), 0).errLine, true)
+})
 
-  // Nonzero exit or missing summary line = unusable result.
-  assert.equal(mod.parseRender('boom\n', 1).errLine, true)
-  assert.equal(mod.parseRender('boom\n', 0).errLine, true)
-  assert.equal(mod.parseRender('', 0).errLine, true)
-  // The worst value must come from the LAST summary line, not earlier text.
-  const lastLineWins = mod.parseRender('[ts] a: worst max-abs-diff across 1 samples = 5\n[ts] b: worst max-abs-diff across 1 samples = 0\n', 0)
-  assert.equal(lastLineWins.worst, '0')
+test('parseRender rejects missing, malformed, duplicate, or incomplete comparator samples', () => {
+  for (const out of [
+    '', 'boom', '[ts] bloom: worst max-abs-diff across 1 samples = 0',
+    renderOutput().replace(/^PARITY-SAMPLE .*$/m, ''),
+    renderOutput().replace(/^PARITY-SAMPLE .*$/m, 'PARITY-SAMPLE {'),
+    renderOutput().replace('candidate: 1 captures', 'candidate: 0 captures'),
+    renderOutput().replace('across 1 samples', 'across 0 samples'),
+    renderOutput([{ ...bloomSample, name: 'noise@f1' }]),
+    renderOutput([bloomSample, bloomSample]),
+  ]) assert.equal(mod.parseRender(out, 1).errLine, true, out)
+  assert.equal(mod.parseRender(renderOutput(), 1, { name: 'bloom', expectedSamples: 2 }).errLine, true)
+  assert.equal(mod.parseRender(renderOutput(), 1, { name: 'noise', expectedSamples: 1 }).errLine, true)
+})
+
+test('only the complete bloom frame within all bounds is deferred for visual review', () => {
+  const result = { name: 'bloom', kind: 'programs', ...mod.parseRender(renderOutput(), 1) }
+  assert.equal(classify(result), 'defer')
+  assert.equal(classify({ ...result, name: 'noise' }), 'fail')
+  assert.equal(classify({ ...result, kind: 'corpus' }), 'fail')
+  assert.equal(classify({ ...result, errLine: true }), 'fail')
+  assert.equal(classify({ ...result, samples: [] }), 'fail')
+  for (const patch of [
+    { max_abs_diff: 2 }, { mean_abs_diff: 0.161 }, { ssim: 0.9998 },
+    { changed_alpha_channels: 1 }, { changed_pixels: 8193 }, { changed_rgb_channels: 10486 },
+    { shape: [256, 256, 4] }, { name: 'bloom@f2' }, { ssim: null },
+    { changed_pixels: undefined },
+  ]) assert.equal(classify({ ...result, samples: [{ ...bloomSample, ...patch }] }), 'fail', JSON.stringify(patch))
+})
+
+test('compare.py reports raw changed pixel and channel counts', (t) => {
+  const python = process.env.NM_PARITY_PYTHON || (existsSync('parity/.venv/bin/python') ? 'parity/.venv/bin/python' : 'python3')
+  const probe = spawnSync(python, ['-c', 'import numpy, PIL'], { encoding: 'utf8' })
+  if (probe.status !== 0) {
+    t.skip('compare.py needs Python with NumPy and Pillow; the rendered parity setup installs them')
+    return
+  }
+  const dir = mkdtempSync(join(tmpdir(), 'threejs-compare-'))
+  try {
+    const golden = new PNG({ width: 2, height: 1 })
+    golden.data.set([10, 20, 30, 255, 40, 50, 60, 255])
+    const candidate = new PNG({ width: 2, height: 1 })
+    candidate.data.set([11, 20, 30, 253, 40, 50, 60, 255])
+    const g = join(dir, 'golden.png'), c = join(dir, 'candidate.png')
+    writeFileSync(g, PNG.sync.write(golden))
+    writeFileSync(c, PNG.sync.write(candidate))
+    const run = spawnSync(python, ['parity/compare.py', g, c, '--name=bloom@f1', '--tolerance=0', '--ssim-min=1', '--json'], { encoding: 'utf8' })
+    assert.equal(run.status, 1, run.stderr)
+    const line = run.stdout.split('\n').find((line) => line.startsWith('PARITY-SAMPLE '))
+    assert.ok(line, run.stdout)
+    const sample = JSON.parse(line.slice('PARITY-SAMPLE '.length))
+    assert.equal(sample.changed_pixels, 1)
+    assert.equal(sample.changed_rgb_channels, 1)
+    assert.equal(sample.changed_alpha_channels, 1)
+    assert.equal(sample.passed, false)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
 })
 
 test('aggregateOk enforces the PARITY-SUMMARY exit contract', () => {
   const zero = { expected: 3, executed: 3, exact: 3, strict: 0, near: 0, defer: 0, skip: 0, fail: 0, missing: 0 }
   assert.equal(mod.aggregateOk(zero), true)
+  assert.equal(mod.aggregateOk({ ...zero, exact: 2, near: 1 }), false)
   for (const bad of [
     { ...zero, exact: 2, fail: 1 },
     { ...zero, executed: 2, missing: 1, exact: 2 },
-    { ...zero, exact: 2, strict: 0, near: 1 },
+    { ...zero, exact: 2, strict: 0, near: 0 },
     { ...zero, exact: 2, defer: 1 },
     { ...zero, expected: 4 },
   ]) {

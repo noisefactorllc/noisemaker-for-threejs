@@ -92,6 +92,7 @@ def main() -> int:
     parser.add_argument("--ssim-min", type=float, default=0.98,
                         help="Minimum acceptable global SSIM (default 0.98)")
     parser.add_argument("--report", type=Path, default=None, help="Write JSON report here")
+    parser.add_argument("--json", action="store_true", help="Print the complete sample report")
     args = parser.parse_args()
 
     if not args.golden.exists():
@@ -119,6 +120,7 @@ def main() -> int:
     max_diff = max_abs_diff(a, b)
     mean_diff = mean_abs_diff(a, b)
     ssim = global_ssim(a, b)
+    changed = a != b
 
     passed = (max_diff <= args.tolerance) and (ssim >= args.ssim_min)
 
@@ -130,6 +132,9 @@ def main() -> int:
         "max_abs_diff": max_diff,
         "mean_abs_diff": mean_diff,
         "ssim": ssim,
+        "changed_pixels": int(np.count_nonzero(np.any(changed, axis=2))),
+        "changed_rgb_channels": int(np.count_nonzero(changed[..., :3])),
+        "changed_alpha_channels": int(np.count_nonzero(changed[..., 3])),
         "tolerance": args.tolerance,
         "ssim_min": args.ssim_min,
         "passed": passed,
@@ -139,6 +144,8 @@ def main() -> int:
     print(f"[{status}] {report['name']}: max-abs-diff={max_diff:.3f} "
           f"mean-abs-diff={mean_diff:.4f} ssim={ssim:.5f} "
           f"(tol={args.tolerance}, ssim_min={args.ssim_min})")
+    if args.json:
+        print(f"PARITY-SAMPLE {json.dumps(report)}")
 
     if args.report:
         args.report.write_text(json.dumps(report, indent=2) + "\n")

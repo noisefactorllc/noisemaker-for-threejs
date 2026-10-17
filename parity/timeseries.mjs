@@ -174,8 +174,8 @@ async function runCase(browser, port, testCase) {
       const cPng = join(outDir, `f${fr}.candidate.png`)
       writeFileSync(gPng, toPng(golden[k].data, size))
       writeFileSync(cPng, toPng(candidate[k].data, size))
-      const r = spawnSync(PY, [join(repoRoot, 'parity', 'compare.py'), gPng, cPng, `--name=${name}@f${fr}`, '--tolerance', '0', '--ssim-min', '1'], { encoding: 'utf8' })
-      const line = (r.stdout || r.stderr || '').trim().split('\n').pop()
+      const r = spawnSync(PY, [join(repoRoot, 'parity', 'compare.py'), gPng, cPng, `--name=${name}@f${fr}`, '--tolerance', '0', '--ssim-min', '1', '--json'], { encoding: 'utf8' })
+      const line = (r.stdout || r.stderr || '').trim()
       process.stdout.write(line + '\n')
       if (r.status !== 0) failed = true
       const m = /max-abs-diff=([0-9.]+)/.exec(line)

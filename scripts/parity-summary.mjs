@@ -20,16 +20,15 @@
 //   programs + stateful + corpus: the enforced contract is bit-exactness —
 //     the dual-backend harness runs compare.py at --tolerance 0 --ssim-min 1,
 //     so every pass has max-abs-diff 0 (exact) and ANY nonzero diff is a
-//     fail. 'strict' and 'near' exist only for completeness: a comparator
-//     FAIL within a published numeric band (none is currently enforced)
-//     would be near; beyond any band is fail.
+//     fail, except bloom@f1 at 128x128 within BLOOM_NEAR_BOUNDS below. That
+//     bounded mismatch is deferred until its exact captures receive review.
 //   Every corpus program is in scope; a program that calls user.* effects
 //   renders with its published definitions (parity/corpus/<code>.effects.json).
 //   An ERR with no result at all, on either side, is fail; a case id that
 //   matches no fixture is missing.
 //
-// Exit status is 0 only when executed == expected, exact + strict == executed,
-// and near/defer/skip/fail/missing are all 0.
+// Exit status is 0 only when executed == expected and exact + strict equals
+// executed, with near/defer/skip/fail/missing all 0.
 import { readdirSync, readFileSync, existsSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import { dirname, join, basename } from 'node:path'
@@ -60,14 +59,22 @@ const root = dirname(dirname(fileURLToPath(import.meta.url)))
 const progDir = join(root, 'parity', 'programs')
 const corpusDir = join(root, 'parity', 'corpus')
 const STATEFUL = new Set('navierStokes convolutionFeedback temporalAberration reactionDiffusion cellularAutomata feedback synth3d_cellularAutomata3d synth3d_reactionDiffusion3d filter3d_flow3d agent_buddhabrot agent_dla agent_physarum agent_physical'.split(' '))
+const BLOOM_NEAR_BOUNDS = {
+  max_abs_diff: 1.001, mean_abs_diff: 0.16, ssim_min: 0.9999,
+  changed_pixels_max: 8192, changed_rgb_channels_max: 10485, changed_alpha_channels: 0,
+}
 
-export function classify({ name, worst, failLine, errLine, kind }) {
+export function classify({ name, worst, failLine, errLine, kind, samples = [] }) {
   if (errLine || worst === null || worst === undefined) return 'fail'
   const w = Number(worst)
   if (failLine) {
-    // A comparator FAIL is a mismatch beyond the port's enforced bit-exact
-    // contract; only a published numeric band (none currently enforced) would
-    // make an in-band miss 'near'.
+    const s = samples[0], b = BLOOM_NEAR_BOUNDS
+    if (name === 'bloom' && kind === 'programs' && samples.length === 1 && validSample(s) &&
+        s.name === 'bloom@f1' && s.shape[0] === 128 && s.shape[1] === 128 &&
+        w > 0 && w <= b.max_abs_diff && s.max_abs_diff > 0 && s.max_abs_diff <= b.max_abs_diff &&
+        s.mean_abs_diff <= b.mean_abs_diff && s.ssim >= b.ssim_min &&
+        s.changed_pixels <= b.changed_pixels_max && s.changed_rgb_channels <= b.changed_rgb_channels_max &&
+        s.changed_alpha_channels === b.changed_alpha_channels) return 'defer'
     return 'fail'
   }
   // The enforced contract is bit-exact (compare.py at tolerance 0, ssim-min
@@ -173,18 +180,43 @@ function kindOf(name) {
 
 const frames = { programs: ['--frames', '1', '--capture', '1'], stateful: ['--frames', '30', '--capture', '15'], corpus: ['--frames', '20', '--capture', '10'] }
 
-// Pure output parser, separated from spawning so it is unit-testable: given a
-// timeseries child's combined output and exit status, extract worst
-// max-abs-diff (the trailing '= N' of the last 'worst max-abs-diff' line),
-// whether any '[FAIL]' comparator line appeared, and whether the run produced
-// no usable result (nonzero exit or missing summary line).
-export function parseRender(out, status) {
-  const line = out.split('\n').filter((l) => /worst max-abs-diff/.test(l)).pop()
-  const m = line ? (line.match(/= ([0-9]+(?:\.[0-9]+)?)$/) || [])[1] : null
+function validSample(s) {
+  if (!s || typeof s.name !== 'string' || !Array.isArray(s.shape) || s.shape.length !== 3 ||
+      !s.shape.every((n) => Number.isInteger(n) && n > 0) || s.shape[2] !== 4 ||
+      !['max_abs_diff', 'mean_abs_diff', 'ssim'].every((key) => Number.isFinite(s[key])) ||
+      s.max_abs_diff < 0 || s.max_abs_diff > 255.001 || s.mean_abs_diff < 0 || s.mean_abs_diff > s.max_abs_diff ||
+      s.ssim < -1 || s.ssim > 1 || typeof s.passed !== 'boolean' || s.tolerance !== 0 || s.ssim_min !== 1) return false
+  const pixels = s.shape[0] * s.shape[1]
+  if (!['changed_pixels', 'changed_rgb_channels', 'changed_alpha_channels'].every((key) => Number.isInteger(s[key]) && s[key] >= 0)) return false
+  return s.changed_pixels <= pixels && s.changed_rgb_channels <= 3 * s.changed_pixels &&
+    s.changed_alpha_channels <= s.changed_pixels && s.changed_pixels <= s.changed_rgb_channels + s.changed_alpha_channels &&
+    s.passed === (s.max_abs_diff === 0 && s.ssim === 1) &&
+    (s.max_abs_diff === 0) === (s.changed_pixels === 0)
+}
+
+export function parseRender(out, status, { name, expectedSamples } = {}) {
+  const lines = out.split('\n')
+  const summaries = lines.filter((l) => /worst max-abs-diff/.test(l))
+  const summary = summaries[0]?.match(/^\[ts\] (\S+): worst max-abs-diff across ([1-9][0-9]*) samples = ([0-9]+(?:\.[0-9]+)?)$/)
+  const samples = []
+  let invalid = false
+  for (const line of lines.filter((l) => l.startsWith('PARITY-SAMPLE '))) {
+    try { samples.push(JSON.parse(line.slice('PARITY-SAMPLE '.length))) } catch { invalid = true }
+  }
+  const failLine = lines.some((l) => /^\[FAIL\]/.test(l))
+  const count = summary ? Number(summary[2]) : 0
+  const caseName = name ?? summary?.[1]
+  const complete = summary && summaries.length === 1 && summary[1] === caseName &&
+    count === (expectedSamples ?? count) && samples.length === count && samples.every(validSample) &&
+    new Set(samples.map((s) => s.name)).size === count &&
+    samples.every((s) => s.name.startsWith(`${caseName}@f`) && /^\d+$/.test(s.name.slice(`${caseName}@f`.length)) &&
+      lines.some((l) => l.startsWith(`[${s.passed ? 'PASS' : 'FAIL'}] ${s.name}: `))) &&
+    lines.filter((l) => /^\[(PASS|FAIL)\]/.test(l)).length === count &&
+    lines.includes(`[ts] ${caseName} golden: ${count} captures`) && lines.includes(`[ts] ${caseName} candidate: ${count} captures`) &&
+    Number(summary[3]) === Math.max(...samples.map((s) => Number(s.max_abs_diff.toFixed(3))))
   return {
-    worst: m === null || m === undefined ? null : m,
-    failLine: out.split('\n').some((l) => /^\[FAIL\]/.test(l)),
-    errLine: status !== 0 || !line,
+    worst: summary?.[3] ?? null, failLine, samples,
+    errLine: invalid || !complete || status !== (failLine ? 1 : 0) || /\b(?:ERROR|FAILED)\b|^error:|^Traceback/m.test(out),
   }
 }
 
@@ -194,7 +226,7 @@ export function aggregateOk(c) {
 
 function renderCase(name, kind) {
   const r = spawnSync('node', [join(root, 'parity', 'timeseries.mjs'), join(kind === 'corpus' ? corpusDir : progDir, `${name}.dsl`), ...frames[kind], '--size', '128'], { encoding: 'utf8', maxBuffer: 256 * 1024 * 1024, timeout: 40 * 60 * 1000 })
-  return parseRender(`${r.stdout || ''}${r.stderr || ''}`, r.status)
+  return parseRender(`${r.stdout || ''}${r.stderr || ''}`, r.status, { name, expectedSamples: kind === 'programs' ? 1 : 2 })
 }
 
 async function main() {
@@ -215,10 +247,11 @@ async function main() {
     const kind = ids.length ? kindOf(id) : (STATEFUL.has(id) && existsSync(join(progDir, `${id}.dsl`)) ? 'stateful' : (existsSync(join(corpusDir, `${id}.dsl`)) ? 'corpus' : (programExpected().includes(id) ? 'programs' : null)))
     if (!kind) { counts.missing++; continue }
     const res = renderCase(id, kind)
-    const status = classify({ name: id, worst: res.worst, failLine: res.failLine, errLine: res.errLine, kind })
+    const status = classify({ name: id, ...res, kind })
     counts.executed++
     counts[status]++
     process.stdout.write(`${status} ${id} (worst=${res.worst}${res.failLine ? ' [FAIL]' : ''})\n`)
+    if (status === 'defer') process.stdout.write(`NEAR-CANDIDATE ${JSON.stringify({ name: id, bounds: BLOOM_NEAR_BOUNDS, samples: res.samples })}\n`)
   }
   process.stdout.write(`PARITY-SUMMARY ${JSON.stringify(counts)}\n`)
   process.exit(aggregateOk(counts) ? 0 : 1)
