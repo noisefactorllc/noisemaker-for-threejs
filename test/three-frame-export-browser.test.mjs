@@ -47,7 +47,7 @@ function isEnvironmentUnavailable (error) {
   return message.includes('Executable doesn\'t exist') || message.includes('playwright install')
 }
 
-// Sandboxed runners (restricted containers, the macOS GPU host broker) permit
+// Sandboxed runners (restricted containers, the macOS GPU host) permit
 // only explicit fixed loopback ports — an ephemeral listen(0) fails with EPERM
 // there, and some sandboxes neither error nor call back on a bind. Follow the
 // parity harnesses' NM_TS_PORT convention, then fall back through the fleet's

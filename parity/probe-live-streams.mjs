@@ -53,7 +53,7 @@ const CASES = [
 ]
 
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.json': 'application/json', '.dsl': 'text/plain' }
-// NM_TS_PORT: sandboxed hosts (the macOS GPU host broker, restricted supervisor
+// NM_TS_PORT: sandboxed hosts (the macOS GPU host, restricted automated-review
 // runners) only permit explicit fixed loopback ports — an ephemeral listen(0)
 // fails with EPERM. Honor the env when set, then fall back through the
 // sandbox's loopback range.

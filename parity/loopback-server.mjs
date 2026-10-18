@@ -1,7 +1,7 @@
 // Shared loopback server bind for the qualification drivers.
 //
-// NM_TS_PORT: sandboxed hosts (the macOS GPU host broker, restricted
-// supervisor runners) only permit explicit fixed loopback ports — an
+// NM_TS_PORT: sandboxed hosts (the macOS GPU host, restricted
+// automated-review runners) only permit explicit fixed loopback ports — an
 // ephemeral listen(0) fails with EPERM there, and some sandboxes neither
 // error nor call back on a bind. Honor the env when set, then fall back
 // through the sandbox's loopback range; every attempt is time-bounded so a
