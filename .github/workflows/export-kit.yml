@@ -1,9 +1,8 @@
 name: Export kit
 
-# Public repo: holds NO deploy credentials. Dispatches scaffold's
-# export-kit-release.yml, which builds this repo's export kit at this exact
-# SHA and ships it to kits.noisedeck.app. See scaffold
-# docs/runbook/export-kits.md.
+# Public repo: holds NO deploy credentials. Dispatches the export-kit
+# release workflow, which builds this repo's export kit at this exact
+# SHA and ships it to kits.noisedeck.app.
 #
 # A push runs only the unit gate (lint + npm test). The rendered-parity gates
 # render in software on hosted runners for over an hour, so they run weekly
@@ -507,7 +506,7 @@ jobs:
 
   # Real Safari, not Playwright's WebKit build, through safaridriver
   # (NM_BROWSER=safari, parity/safari-webdriver.mjs). A hosted macOS runner has
-  # passwordless sudo, so it can enable Safari automation; an office Mac asks
+  # passwordless sudo, so it can enable Safari automation; a self-hosted Mac asks
   # for an admin password at the same step. One sweep case renders golden and
   # candidate in Safari at tolerance 0. The job fails unless the case is exact
   # and both modes record zero console errors and zero page errors.
@@ -571,7 +570,7 @@ jobs:
     if: github.ref == 'refs/heads/main' && github.event_name != 'push'
     runs-on: ubuntu-latest
     steps:
-      # scaffold mints a new kit version for every dispatch, so a weekly run on
+      # The release mints a new kit version for every dispatch, so a weekly run on
       # an unchanged main must not release the same SHA again.
       - name: Skip a SHA that is already released
         id: released
@@ -587,7 +586,21 @@ jobs:
             echo "released=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Mint scaffold-dispatch token
+      - name: Check the release dispatch configuration
+        if: steps.released.outputs.released == 'false'
+        env:
+          RELEASE_REPOSITORY: ${{ secrets.RELEASE_REPOSITORY }}
+          EXPORT_KIT_RELEASE_WORKFLOW: ${{ secrets.EXPORT_KIT_RELEASE_WORKFLOW }}
+        run: |
+          missing=""
+          [ -n "$RELEASE_REPOSITORY" ] || missing="$missing RELEASE_REPOSITORY"
+          [ -n "$EXPORT_KIT_RELEASE_WORKFLOW" ] || missing="$missing EXPORT_KIT_RELEASE_WORKFLOW"
+          if [ -n "$missing" ]; then
+            echo "::error::The release dispatch is not configured. Empty or unset secret(s):$missing"
+            exit 1
+          fi
+
+      - name: Mint release-dispatch token
         if: steps.released.outputs.released == 'false'
         id: app-token
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
@@ -595,15 +608,17 @@ jobs:
           app-id: 2959521
           private-key: ${{ secrets.EHSRE_APP_PRIVATE_KEY }}
           owner: noisefactorllc
-          repositories: scaffold
+          repositories: ${{ secrets.RELEASE_REPOSITORY }}
 
-      - name: Dispatch export-kit-release
+      - name: Dispatch the export-kit release
         if: steps.released.outputs.released == 'false'
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          RELEASE_REPOSITORY: ${{ secrets.RELEASE_REPOSITORY }}
+          EXPORT_KIT_RELEASE_WORKFLOW: ${{ secrets.EXPORT_KIT_RELEASE_WORKFLOW }}
         run: |
-          gh workflow run export-kit-release.yml \
-            --repo noisefactorllc/scaffold \
+          gh workflow run "$EXPORT_KIT_RELEASE_WORKFLOW" \
+            --repo "$GITHUB_REPOSITORY_OWNER/$RELEASE_REPOSITORY" \
             --ref main \
             -f kit=threejs \
             -f sha=${{ github.sha }}
