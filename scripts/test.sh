@@ -23,7 +23,7 @@ fi
 
 pick_browsers_path() {
   [ -n "${PLAYWRIGHT_BROWSERS_PATH:-}" ] && { printf '%s' "$PLAYWRIGHT_BROWSERS_PATH"; return; }
-  # /state/cache is an exec-mounted cache in this fleet's containers and HOME is
+  # /state/cache is an exec-mounted cache in some CI containers and HOME is
   # often a noexec tmpfs — a browser installed under HOME fails to launch with
   # EACCES. Prefer /state/cache/pw-browsers whenever /state/cache exists, even
   # when empty (the install below fills it); only fall back to HOME otherwise.
