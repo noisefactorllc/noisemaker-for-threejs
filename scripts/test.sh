@@ -23,17 +23,20 @@ fi
 
 pick_browsers_path() {
   [ -n "${PLAYWRIGHT_BROWSERS_PATH:-}" ] && { printf '%s' "$PLAYWRIGHT_BROWSERS_PATH"; return; }
-  # /state/cache is an exec-mounted cache in some CI containers and HOME is
-  # often a noexec tmpfs — a browser installed under HOME fails to launch with
-  # EACCES. Prefer /state/cache/pw-browsers whenever /state/cache exists, even
-  # when empty (the install below fills it); only fall back to HOME otherwise.
-  if [ -d /state/cache ] && [ -w /state/cache ]; then
-    mkdir -p /state/cache/pw-browsers
-    printf '%s' "/state/cache/pw-browsers"
+  # NOISEMAKER_BROWSER_CACHE names a browser directory on an exec-mounted cache
+  # in some CI containers, and HOME is often a noexec tmpfs — a browser
+  # installed under HOME fails to launch with EACCES. Prefer
+  # NOISEMAKER_BROWSER_CACHE whenever its cache directory exists and is
+  # writable, even when empty (the install below fills it); only fall back to
+  # HOME otherwise.
+  local cache="${NOISEMAKER_BROWSER_CACHE:-}"
+  if [ -n "$cache" ] && [ -d "$(dirname "$cache")" ] && [ -w "$(dirname "$cache")" ]; then
+    mkdir -p "$cache"
+    printf '%s' "$cache"
     return
   fi
   local c
-  for c in /state/cache/pw-browsers "$HOME/.cache/ms-playwright"; do
+  for c in ${cache:+"$cache"} "$HOME/.cache/ms-playwright"; do
     [ -n "$(ls -d "$c"/chromium_headless_shell-* 2>/dev/null)" ] && { printf '%s' "$c"; return; }
   done
   printf '%s' "${HOME}/.cache/ms-playwright"
