@@ -13,7 +13,7 @@
  */
 import * as THREE from 'three'
 import { Backend, FrameExportQueue } from '../engine-browser.js'
-import { formatToType, fullscreenTriangle, stripVersion, parseUniformSizes, DEFAULT_VERTEX_SHADER } from './three-resources.js'
+import { formatToType, formatToInternalFormat, fullscreenTriangle, stripVersion, parseUniformSizes, mipLevelCount, mipLevelSize, DEFAULT_VERTEX_SHADER } from './three-resources.js'
 import { ThreeFrameExportAdapter } from './three-frame-export.js'
 
 // Parity + integration require pure-linear pixels everywhere: no sRGB decode on
@@ -133,6 +133,16 @@ export class ThreeBackend extends Backend {
       depthTest: false,
       depthWrite: false,
     })
+    // 1x1 transparent black texture — mirrors the reference webgl2
+    // createDefaultTexture. Three.js material uniforms need a THREE texture
+    // object, so a DataTexture stands in for the reference's raw GL texture;
+    // the sampled value (0,0,0,0) is identical.
+    this.defaultTexture = new THREE.DataTexture(new Uint8Array([0, 0, 0, 0]), 1, 1)
+    this.defaultTexture.minFilter = THREE.NearestFilter
+    this.defaultTexture.magFilter = THREE.NearestFilter
+    this.defaultTexture.wrapS = THREE.ClampToEdgeWrapping
+    this.defaultTexture.wrapT = THREE.ClampToEdgeWrapping
+    this.defaultTexture.needsUpdate = true
   }
 
   /**
@@ -244,8 +254,6 @@ export class ThreeBackend extends Backend {
       generateMipmaps: false,
     })
     rt.texture.colorSpace = THREE.NoColorSpace
-    const info = { target: rt, texture: rt.texture, width, height, format: spec.format, handle: rt }
-    this.textures.set(id, info)
     // Initialize to transparent black, like the reference webgl2 createTexture/createFBO.
     // three.js leaves new RTs uninitialized; state sims (e.g. cellularAutomata) would
     // diverge from garbage initial contents.
@@ -254,6 +262,38 @@ export class ThreeBackend extends Backend {
     this.renderer.setClearColor(0x000000, 0)
     this.renderer.clear(true, false, false)
     this.renderer.setRenderTarget(prev)
+    // Opt-in mip chain: allocate every level up front (sampling an unallocated chain
+    // returns black and the per-level blits in generateMipmaps() would run against
+    // incomplete framebuffers), then sample with LINEAR_MIPMAP_LINEAR — mirrors the
+    // reference webgl2 createTexture. mipmaps are not exercised by any current effect
+    // (no mini-bundle declares spec.mipmaps); kept for Backend-interface parity.
+    const mipLevels = spec.mipmaps ? mipLevelCount(width, height) : 1
+    if (mipLevels > 1) {
+      const gl = this.gl
+      const glTex = this.renderer.properties.get(rt.texture)?.__webglTexture
+      if (!glTex) throw new Error(`ThreeBackend.createTexture: no GL handle for ${id} mip chain`)
+      const internalFormat = formatToInternalFormat(gl, spec.format)
+      const previousTexture = gl.getParameter(gl.TEXTURE_BINDING_2D)
+      gl.bindTexture(gl.TEXTURE_2D, glTex)
+      for (let level = 1; level < mipLevels; level++) {
+        gl.texImage2D(
+          gl.TEXTURE_2D,
+          level,
+          internalFormat,
+          mipLevelSize(width, level),
+          mipLevelSize(height, level),
+          0,
+          gl.RGBA,
+          formatToType(spec.format),
+          null
+        )
+      }
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR)
+      gl.bindTexture(gl.TEXTURE_2D, previousTexture)
+      rt.texture.minFilter = THREE.LinearMipmapLinearFilter
+    }
+    const info = { target: rt, texture: rt.texture, width, height, format: spec.format, handle: rt, mipmaps: mipLevels > 1, mipLevels, persistent: !!spec.persistent }
+    this.textures.set(id, info)
     return info
   }
 
@@ -291,6 +331,39 @@ export class ThreeBackend extends Backend {
     this.renderer.setClearColor(0x000000, 0)
     this.renderer.clear(true, false, false)
     this.renderer.setRenderTarget(prevTarget)
+  }
+
+  // Regenerate the opt-in mip chain from level 0 after a frame renders to a
+  // mipmapped texture. Mirrors reference webgl2 generateMipmaps: a NEAREST
+  // blit between consecutive mip levels, level 0 → 1 → …, per texture id.
+  generateMipmaps(ids) {
+    const gl = this.gl
+    if (!this._mipReadFbo) {
+      this._mipReadFbo = gl.createFramebuffer()
+      this._mipDrawFbo = gl.createFramebuffer()
+    }
+    const prevRead = gl.getParameter(gl.READ_FRAMEBUFFER)
+    const prevDraw = gl.getParameter(gl.DRAW_FRAMEBUFFER)
+    for (const id of ids) {
+      const info = this.textures.get(id)
+      if (!info || !info.mipmaps || !info.mipLevels || info.mipLevels < 2) continue
+      const glTex = this.renderer.properties.get(info.texture)?.__webglTexture
+      if (!glTex) continue
+      const { width, height, mipLevels } = info
+      gl.bindFramebuffer(gl.READ_FRAMEBUFFER, this._mipReadFbo)
+      gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, this._mipDrawFbo)
+      for (let level = 1; level < mipLevels; level++) {
+        const srcW = mipLevelSize(width, level - 1)
+        const srcH = mipLevelSize(height, level - 1)
+        const dstW = mipLevelSize(width, level)
+        const dstH = mipLevelSize(height, level)
+        gl.framebufferTexture2D(gl.READ_FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, glTex, level - 1)
+        gl.framebufferTexture2D(gl.DRAW_FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, glTex, level)
+        gl.blitFramebuffer(0, 0, srcW, srcH, 0, 0, dstW, dstH, gl.COLOR_BUFFER_BIT, gl.NEAREST)
+      }
+    }
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, prevRead)
+    gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, prevDraw)
   }
 
   // --- shader compilation ---
@@ -419,6 +492,29 @@ export class ThreeBackend extends Backend {
     prog.uniformBlocks = glProgram ? this.extractUniformBlocks(glProgram, prog.spec) : []
   }
 
+  // Extract the declared sampler2D uniforms from the compiled GL program (once
+  // per program), mirroring the reference webgl2 extractUniforms. bindMaterial
+  // binds the default texture to samplers the pass lists no input for.
+  ensureSamplers(prog, material) {
+    if (prog.samplers) return prog.samplers
+    this.mesh.material = material
+    this.renderer.compile(this.scene, this.camera)
+    const glProgram = this.getGLProgram(material)
+    const samplers = []
+    if (glProgram) {
+      const gl = this.gl
+      const count = gl.getProgramParameter(glProgram, gl.ACTIVE_UNIFORMS)
+      for (let i = 0; i < count; i++) {
+        const info = gl.getActiveUniform(glProgram, i)
+        if (info.type === gl.SAMPLER_2D && info.size === 1 && !info.name.endsWith(']')) {
+          samplers.push(info.name)
+        }
+      }
+    }
+    prog.samplers = samplers
+    return samplers
+  }
+
   // Pack `merged` into std140 slots and upload + bind each block (every draw).
   packUniformsWithLayout(uniforms, layout, minSize = 0) {
     const layoutArray = normalizePackedUniformLayout(layout)
@@ -503,6 +599,14 @@ export class ThreeBackend extends Backend {
       for (const [samplerName, texId] of Object.entries(pass.inputs)) {
         this.setUniform(material, samplerName, this.resolveInputTexture(texId, state))
       }
+    }
+    // A declared sampler that the pass lists no input for gets the default
+    // texture (transparent black), as WebGPU binds its dummy texture. Left
+    // alone it would keep unit 0 and sample the first input instead.
+    const inputs = pass.inputs || {}
+    for (const name of this.ensureSamplers(prog, material)) {
+      if (name in inputs) continue
+      this.setUniform(material, name, this.defaultTexture)
     }
     // Blend state for deposit/accumulation passes. `blend: true` (or any non-array truthy)
     // is additive gl.blendFunc(ONE,ONE) — the bare deposit. `blend: ['SRC','DST']` is a
@@ -998,7 +1102,16 @@ export class ThreeBackend extends Backend {
       for (const geo of this._triGeoCache.values()) geo.dispose()
       this._triGeoCache.clear()
     }
+    if (this._mipReadFbo) {
+      this.gl.deleteFramebuffer(this._mipReadFbo)
+      this._mipReadFbo = null
+    }
+    if (this._mipDrawFbo) {
+      this.gl.deleteFramebuffer(this._mipDrawFbo)
+      this._mipDrawFbo = null
+    }
     this.geometry?.dispose?.()
     this.presentMaterial?.dispose?.()
+    this.defaultTexture?.dispose?.()
   }
 }
