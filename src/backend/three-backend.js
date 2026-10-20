@@ -13,7 +13,7 @@
  */
 import * as THREE from 'three'
 import { Backend, FrameExportQueue } from '../engine-browser.js'
-import { formatToType, formatToNativeType, formatToInternalFormat, fullscreenTriangle, stripVersion, parseUniformSizes, mipLevelCount, mipLevelSize, DEFAULT_VERTEX_SHADER } from './three-resources.js'
+import { formatToType, fullscreenTriangle, stripVersion, parseUniformSizes, DEFAULT_VERTEX_SHADER } from './three-resources.js'
 import { ThreeFrameExportAdapter } from './three-frame-export.js'
 
 // Parity + integration require pure-linear pixels everywhere: no sRGB decode on
@@ -254,6 +254,8 @@ export class ThreeBackend extends Backend {
       generateMipmaps: false,
     })
     rt.texture.colorSpace = THREE.NoColorSpace
+    const info = { target: rt, texture: rt.texture, width, height, format: spec.format, handle: rt }
+    this.textures.set(id, info)
     // Initialize to transparent black, like the reference webgl2 createTexture/createFBO.
     // three.js leaves new RTs uninitialized; state sims (e.g. cellularAutomata) would
     // diverge from garbage initial contents.
@@ -262,38 +264,6 @@ export class ThreeBackend extends Backend {
     this.renderer.setClearColor(0x000000, 0)
     this.renderer.clear(true, false, false)
     this.renderer.setRenderTarget(prev)
-    // Opt-in mip chain: allocate every level up front (sampling an unallocated chain
-    // returns black and the per-level blits in generateMipmaps() would run against
-    // incomplete framebuffers), then sample with LINEAR_MIPMAP_LINEAR — mirrors the
-    // reference webgl2 createTexture. mipmaps are not exercised by any current effect
-    // (no mini-bundle declares spec.mipmaps); kept for Backend-interface parity.
-    const mipLevels = spec.mipmaps ? mipLevelCount(width, height) : 1
-    if (mipLevels > 1) {
-      const gl = this.gl
-      const glTex = this.renderer.properties.get(rt.texture)?.__webglTexture
-      if (!glTex) throw new Error(`ThreeBackend.createTexture: no GL handle for ${id} mip chain`)
-      const internalFormat = formatToInternalFormat(gl, spec.format)
-      const previousTexture = gl.getParameter(gl.TEXTURE_BINDING_2D)
-      gl.bindTexture(gl.TEXTURE_2D, glTex)
-      for (let level = 1; level < mipLevels; level++) {
-        gl.texImage2D(
-          gl.TEXTURE_2D,
-          level,
-          internalFormat,
-          mipLevelSize(width, level),
-          mipLevelSize(height, level),
-          0,
-          gl.RGBA,
-          formatToNativeType(gl, spec.format),
-          null
-        )
-      }
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR)
-      gl.bindTexture(gl.TEXTURE_2D, previousTexture)
-      rt.texture.minFilter = THREE.LinearMipmapLinearFilter
-    }
-    const info = { target: rt, texture: rt.texture, width, height, format: spec.format, handle: rt, mipmaps: mipLevels > 1, mipLevels, persistent: !!spec.persistent }
-    this.textures.set(id, info)
     return info
   }
 
@@ -331,39 +301,6 @@ export class ThreeBackend extends Backend {
     this.renderer.setClearColor(0x000000, 0)
     this.renderer.clear(true, false, false)
     this.renderer.setRenderTarget(prevTarget)
-  }
-
-  // Regenerate the opt-in mip chain from level 0 after a frame renders to a
-  // mipmapped texture. Mirrors reference webgl2 generateMipmaps: a NEAREST
-  // blit between consecutive mip levels, level 0 → 1 → …, per texture id.
-  generateMipmaps(ids) {
-    const gl = this.gl
-    if (!this._mipReadFbo) {
-      this._mipReadFbo = gl.createFramebuffer()
-      this._mipDrawFbo = gl.createFramebuffer()
-    }
-    const prevRead = gl.getParameter(gl.READ_FRAMEBUFFER_BINDING)
-    const prevDraw = gl.getParameter(gl.DRAW_FRAMEBUFFER_BINDING)
-    for (const id of ids) {
-      const info = this.textures.get(id)
-      if (!info || !info.mipmaps || !info.mipLevels || info.mipLevels < 2) continue
-      const glTex = this.renderer.properties.get(info.texture)?.__webglTexture
-      if (!glTex) continue
-      const { width, height, mipLevels } = info
-      gl.bindFramebuffer(gl.READ_FRAMEBUFFER, this._mipReadFbo)
-      gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, this._mipDrawFbo)
-      for (let level = 1; level < mipLevels; level++) {
-        const srcW = mipLevelSize(width, level - 1)
-        const srcH = mipLevelSize(height, level - 1)
-        const dstW = mipLevelSize(width, level)
-        const dstH = mipLevelSize(height, level)
-        gl.framebufferTexture2D(gl.READ_FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, glTex, level - 1)
-        gl.framebufferTexture2D(gl.DRAW_FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, glTex, level)
-        gl.blitFramebuffer(0, 0, srcW, srcH, 0, 0, dstW, dstH, gl.COLOR_BUFFER_BIT, gl.NEAREST)
-      }
-    }
-    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, prevRead)
-    gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, prevDraw)
   }
 
   // --- shader compilation ---
@@ -1101,14 +1038,6 @@ export class ThreeBackend extends Backend {
     if (this._triGeoCache) {
       for (const geo of this._triGeoCache.values()) geo.dispose()
       this._triGeoCache.clear()
-    }
-    if (this._mipReadFbo) {
-      this.gl.deleteFramebuffer(this._mipReadFbo)
-      this._mipReadFbo = null
-    }
-    if (this._mipDrawFbo) {
-      this.gl.deleteFramebuffer(this._mipDrawFbo)
-      this._mipDrawFbo = null
     }
     this.geometry?.dispose?.()
     this.presentMaterial?.dispose?.()

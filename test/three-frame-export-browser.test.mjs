@@ -86,6 +86,80 @@ async function startServer () {
   throw new EnvironmentUnavailable(`no permitted loopback port (tried ${candidates.join(', ')})`)
 }
 
+test('ThreeBackend binds transparent black to an unbound sampler without replacing bound inputs', { timeout: 90000 }, async (t) => {
+  const { server, port } = await startServer()
+  let browser
+  try {
+    browser = await chromium.launch({ headless: true, args: chromiumLaunchArgs(), timeout: 30000 })
+    const page = await browser.newPage()
+    const errors = []
+    page.on('pageerror', error => errors.push(error.message))
+    page.on('console', message => {
+      if (message.type() === 'error') errors.push(message.text())
+    })
+    await page.goto(`http://127.0.0.1:${port}/__frame_export_test__.html`)
+    const result = await page.evaluate(async () => {
+      const THREE = await import('three')
+      const { ThreeBackend } = await import('/src/backend/three-backend.js')
+      const renderer = new THREE.WebGLRenderer({ canvas: document.createElement('canvas') })
+      renderer.setSize(4, 4, false)
+      const backend = new ThreeBackend(renderer, { presentToScreen: false })
+      const source = new THREE.DataTexture(new Uint8Array([128, 64, 32, 255]), 1, 1)
+      const extra = new THREE.DataTexture(new Uint8Array([32, 48, 64, 255]), 1, 1)
+      source.needsUpdate = true
+      extra.needsUpdate = true
+      try {
+        await backend.init()
+        backend.setExternalTexture('source', source, 1, 1)
+        backend.setExternalTexture('extra', extra, 1, 1)
+        const output = backend.createTexture('result', { width: 4, height: 4, format: 'rgba8' })
+        await backend.compileProgram('fixture', { glsl: `
+          precision highp float;
+          uniform sampler2D inputTex;
+          uniform sampler2D extraTex;
+          out vec4 fragColor;
+          void main() {
+            vec3 a = texelFetch(inputTex, ivec2(0), 0).rgb;
+            vec3 b = texelFetch(extraTex, ivec2(0), 0).rgb;
+            fragColor = vec4(a * 0.5 + b + vec3(0.25), 1.0);
+          }` })
+        const samples = []
+        for (const inputs of [
+          { inputTex: 'source' },
+          { inputTex: 'source', extraTex: 'extra' },
+          { inputTex: 'source' },
+          undefined,
+        ]) {
+          backend.executePass({ id: 'fixture', program: 'fixture', inputs, outputs: { fragColor: 'result' } }, {})
+          const pixels = new Uint8Array(4 * 4 * 4)
+          renderer.readRenderTargetPixels(output.target, 0, 0, 4, 4, pixels)
+          samples.push(Array.from(pixels))
+        }
+        const gl = renderer.getContext()
+        const debug = gl.getExtension('WEBGL_debug_renderer_info')
+        return { samples, renderer: debug ? gl.getParameter(debug.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER), glError: gl.getError() }
+      } finally {
+        backend.destroy()
+        source.dispose()
+        extra.dispose()
+        renderer.dispose()
+      }
+    })
+    assert.deepEqual(errors, [])
+    assert.equal(result.glError, 0)
+    const expected = [[128, 96, 80, 255], [160, 144, 144, 255], [128, 96, 80, 255], [64, 64, 64, 255]]
+    for (let sample = 0; sample < expected.length; sample++) {
+      for (let pixel = 0; pixel < 16; pixel++) {
+        assert.deepEqual(result.samples[sample].slice(pixel * 4, pixel * 4 + 4), expected[sample], `sample ${sample}, pixel ${pixel}`)
+      }
+    }
+    t.diagnostic(JSON.stringify({ renderer: result.renderer, samples: result.samples.map(pixels => pixels.slice(0, 4)), pixelsPerSample: 16, glError: result.glError }))
+  } finally {
+    if (browser) await browser.close()
+    await new Promise(resolveClose => server.close(resolveClose))
+  }
+})
+
 test('Three frame export reads real WebGL2 pixels asynchronously', async (t) => {
   let server
   let port

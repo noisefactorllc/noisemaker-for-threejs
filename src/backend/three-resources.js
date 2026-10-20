@@ -39,59 +39,6 @@ export function formatToType(fmt) {
 }
 
 /**
- * Map a noisemaker texture format string to its GL internal format, matching the
- * reference webgl2 resolveFormat (used for mip-chain level allocation, where raw
- * texImage2D calls need the sized internal format rather than three.js' type enum).
- */
-export function formatToInternalFormat(gl, fmt) {
-  switch (FORMAT_ALIASES[fmt] ?? fmt) {
-    case 'rgba16f':
-    case 'r16f':
-      return gl.RGBA16F
-    case 'rgba32f':
-    case 'r32f':
-      return gl.RGBA32F
-    default:
-      return gl.RGBA8
-  }
-}
-
-/**
- * Map a noisemaker texture format string to its native WebGL data type for raw
- * texImage2D calls (three.js type enums do not match the GL constants WebGL
- * expects). Pairs with formatToInternalFormat for mip-chain level allocation.
- */
-export function formatToNativeType(gl, fmt) {
-  switch (FORMAT_ALIASES[fmt] ?? fmt) {
-    case 'rgba16f':
-    case 'r16f':
-      return gl.HALF_FLOAT
-    case 'rgba32f':
-    case 'r32f':
-      return gl.FLOAT
-    default:
-      return gl.UNSIGNED_BYTE
-  }
-}
-
-/**
- * Number of mip levels for a level-0 size — mirrors the reference
- * webgl2 mipLevelCount (used with the opt-in `spec.mipmaps` chain).
- */
-export function mipLevelCount(width, height) {
-  const maxDim = Math.max(1, Math.floor(width), Math.floor(height))
-  return Math.max(1, Math.floor(Math.log2(maxDim)) + 1)
-}
-
-/**
- * Size (>= 1) of one mip level for a dimension — mirrors the reference
- * webgl2 mipLevelSize.
- */
-export function mipLevelSize(dim, level) {
-  return Math.max(1, Math.floor(dim / Math.pow(2, level)))
-}
-
-/**
  * Fullscreen triangle geometry with an `a_position` attribute, matching the
  * reference DEFAULT_VERTEX_SHADER (FULLSCREEN_TRIANGLE_POSITIONS).
  */
