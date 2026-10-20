@@ -57,6 +57,24 @@ export function formatToInternalFormat(gl, fmt) {
 }
 
 /**
+ * Map a noisemaker texture format string to its native WebGL data type for raw
+ * texImage2D calls (three.js type enums do not match the GL constants WebGL
+ * expects). Pairs with formatToInternalFormat for mip-chain level allocation.
+ */
+export function formatToNativeType(gl, fmt) {
+  switch (FORMAT_ALIASES[fmt] ?? fmt) {
+    case 'rgba16f':
+    case 'r16f':
+      return gl.HALF_FLOAT
+    case 'rgba32f':
+    case 'r32f':
+      return gl.FLOAT
+    default:
+      return gl.UNSIGNED_BYTE
+  }
+}
+
+/**
  * Number of mip levels for a level-0 size — mirrors the reference
  * webgl2 mipLevelCount (used with the opt-in `spec.mipmaps` chain).
  */

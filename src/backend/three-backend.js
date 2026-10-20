@@ -13,7 +13,7 @@
  */
 import * as THREE from 'three'
 import { Backend, FrameExportQueue } from '../engine-browser.js'
-import { formatToType, formatToInternalFormat, fullscreenTriangle, stripVersion, parseUniformSizes, mipLevelCount, mipLevelSize, DEFAULT_VERTEX_SHADER } from './three-resources.js'
+import { formatToType, formatToNativeType, formatToInternalFormat, fullscreenTriangle, stripVersion, parseUniformSizes, mipLevelCount, mipLevelSize, DEFAULT_VERTEX_SHADER } from './three-resources.js'
 import { ThreeFrameExportAdapter } from './three-frame-export.js'
 
 // Parity + integration require pure-linear pixels everywhere: no sRGB decode on
@@ -284,7 +284,7 @@ export class ThreeBackend extends Backend {
           mipLevelSize(height, level),
           0,
           gl.RGBA,
-          formatToType(spec.format),
+          formatToNativeType(gl, spec.format),
           null
         )
       }
@@ -342,8 +342,8 @@ export class ThreeBackend extends Backend {
       this._mipReadFbo = gl.createFramebuffer()
       this._mipDrawFbo = gl.createFramebuffer()
     }
-    const prevRead = gl.getParameter(gl.READ_FRAMEBUFFER)
-    const prevDraw = gl.getParameter(gl.DRAW_FRAMEBUFFER)
+    const prevRead = gl.getParameter(gl.READ_FRAMEBUFFER_BINDING)
+    const prevDraw = gl.getParameter(gl.DRAW_FRAMEBUFFER_BINDING)
     for (const id of ids) {
       const info = this.textures.get(id)
       if (!info || !info.mipmaps || !info.mipLevels || info.mipLevels < 2) continue
