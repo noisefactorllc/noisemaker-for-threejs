@@ -109,7 +109,9 @@ test('Invalid Portable packages fail before registration and leave a valid name 
 test('Portable names that search user cannot call are rejected', { skip }, async () => {
   // A surface reference (`o1`) reads as an OUTPUT_REF, not a call; a reserved parser-call
   // name (`osc`) transforms into another node (upstream GAP-012: reserved func rejection).
-  for (const func of ['o1', 'osc']) {
+  // Trailing-identifier prefixes (`o1x`, `vol2d`) lex as a reference token plus junk, so the
+  // source parser refuses them too.
+  for (const func of ['o1', 'osc', 'o1x', 'vol2d']) {
     await assert.rejects(
       () => registerPortableEffect(core, definition(func)),
       new RegExp(`Portable effect: reserved func ${func}`),

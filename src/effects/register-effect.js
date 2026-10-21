@@ -8,22 +8,17 @@
 //
 // `core` is the evaluated noisemaker-shaders-core ESM (registerEffect/registerOp/… exports).
 
-// Reserved DSL keyword lexemes (`reference/01-dsl-frontend.md` §1.3) and the parser
-// transforms the `search` flow treats as calls (§4.2): osc, midi, audio, read, read3d, from.
-const _RESERVED_KEYWORDS = new Set(['let', 'render', 'write', 'write3d', 'true', 'false', 'if', 'elif', 'else', 'break', 'continue', 'return', 'search', 'subchain'])
-const _RESERVED_FUNCTION_NAMES = new Set(['from', 'osc', 'midi', 'audio', 'read', 'read3d'])
-// Lexer surface-reference rules (§1.4 rules 4–10): o0..oN, s0..sN, vol0..volN, geo0..geoN,
-// xyz0..xyzN, vel0..velN, rgba0..rgbaN, mesh0..meshN. A `search` program reads these as
-// reference tokens, so they cannot be named as calls.
-const _SURFACE_REF = /^(?:o|s|vol|geo|xyz|vel|rgba|mesh)[0-9]+$/
-
-/** Check if a `search user` program can call `name()` as an effect. */
-export function parsesAsUserEffectCall (func) {
-  if (typeof func !== 'string') return false
-  if (_RESERVED_KEYWORDS.has(func)) return false
-  if (_RESERVED_FUNCTION_NAMES.has(func)) return false
-  if (_SURFACE_REF.test(func)) return false
-  return true
+/** Check if a `search user` program can call `name()` as an effect. Keywords,
+ * surface references (o1, s1, vol2, ...) and the calls that the parser turns
+ * into other nodes (osc, midi, audio, read, read3d, from) cannot be called. */
+export function parsesAsUserEffectCall (core, name) {
+  let chain
+  try {
+    chain = core.parse(core.lex(`search user\n${name}()`)).plans?.[0]?.chain
+  } catch {
+    return false
+  }
+  return chain?.length === 1 && chain[0].type === 'Call' && chain[0].name === name
 }
 
 // One-time engine boot: standard enums + starter ops (write/render/blend/…), before any effect.
@@ -125,7 +120,7 @@ export async function registerPortableEffect (core, definition) {
   // The DSL lexer reads surface references (o1, vol2, …) and the parser turns reserved calls
   // (osc, midi, audio, read, read3d, from) into other nodes; a `search user` program cannot
   // call them as effects.
-  if (!parsesAsUserEffectCall(func)) fail(`reserved func ${func}`)
+  if (!parsesAsUserEffectCall(core, func)) fail(`reserved func ${func}`)
   // The shared operator/enum registries use object trees. JSON keys that control their
   // prototypes must never reach those registration paths.
   const reserved = [...Object.getOwnPropertyNames(Object.prototype), 'prototype']
