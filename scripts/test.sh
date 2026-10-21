@@ -47,4 +47,34 @@ mkdir -p "$BROWSERS"
 if [ -z "$(ls -d "$BROWSERS"/chromium_headless_shell-* 2>/dev/null)" ]; then
   PLAYWRIGHT_BROWSERS_PATH="$BROWSERS" node node_modules/@playwright/test/cli.js install chromium-headless-shell
 fi
+# Operator changed-path mode: with NM_CHANGED_FILES set, run only the tests
+# that exercise the changed paths. A test exercises a changed path when it is
+# the changed file itself or its source references the changed file's
+# basename. With the variable unset the entrypoint runs the whole suite
+# exactly as before, and exact-source CI keeps the full run.
+if [ -n "${NM_CHANGED_FILES:-}" ]; then
+  selected=""
+  while IFS= read -r changed; do
+    [ -n "$changed" ] || continue
+    case "$changed" in
+      test/*) selected="$selected $changed" ;;
+      *)
+        base="$(basename "$changed")"
+        for t in test/*.test.mjs; do
+          grep -qF -- "$base" "$t" && selected="$selected $t"
+        done
+        ;;
+    esac
+  done <<EOF
+$NM_CHANGED_FILES
+EOF
+  selected="$(printf '%s\n' $selected | sort -u)"
+  if [ -z "$selected" ]; then
+    echo "no unit test exercises the NM_CHANGED_FILES paths; nothing to run" >&2
+    exit 0
+  fi
+  # shellcheck disable=SC2086
+  exec env PLAYWRIGHT_BROWSERS_PATH="$BROWSERS" node --test --test-concurrency=1 $selected
+fi
+
 exec env PLAYWRIGHT_BROWSERS_PATH="$BROWSERS" node --test --test-concurrency=1 test/*.test.mjs

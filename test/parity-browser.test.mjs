@@ -12,6 +12,20 @@ test('the default parity browser keeps the Chromium launch configuration', () =>
   })
 })
 
+test('NM_PARITY_BROWSER_EXECUTABLE names the chromium executable without changing the rest of the launch options', () => {
+  const previous = process.env.NM_PARITY_BROWSER_EXECUTABLE
+  try {
+    process.env.NM_PARITY_BROWSER_EXECUTABLE = '/browsers/chrome-headless-shell'
+    const { launchOptions } = launch.parityBrowserConfig('chromium')
+    assert.equal(launchOptions.executablePath, '/browsers/chrome-headless-shell')
+    assert.deepEqual(launchOptions.args, launch.chromiumLaunchArgs())
+    assert.equal(launchOptions.timeout, 120000)
+  } finally {
+    if (previous === undefined) delete process.env.NM_PARITY_BROWSER_EXECUTABLE
+    else process.env.NM_PARITY_BROWSER_EXECUTABLE = previous
+  }
+})
+
 test('Firefox parity launches without Chromium command-line flags', () => {
   const { browserType, launchOptions } = launch.parityBrowserConfig('firefox')
   assert.equal(browserType.name(), 'firefox')

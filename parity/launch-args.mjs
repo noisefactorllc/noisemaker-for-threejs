@@ -22,11 +22,21 @@ export function chromiumLaunchArgs () {
   return args
 }
 
+// The pinned playwright-core revision resolves its browser executable from
+// browsers.json. A host that provisions a different headless-shell revision
+// (a cache pruned to other revisions) can name its executable through
+// NM_PARITY_BROWSER_EXECUTABLE; the launch path is otherwise unchanged.
+function parityChromiumLaunchOptions () {
+  const options = { headless: true, args: chromiumLaunchArgs(), timeout: 120000 }
+  if (process.env.NM_PARITY_BROWSER_EXECUTABLE) options.executablePath = process.env.NM_PARITY_BROWSER_EXECUTABLE
+  return options
+}
+
 export function parityBrowserConfig (name = process.env.NM_BROWSER || 'chromium') {
   if (name === 'chromium') {
     return {
       browserType: chromium,
-      launchOptions: { headless: true, args: chromiumLaunchArgs(), timeout: 120000 },
+      launchOptions: parityChromiumLaunchOptions(),
     }
   }
   if (name === 'firefox') {
