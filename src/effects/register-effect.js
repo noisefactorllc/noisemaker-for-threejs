@@ -8,6 +8,24 @@
 //
 // `core` is the evaluated noisemaker-shaders-core ESM (registerEffect/registerOp/… exports).
 
+// Reserved DSL keyword lexemes (`reference/01-dsl-frontend.md` §1.3) and the parser
+// transforms the `search` flow treats as calls (§4.2): osc, midi, audio, read, read3d, from.
+const _RESERVED_KEYWORDS = new Set(['let', 'render', 'write', 'write3d', 'true', 'false', 'if', 'elif', 'else', 'break', 'continue', 'return', 'search', 'subchain'])
+const _RESERVED_FUNCTION_NAMES = new Set(['from', 'osc', 'midi', 'audio', 'read', 'read3d'])
+// Lexer surface-reference rules (§1.4 rules 4–10): o0..oN, s0..sN, vol0..volN, geo0..geoN,
+// xyz0..xyzN, vel0..velN, rgba0..rgbaN, mesh0..meshN. A `search` program reads these as
+// reference tokens, so they cannot be named as calls.
+const _SURFACE_REF = /^(?:o|s|vol|geo|xyz|vel|rgba|mesh)[0-9]+$/
+
+/** Check if a `search user` program can call `name()` as an effect. */
+export function parsesAsUserEffectCall (func) {
+  if (typeof func !== 'string') return false
+  if (_RESERVED_KEYWORDS.has(func)) return false
+  if (_RESERVED_FUNCTION_NAMES.has(func)) return false
+  if (_SURFACE_REF.test(func)) return false
+  return true
+}
+
 // One-time engine boot: standard enums + starter ops (write/render/blend/…), before any effect.
 export async function bootCore (core) {
   if (core.mergeIntoEnums && core.stdEnums) await core.mergeIntoEnums(core.stdEnums)
@@ -104,6 +122,10 @@ export async function registerPortableEffect (core, definition) {
   if (typeof func !== 'string' || !(core.isValidIdentifier ? core.isValidIdentifier(func) : /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(func))) {
     fail('func must be a DSL identifier')
   }
+  // The DSL lexer reads surface references (o1, vol2, …) and the parser turns reserved calls
+  // (osc, midi, audio, read, read3d, from) into other nodes; a `search user` program cannot
+  // call them as effects.
+  if (!parsesAsUserEffectCall(func)) fail(`reserved func ${func}`)
   // The shared operator/enum registries use object trees. JSON keys that control their
   // prototypes must never reach those registration paths.
   const reserved = [...Object.getOwnPropertyNames(Object.prototype), 'prototype']

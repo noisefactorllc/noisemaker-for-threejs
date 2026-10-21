@@ -87,10 +87,19 @@ async function startServer () {
 }
 
 test('ThreeBackend binds transparent black to an unbound sampler without replacing bound inputs', { timeout: 90000 }, async (t) => {
-  const { server, port } = await startServer()
+  let server
+  let port
   let browser
   try {
-    browser = await chromium.launch({ headless: true, args: chromiumLaunchArgs(), timeout: 30000 })
+    try {
+      ({ server, port } = await startServer())
+      browser = await chromium.launch({ headless: true, args: chromiumLaunchArgs(), timeout: 30000 })
+    } catch (error) {
+      if (!isEnvironmentUnavailable(error)) throw error
+      process.stderr.write(`[SKIP] unbound sampler browser test: ${error.message}\n`)
+      t.skip(error.message)
+      return
+    }
     const page = await browser.newPage()
     const errors = []
     page.on('pageerror', error => errors.push(error.message))
@@ -156,7 +165,7 @@ test('ThreeBackend binds transparent black to an unbound sampler without replaci
     t.diagnostic(JSON.stringify({ renderer: result.renderer, samples: result.samples.map(pixels => pixels.slice(0, 4)), pixelsPerSample: 16, glError: result.glError }))
   } finally {
     if (browser) await browser.close()
-    await new Promise(resolveClose => server.close(resolveClose))
+    if (server) await new Promise(resolveClose => server.close(resolveClose))
   }
 })
 

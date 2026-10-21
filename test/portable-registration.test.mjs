@@ -106,6 +106,20 @@ test('Invalid Portable packages fail before registration and leave a valid name 
   assert.ok(core.getEffect('user.portableInvalid') instanceof core.Effect)
 })
 
+test('Portable names that search user cannot call are rejected', { skip }, async () => {
+  // A surface reference (`o1`) reads as an OUTPUT_REF, not a call; a reserved parser-call
+  // name (`osc`) transforms into another node (upstream GAP-012: reserved func rejection).
+  for (const func of ['o1', 'osc']) {
+    await assert.rejects(
+      () => registerPortableEffect(core, definition(func)),
+      new RegExp(`Portable effect: reserved func ${func}`),
+      func
+    )
+    assert.equal(core.getEffect(`user.${func}`), undefined)
+    assert.equal(core.getEffect(func), undefined)
+  }
+})
+
 test('A name-only Portable effect preserves an existing bare built-in name', { skip }, async () => {
   const prior = new core.Effect({ namespace: 'synth', func: 'portableNameOnly' })
   core.registerEffect('portableNameOnly', prior)
