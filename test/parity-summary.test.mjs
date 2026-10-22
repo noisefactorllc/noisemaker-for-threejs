@@ -34,19 +34,19 @@ test('a corpus compile failure fails, whichever program it is', () => {
   }
 })
 
-test('whole-port scope: 291 single-frame programs + 13 stateful + 88 corpus, disjoint, none excluded', () => {
+test('whole-port scope: 291 single-frame programs + 14 stateful + 88 corpus, disjoint, none excluded', () => {
   const scope = mod.wholePortIds()
   const total = [...scope.programs, ...scope.stateful, ...scope.corpus]
-  // No double count: the 13 stateful fixtures live in parity/programs and are
+  // No double count: the 14 stateful fixtures live in parity/programs and are
   // removed from the single-frame program set before being re-added as
   // time-series cases.
   assert.equal(new Set(total).size, total.length, 'duplicate ids in the whole-port scope')
-  assert.equal(scope.stateful.length, 13)
+  assert.equal(scope.stateful.length, 14)
   assert.equal(scope.corpus.length, 88)
   for (const userEffectProgram of '4bm9AA 7INvow B5oBsA PmJyUQ d-MpwA fKPUww liTYEg'.split(' ')) {
     assert.ok(total.includes(userEffectProgram), `user-effect corpus program ${userEffectProgram} must be in the whole-port scope`)
   }
-  assert.equal(scope.programs.length + scope.stateful.length + scope.corpus.length, 392)
+  assert.equal(scope.programs.length + scope.stateful.length + scope.corpus.length, 393)
 })
 
 const bloomSample = {

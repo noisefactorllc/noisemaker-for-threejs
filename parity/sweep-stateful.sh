@@ -11,7 +11,7 @@
 # snapshot harness made look divergent.
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-EFFECTS="${*:-navierStokes convolutionFeedback temporalAberration reactionDiffusion cellularAutomata feedback synth3d_cellularAutomata3d synth3d_reactionDiffusion3d filter3d_flow3d agent_buddhabrot agent_dla agent_physarum agent_physical}"
+EFFECTS="${*:-navierStokes convolutionFeedback temporalAberration reactionDiffusion cellularAutomata feedback synth3d_cellularAutomata3d synth3d_reactionDiffusion3d filter3d_flow3d agent_buddhabrot agent_dla agent_dla_textures agent_physarum agent_physical}"
 worst=0; pass=0; fail=0; err=0
 for name in $EFFECTS; do
   status=0

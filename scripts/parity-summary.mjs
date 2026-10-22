@@ -58,7 +58,7 @@ export function checkPrerequisites({ needCorpus = true } = {}) {
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
 const progDir = join(root, 'parity', 'programs')
 const corpusDir = join(root, 'parity', 'corpus')
-const STATEFUL = new Set('navierStokes convolutionFeedback temporalAberration reactionDiffusion cellularAutomata feedback synth3d_cellularAutomata3d synth3d_reactionDiffusion3d filter3d_flow3d agent_buddhabrot agent_dla agent_physarum agent_physical'.split(' '))
+const STATEFUL = new Set('navierStokes convolutionFeedback temporalAberration reactionDiffusion cellularAutomata feedback synth3d_cellularAutomata3d synth3d_reactionDiffusion3d filter3d_flow3d agent_buddhabrot agent_dla agent_dla_textures agent_physarum agent_physical'.split(' '))
 const BLOOM_NEAR_BOUNDS = {
   max_abs_diff: 1.001, mean_abs_diff: 0.16, ssim_min: 0.9999,
   changed_pixels_max: 8192, changed_rgb_channels_max: 10485, changed_alpha_channels: 0,
@@ -158,10 +158,10 @@ export function auditAuthority({
   return { keys: keys.length, covered, missing }
 }
 
-// Whole-port scope: current programs EXCLUDING the 13 stateful effects (they
+// Whole-port scope: current programs EXCLUDING the 14 stateful effects (they
 // are counted as separate time-series cases — a single-frame render would not
 // exercise their contract), the stateful set itself in time-series mode, and
-// the whole corpus. 291 + 13 + 88 = 392; the stateful fixtures are NOT
+// the whole corpus. 291 + 14 + 88 = 393; the stateful fixtures are NOT
 // double-counted.
 export function wholePortIds() {
   const statefulIds = [...STATEFUL].filter((n) => existsSync(join(progDir, `${n}.dsl`)))
