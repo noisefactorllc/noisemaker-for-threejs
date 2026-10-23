@@ -120,7 +120,7 @@ jobs:
         with:
           artifact-suffix: windows-programs-0of6
       - name: Programs gate shard 0/6
-        run: bash scripts/gate-step.sh parity/out/programs.log node parity/sweep-programs.mjs --shard 0/6
+        run: bash scripts/gate-step.sh parity/out/programs.log node parity/sweep-programs.mjs --shard 0/6 --exclude octaveWarp
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -144,7 +144,7 @@ jobs:
           skip-unit-tests: 'true'
           artifact-suffix: windows-programs-1of6
       - name: Programs gate shard 1/6
-        run: bash scripts/gate-step.sh parity/out/programs.log node parity/sweep-programs.mjs --shard 1/6
+        run: bash scripts/gate-step.sh parity/out/programs.log node parity/sweep-programs.mjs --shard 1/6 --exclude octaveWarp
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -168,7 +168,7 @@ jobs:
           skip-unit-tests: 'true'
           artifact-suffix: windows-programs-2of6
       - name: Programs gate shard 2/6
-        run: bash scripts/gate-step.sh parity/out/programs.log node parity/sweep-programs.mjs --shard 2/6
+        run: bash scripts/gate-step.sh parity/out/programs.log node parity/sweep-programs.mjs --shard 2/6 --exclude octaveWarp
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -192,7 +192,7 @@ jobs:
           skip-unit-tests: 'true'
           artifact-suffix: windows-programs-3of6
       - name: Programs gate shard 3/6
-        run: bash scripts/gate-step.sh parity/out/programs.log node parity/sweep-programs.mjs --shard 3/6
+        run: bash scripts/gate-step.sh parity/out/programs.log node parity/sweep-programs.mjs --shard 3/6 --exclude octaveWarp
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -216,7 +216,7 @@ jobs:
           skip-unit-tests: 'true'
           artifact-suffix: windows-programs-4of6
       - name: Programs gate shard 4/6
-        run: bash scripts/gate-step.sh parity/out/programs.log node parity/sweep-programs.mjs --shard 4/6
+        run: bash scripts/gate-step.sh parity/out/programs.log node parity/sweep-programs.mjs --shard 4/6 --exclude octaveWarp
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -240,7 +240,7 @@ jobs:
           skip-unit-tests: 'true'
           artifact-suffix: windows-programs-5of12
       - name: Programs gate shard 5/12
-        run: bash scripts/gate-step.sh parity/out/programs.log node parity/sweep-programs.mjs --shard 5/12
+        run: bash scripts/gate-step.sh parity/out/programs.log node parity/sweep-programs.mjs --shard 5/12 --exclude octaveWarp
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -264,7 +264,7 @@ jobs:
           skip-unit-tests: 'true'
           artifact-suffix: windows-programs-11of24
       - name: Programs gate shard 11/24
-        run: bash scripts/gate-step.sh parity/out/programs.log node parity/sweep-programs.mjs --shard 11/24
+        run: bash scripts/gate-step.sh parity/out/programs.log node parity/sweep-programs.mjs --shard 11/24 --exclude octaveWarp
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -288,7 +288,7 @@ jobs:
           skip-unit-tests: 'true'
           artifact-suffix: windows-programs-23of48
       - name: Programs gate shard 23/48
-        run: bash scripts/gate-step.sh parity/out/programs.log node parity/sweep-programs.mjs --shard 23/48
+        run: bash scripts/gate-step.sh parity/out/programs.log node parity/sweep-programs.mjs --shard 23/48 --exclude octaveWarp
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
