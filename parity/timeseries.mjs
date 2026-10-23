@@ -84,6 +84,7 @@ const harnessPage = join(repoRoot, 'parity', 'page-timeseries.html')
 function startServer(pageInitScript) {
   return startLoopbackServer(() => createServer((req, rq) => {
     const p = join(repoRoot, decodeURIComponent(req.url.split('?')[0]))
+    if (req.url === '/favicon.ico') { rq.statusCode = 204; rq.end(); return }
     if (!p.startsWith(repoRoot) || !existsSync(p) || !statSync(p).isFile()) { rq.statusCode = 404; rq.end('nf'); return }
     rq.setHeader('Content-Type', MIME[extname(p)] || 'application/octet-stream')
     if (pageInitScript && p === harnessPage) {

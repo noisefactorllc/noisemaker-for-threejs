@@ -26,6 +26,22 @@ test('NM_PARITY_BROWSER_EXECUTABLE names the chromium executable without changin
   }
 })
 
+test('NM_PARITY_GPU=vulkan selects the headed hardware ANGLE/Vulkan path', () => {
+  const previous = process.env.NM_PARITY_GPU
+  try {
+    process.env.NM_PARITY_GPU = 'vulkan'
+    const { launchOptions } = launch.parityBrowserConfig('chromium')
+    assert.equal(launchOptions.headless, false)
+    assert.deepEqual(launchOptions.args, launch.chromiumLaunchArgs())
+    assert.ok(launchOptions.args.includes('--use-angle=vulkan'))
+    assert.ok(!launchOptions.args.includes('--use-angle=swiftshader'))
+    assert.equal(launch.parityHeadless(), false)
+  } finally {
+    if (previous === undefined) delete process.env.NM_PARITY_GPU
+    else process.env.NM_PARITY_GPU = previous
+  }
+})
+
 test('Firefox parity launches without Chromium command-line flags', () => {
   const { browserType, launchOptions } = launch.parityBrowserConfig('firefox')
   assert.equal(browserType.name(), 'firefox')

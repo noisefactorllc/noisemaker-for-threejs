@@ -30,6 +30,7 @@
 // serialize function arguments, so each step runs through one `evaluate(key)`.
 import { chromium } from '@playwright/test'
 import { startLoopbackServer } from './loopback-server.mjs'
+import { parityHeadless, chromiumLaunchArgs } from './launch-args.mjs'
 import { createHash } from 'node:crypto'
 import { mkdirSync, writeFileSync, readFileSync, readdirSync } from 'node:fs'
 import http from 'node:http'
@@ -93,6 +94,7 @@ const { server, port } = await startLoopbackServer(() => http.createServer((req,
     res.writeHead(200, { 'content-type': MIME[extname(p)] || 'application/octet-stream' })
     res.end(body)
   } catch {
+    if (req.url === '/favicon.ico') { res.writeHead(204); res.end(); return }
     res.writeHead(404); res.end('nf')
   }
 }))
@@ -269,13 +271,8 @@ window.__ready = true
 
 
 const browser = await chromium.launch({
-  headless: true,
-  args: [
-    ...(process.platform === 'darwin'
-      ? ['--use-angle=metal']
-      : ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader']),
-    '--no-sandbox', '--disable-gpu-sandbox',
-  ],
+  headless: parityHeadless(),
+  args: [...new Set([...chromiumLaunchArgs(), '--no-sandbox'])],
 })
 let page
 try {

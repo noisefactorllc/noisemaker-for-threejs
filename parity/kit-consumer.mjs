@@ -33,7 +33,7 @@
 // and the removal left no tree. results.json (per-leg measurements, screenshot hashes,
 // inventory and engine hashes, gate verdict) lands in <outDir>.
 import { chromium } from '@playwright/test'
-import { chromiumLaunchArgs } from './launch-args.mjs'
+import { parityHeadless, chromiumLaunchArgs } from './launch-args.mjs'
 import { startLoopbackServer } from './loopback-server.mjs'
 import { createHash } from 'node:crypto'
 import http from 'node:http'
@@ -147,13 +147,14 @@ const { server, port } = await startLoopbackServer(() => http.createServer((req,
     res.writeHead(200, { 'content-type': mime[extname(p)] || 'application/octet-stream' })
     res.end(data)
   } catch {
+    if (req.url === '/favicon.ico') { res.writeHead(204); res.end(); return }
     res.writeHead(404)
     res.end('nf')
   }
 }))
 const base = `http://127.0.0.1:${port}`
 
-const browser = await chromium.launch({ args: chromiumLaunchArgs() })
+const browser = await chromium.launch({ headless: parityHeadless(), args: chromiumLaunchArgs() })
 out.host = { platform: process.platform, arch: process.arch, browserVersion: browser.version() }
 const page = await browser.newPage({ viewport: { width: 960, height: 600 } })
 const consoleErrors = { valid: [], invalid: [] }

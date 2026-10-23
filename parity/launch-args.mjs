@@ -9,11 +9,20 @@
 // 36422741592 — same renderer stack that already renders byte-exact on the
 // Linux legs). This is a rendering-path selection, not a tolerance change:
 // every gate still enforces its published thresholds.
+//
+// NM_PARITY_GPU=vulkan opts a host into hardware ANGLE/Vulkan: the browser
+// then runs headed on the host's X display (xvfb-run qualifies) and renders
+// through ANGLE's Vulkan backend, so the gates measure the host GPU. The
+// headless software path stays the default everywhere else.
 import { chromium, firefox } from '@playwright/test'
 import { CONSOLE_RECORDER, safari } from './safari-webdriver.mjs'
 
 export function chromiumLaunchArgs () {
   const args = ['--disable-gpu-sandbox']
+  if (process.env.NM_PARITY_GPU === 'vulkan') {
+    args.push('--no-sandbox', '--ozone-platform=x11', '--use-angle=vulkan', '--enable-features=Vulkan', '--enable-unsafe-webgpu', '--ignore-gpu-blocklist')
+    return args
+  }
   if (process.platform === 'darwin') {
     args.push('--use-angle=metal')
   } else {
@@ -22,12 +31,18 @@ export function chromiumLaunchArgs () {
   return args
 }
 
+// The vulkan path needs a real display: the NVIDIA Vulkan driver exposes no
+// headless surface, so a headless browser cannot start its context there.
+export function parityHeadless () {
+  return process.env.NM_PARITY_GPU !== 'vulkan'
+}
+
 // The pinned playwright-core revision resolves its browser executable from
 // browsers.json. A host that provisions a different headless-shell revision
 // (a cache pruned to other revisions) can name its executable through
 // NM_PARITY_BROWSER_EXECUTABLE; the launch path is otherwise unchanged.
 function parityChromiumLaunchOptions () {
-  const options = { headless: true, args: chromiumLaunchArgs(), timeout: 120000 }
+  const options = { headless: parityHeadless(), args: chromiumLaunchArgs(), timeout: 120000 }
   if (process.env.NM_PARITY_BROWSER_EXECUTABLE) options.executablePath = process.env.NM_PARITY_BROWSER_EXECUTABLE
   return options
 }
