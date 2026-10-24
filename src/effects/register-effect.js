@@ -83,6 +83,22 @@ export async function registerEffectInstance (core, ns, eff, instance, allChoice
   // fails paramAliases outright, and that contract is the one mirrored here.)
   if (core.registerOp) core.registerOp(`${ns}.${func}`, { name: func, args })
 
+  // Built-in effects may carry paramAliases (upstream 27a2b58..d0ed94ae restores
+  // `fieldTex -> heightTex` on points/flow, points/physarum and points/dla, with an S007
+  // deprecation warning until 2027-06-01) and hidden/deprecatedBy aliases. The bundle's
+  // bare registerEffect does NOT register those — only CanvasRenderer.registerEffectWithRuntime
+  // does (registerParamAliases / registerEffectAlias are unexported). So when the instance
+  // carries alias metadata, run it through the bundle's own runtime registrar too. The
+  // lookups and op it re-registers are plain map sets (idempotent), and its returned
+  // choices are ignored here — this function collects choices into allChoices itself.
+  // Portable definitions keep the opposite contract (registerPortableEffect rejects
+  // paramAliases with the bundle's message); that path is untouched.
+  const runtimeRegistrar = core.CanvasRenderer?.prototype?.registerEffectWithRuntime
+  if (runtimeRegistrar && instance.func &&
+      (instance.paramAliases || (instance.hidden && instance.deprecatedBy))) {
+    runtimeRegistrar.call(null, { namespace: ns, name: eff, instance })
+  }
+
   const isStarter = !((instance.passes || []).some((p) =>
     p.inputs && Object.values(p.inputs).some((v) => ['inputTex', 'inputTex3d', 'src', 'o0', 'o1'].includes(v))))
   if (isStarter && core.registerStarterOps) core.registerStarterOps([`${ns}.${func}`])
