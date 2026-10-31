@@ -73,9 +73,6 @@ export class NoisemakerCanvas {
 
   /** @private Handle a lost WebGL context: stop, notify the host, and schedule recovery. */
   _handleContextLost() {
-    // Before the first compile nothing has been rendered yet; the early
-    // transient loss a software rasterizer reports restores by itself.
-    if (!this.pipeline && !this._currentDsl) return
     this._isContextLost = true
     // A context lost while the program drew its first frames may have been
     // stalled by those very frames; rebuilding it could stall the GPU again.
@@ -247,9 +244,11 @@ export class NoisemakerCanvas {
    */
   _swapCanvas() {
     const old = this.canvas
-    const fresh = document.createElement('canvas')
-    fresh.width = old.width
-    fresh.height = old.height
+    // Detach the handlers first: the discarded canvas's late restore event can
+    // never recover anything, and its listeners must not leak with it.
+    old.removeEventListener('webglcontextlost', this._boundContextLost)
+    old.removeEventListener('webglcontextrestored', this._boundContextRestored)
+    const fresh = old.cloneNode(false)
     if (old.parentNode) {
       old.parentNode.replaceChild(fresh, old)
     }
@@ -288,15 +287,17 @@ export class NoisemakerCanvas {
 
   /** Render a single frame at normalized time t (0..1). */
   renderFrame(t = 0, presentationTimestamp) {
-    this._frameCount++
     this.pipeline.render(t, presentationTimestamp)
+    // Count a frame only after a successful draw: a thrown draw must not
+    // consume the first-frame loss protection.
+    this._frameCount++
   }
 
   /** Render `frames` deterministic frames at a pinned time (matches golden settle=8). */
   renderFrames(t = 0.25, frames = 8) {
     for (let i = 0; i < frames; i++) {
-      this._frameCount++
       this.pipeline.render(t)
+      this._frameCount++
     }
   }
 

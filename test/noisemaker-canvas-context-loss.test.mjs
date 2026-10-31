@@ -96,6 +96,7 @@ async function runCase (page, name) {
       // Let the software rasterizer's transient construction-time loss pass
       // before the first compile, so the pipeline is built on a stable context.
       await sleep(2200)
+      events.length = 0 // discard the construction-time transient's events
       await nc.compile(DSL)
       for (let i = 0; i < frames; i++) nc.renderFrame(0.5)
       const lose = nc.canvas.getContext('webgl2').getExtension('WEBGL_lose_context')
@@ -139,6 +140,17 @@ async function runCase (page, name) {
       await waitEvent(events, 'restored', 8000)
       nc.renderFrame(0.5)
       return { changed: nc.canvas !== original, events, pixels: sanity(nc) }
+    }
+    if (caseName === 'failed-render') {
+      const { nc, original } = await setup(0)
+      const broken = nc.pipeline.render.bind(nc.pipeline)
+      nc.pipeline.render = () => { throw new Error('draw failed') }
+      let threw = false
+      try { nc.renderFrame(0.5) } catch { threw = true }
+      const countAfterFailure = nc._frameCount
+      nc.pipeline.render = broken
+      nc.renderFrame(0.5)
+      return { threw, countAfterFailure, countAfterSuccess: nc._frameCount, changed: nc.canvas === original }
     }
     if (caseName === 'first-frame-skip') {
       const { nc, events, lose, original } = await setup(1)
@@ -193,6 +205,11 @@ test('NoisemakerCanvas recovers on a fresh canvas after a lost WebGL context', {
     const timer = await runCase(page, 'recovery-timer')
     assert.ok(timer.changed, 'an unrestored context: the recovery timer moves to a fresh canvas')
     assert.ok(timer.pixels.nonzero, 'an unrestored context: the rebuilt pipeline renders')
+
+    const failed = await runCase(page, 'failed-render')
+    assert.ok(failed.threw, 'failed render: the draw error surfaces')
+    assert.equal(failed.countAfterFailure, 0, 'failed render: the frame is not counted')
+    assert.equal(failed.countAfterSuccess, 1, 'failed render: a later successful draw is counted')
 
     const firstFrame = await runCase(page, 'first-frame-skip')
     assert.ok(firstFrame.changed, 'first-frame loss: the canvas is still replaced')
