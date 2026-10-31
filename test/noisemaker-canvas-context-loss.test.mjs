@@ -141,6 +141,25 @@ async function runCase (page, name) {
       nc.renderFrame(0.5)
       return { changed: nc.canvas !== original, events, pixels: sanity(nc) }
     }
+    if (caseName === 'pre-compile-loss') {
+      const canvas = document.createElement('canvas')
+      canvas.width = 128
+      canvas.height = 128
+      const events = []
+      const nc = new NoisemakerCanvas(canvas, {
+        onContextLost: () => events.push('lost'),
+        onContextRestored: () => events.push('restored'),
+      })
+      // Let the software rasterizer's transient construction-time loss pass and
+      // discard its events, so the loss below is deterministic.
+      await sleep(2200)
+      events.length = 0
+      nc.canvas.getContext('webgl2').getExtension('WEBGL_lose_context').loseContext()
+      await waitEvent(events, 'lost', 10000)
+      await nc.compile(DSL)
+      nc.renderFrame(0.5)
+      return { changed: nc.canvas !== canvas, events, pixels: sanity(nc) }
+    }
     if (caseName === 'failed-render') {
       const { nc, original } = await setup(0)
       const broken = nc.pipeline.render.bind(nc.pipeline)
@@ -205,6 +224,12 @@ test('NoisemakerCanvas recovers on a fresh canvas after a lost WebGL context', {
     const timer = await runCase(page, 'recovery-timer')
     assert.ok(timer.changed, 'an unrestored context: the recovery timer moves to a fresh canvas')
     assert.ok(timer.pixels.nonzero, 'an unrestored context: the rebuilt pipeline renders')
+
+    const preCompile = await runCase(page, 'pre-compile-loss')
+    assert.equal(preCompile.events[0], 'lost', 'pre-compile loss: the loss is marked before the first compile')
+    assert.ok(preCompile.events.includes('restored'), 'pre-compile loss: the host learns rendering is back')
+    assert.ok(preCompile.changed, 'pre-compile loss: compile() moves to a fresh canvas')
+    assert.ok(preCompile.pixels.nonzero, 'pre-compile loss: the built pipeline renders')
 
     const failed = await runCase(page, 'failed-render')
     assert.ok(failed.threw, 'failed render: the draw error surfaces')
