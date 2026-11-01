@@ -227,6 +227,47 @@ async function runCase (page, name) {
       nc.renderFrame(0.5)
       return { sameCanvas: nc.canvas === original, pixels: sanity(nc) }
     }
+    if (caseName === 'disposed-during-build') {
+      const { ThreeBackend } = await import('/src/backend/three-backend.js')
+      const canvas = document.createElement('canvas')
+      canvas.width = 128
+      canvas.height = 128
+      const nc = new NoisemakerCanvas(canvas)
+      // Let the software rasterizer's transient construction-time loss pass.
+      await sleep(2200)
+      let release
+      const gate = new Promise((resolve) => { release = resolve })
+      let gated = false
+      const realCompileProgram = ThreeBackend.prototype.compileProgram
+      ThreeBackend.prototype.compileProgram = async function (...args) {
+        if (!gated) {
+          gated = true
+          await gate
+        }
+        return realCompileProgram.apply(this, args)
+      }
+      let stale = null
+      let rejected = null
+      try {
+        const building = nc.compile(DSL)
+        const deadline = performance.now() + 10000
+        while (!gated && performance.now() < deadline) await sleep(20)
+        if (!gated) throw new Error('the pipeline build never reached its program compilation')
+        // Dispose while the pipeline build is still awaiting program compilation.
+        await nc.dispose()
+        release()
+        try {
+          stale = (await building) === null
+        } catch (error) {
+          rejected = error.message
+        }
+      } finally {
+        ThreeBackend.prototype.compileProgram = realCompileProgram
+      }
+      // Observe beyond the recovery delay: a disposed canvas stays dead.
+      await sleep(3600)
+      return { stale, rejected, noPipeline: nc.pipeline === null, sameCanvas: nc.canvas === canvas }
+    }
     throw new Error('unknown case ' + caseName)
   }, name)
 }
@@ -304,6 +345,12 @@ test('NoisemakerCanvas recovers on a fresh canvas after a lost WebGL context', {
     const disposedRevive = await runCase(page, 'disposed-live-revive')
     assert.ok(disposedRevive.sameCanvas, 'disposed: a revive keeps the canvas')
     assert.ok(disposedRevive.pixels.nonzero, 'disposed: a revived canvas renders on its live context')
+
+    const disposedBuild = await runCase(page, 'disposed-during-build')
+    assert.equal(disposedBuild.rejected, null, 'disposed during build: the stale compile does not reject')
+    assert.ok(disposedBuild.stale, 'disposed during build: the stale compile resolves null')
+    assert.ok(disposedBuild.noPipeline, 'disposed during build: no pipeline attaches to the disposed canvas')
+    assert.ok(disposedBuild.sameCanvas, 'disposed during build: the canvas is not replaced')
 
     assert.deepEqual(errors, [])
   } finally {

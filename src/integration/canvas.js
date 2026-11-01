@@ -201,21 +201,43 @@ export class NoisemakerCanvas {
   }
 
   async _compile(dsl) {
+    // A dispose() during any of the awaits below makes this compile stale:
+    // its result belongs to a disposed canvas and must not attach.
+    const generation = this._lifecycleGeneration
     this._currentDsl = dsl
-    // A lost context that the browser has not restored cannot compile;
-    // build on a fresh canvas instead.
     const recovering = this._isContextLost
-    if (recovering) {
-      await this._replaceLostCanvas()
+    let graph
+    let pipeline
+    try {
+      // A lost context that the browser has not restored cannot compile;
+      // build on a fresh canvas instead.
+      if (recovering) {
+        await this._replaceLostCanvas()
+      }
+      if (generation !== this._lifecycleGeneration) return null
+      await loadEffectsForDsl(dsl)
+      if (generation !== this._lifecycleGeneration) return null
+      graph = compileGraph(dsl)
+      pipeline = await createThreePipeline(graph, {
+        renderer: this.renderer,
+        width: this.width,
+        height: this.height,
+      })
+    } catch (error) {
+      // An error from a build the canvas was disposed during is the disposed
+      // canvas's, not the caller's.
+      if (generation !== this._lifecycleGeneration) return null
+      throw error
     }
-    await loadEffectsForDsl(dsl)
-    const graph = compileGraph(dsl)
+    if (generation !== this._lifecycleGeneration) {
+      try {
+        pipeline.dispose()
+      } catch (error) {
+        console.warn('Failed to dispose a stale NoisemakerCanvas pipeline', error)
+      }
+      return null
+    }
     const previousPipeline = this.pipeline
-    const pipeline = await createThreePipeline(graph, {
-      renderer: this.renderer,
-      width: this.width,
-      height: this.height,
-    })
     this.pipeline = pipeline
     if (previousPipeline && previousPipeline !== pipeline) {
       try {
