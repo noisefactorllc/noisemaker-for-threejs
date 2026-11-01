@@ -156,7 +156,8 @@ export class NoisemakerCanvas {
       // _compile fires onContextRestored when it rebuilt on a fresh canvas.
       await this._compile(this._currentDsl)
     } else {
-      await this._replaceLostCanvas()
+      const replaced = await this._replaceLostCanvas()
+      if (!replaced) return false
       if (this._onContextRestored) {
         this._onContextRestored()
       }
@@ -279,6 +280,9 @@ export class NoisemakerCanvas {
 
     // A fresh canvas normally takes a WebGL2 context at once; a browser that
     // blames the page for a GPU process exit refuses new contexts for a while.
+    // A dispose() during the waits makes this replacement stale: stop without
+    // creating a renderer for the disposed canvas.
+    const generation = this._lifecycleGeneration
     const deadline = performance.now() + CONTEXT_RECOVERY_LIMIT_MS
     while (!this.canvas.getContext('webgl2', { preserveDrawingBuffer: true })) {
       if (performance.now() >= deadline) {
@@ -287,7 +291,9 @@ export class NoisemakerCanvas {
         throw new Error('The browser did not allow a new WebGL2 context after the context was lost')
       }
       await new Promise((resolve) => setTimeout(resolve, CONTEXT_RETRY_MS))
+      if (generation !== this._lifecycleGeneration) return false
     }
+    if (generation !== this._lifecycleGeneration) return false
     this.renderer = this._createRenderer(this.canvas)
     this._isContextLost = false
     return true

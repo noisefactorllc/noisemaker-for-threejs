@@ -268,6 +268,46 @@ async function runCase (page, name) {
       await sleep(3600)
       return { stale, rejected, noPipeline: nc.pipeline === null, sameCanvas: nc.canvas === canvas }
     }
+    if (caseName === 'disposed-during-blocked-context') {
+      const { nc, events, lose, original } = await setup(2)
+      // Count renderer creations: the constructor created the first one.
+      let creations = 1
+      const realCreateRenderer = nc._createRenderer.bind(nc)
+      nc._createRenderer = (canvas) => {
+        creations++
+        return realCreateRenderer(canvas)
+      }
+      // Block every new WebGL2 context the way a browser does after a GPU
+      // process exit it blames on the page.
+      const realGetContext = HTMLCanvasElement.prototype.getContext
+      let blocked = true
+      HTMLCanvasElement.prototype.getContext = function (type, ...args) {
+        if (blocked && type === 'webgl2') return null
+        return realGetContext.call(this, type, ...args)
+      }
+      let stale = null
+      let rejected = null
+      try {
+        lose.loseContext()
+        await waitEvent(events, 'lost', 10000)
+        const building = nc.compile(DSL)
+        // One blocked retry wait elapses, then the canvas is disposed while
+        // the context is still blocked.
+        await sleep(1500)
+        await nc.dispose()
+        blocked = false
+        try {
+          stale = (await building) === null
+        } catch (error) {
+          rejected = error.message
+        }
+      } finally {
+        HTMLCanvasElement.prototype.getContext = realGetContext
+      }
+      // Observe beyond the recovery delay: the disposed canvas stays dead.
+      await sleep(3600)
+      return { stale, rejected, creations, noPipeline: nc.pipeline === null, swapped: nc.canvas !== original }
+    }
     throw new Error('unknown case ' + caseName)
   }, name)
 }
@@ -351,6 +391,13 @@ test('NoisemakerCanvas recovers on a fresh canvas after a lost WebGL context', {
     assert.ok(disposedBuild.stale, 'disposed during build: the stale compile resolves null')
     assert.ok(disposedBuild.noPipeline, 'disposed during build: no pipeline attaches to the disposed canvas')
     assert.ok(disposedBuild.sameCanvas, 'disposed during build: the canvas is not replaced')
+
+    const disposedBlocked = await runCase(page, 'disposed-during-blocked-context')
+    assert.equal(disposedBlocked.rejected, null, 'disposed during blocked context: the stale compile does not reject')
+    assert.ok(disposedBlocked.stale, 'disposed during blocked context: the stale compile resolves null')
+    assert.equal(disposedBlocked.creations, 1, 'disposed during blocked context: no renderer is created for the disposed canvas')
+    assert.ok(disposedBlocked.noPipeline, 'disposed during blocked context: no pipeline attaches')
+    assert.ok(disposedBlocked.swapped, 'disposed during blocked context: the lost canvas was still replaced')
 
     assert.deepEqual(errors, [])
   } finally {
