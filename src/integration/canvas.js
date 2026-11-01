@@ -11,6 +11,8 @@
  * browser restores the context or not, because a canvas after a GPU process
  * exit cannot be read back as an image. compile() on an unrestored context
  * moves to a fresh canvas too, waiting while the browser refuses new contexts.
+ * A canvas disposed intentionally never restarts after a context loss; an
+ * explicit compile() revives it, and a failed revive keeps it disposed.
  */
 import * as THREE from 'three'
 import { compileGraph, loadEffectsForDsl, registerPortableEffectInstance } from '../engine-browser.js'
@@ -35,6 +37,9 @@ export class NoisemakerCanvas {
     this._currentDsl = null
     this._isContextLost = false
     this._contextLostBeforeSecondFrame = false
+    // An intentionally disposed canvas never restarts after a context loss.
+    this._isDisposed = false
+    this._lifecycleGeneration = 0
     this._frameCount = 0
     this._contextRecoveryTimer = null
     this._compileQueue = null
@@ -62,6 +67,10 @@ export class NoisemakerCanvas {
   _attachContextLossHandlers(canvas) {
     this._boundContextLost = (event) => {
       event.preventDefault() // Signal the browser we will handle restore
+      this._isContextLost = true
+      // A disposed canvas stays dead: the late loss event must not schedule a
+      // rebuild. It still marks the loss, so a later explicit compile() recovers.
+      if (this._isDisposed) return
       this._handleContextLost()
     }
     this._boundContextRestored = () => {
@@ -73,7 +82,6 @@ export class NoisemakerCanvas {
 
   /** @private Handle a lost WebGL context: stop, notify the host, and schedule recovery. */
   _handleContextLost() {
-    this._isContextLost = true
     // A context lost while the program drew its first frames may have been
     // stalled by those very frames; rebuilding it could stall the GPU again.
     // The next compile() builds.
@@ -128,6 +136,7 @@ export class NoisemakerCanvas {
    * canvas in the old canvas's place and rebuild the program.
    */
   async _handleContextRestored() {
+    if (this._isDisposed) return
     this._clearContextRecovery()
     if (!this._isContextLost) return
     console.log('[NoisemakerCanvas] WebGL context restored, rebuilding on a fresh canvas...')
@@ -140,6 +149,7 @@ export class NoisemakerCanvas {
    * `canvas` afterwards), rebuild the program, and notify the host.
    */
   async _recoverAfterContextLoss() {
+    if (this._isDisposed) return false
     if (!this._isContextLost) return false
     const rebuilds = this._rebuildsAfterContextLoss()
     if (rebuilds) {
@@ -162,7 +172,32 @@ export class NoisemakerCanvas {
   }
 
   compile(dsl) {
-    return this._queueCompile(() => this._compile(dsl))
+    // A compile queued before a dispose() must not run after it: the disposed
+    // canvas stays dead until a later explicit compile() revives it.
+    const generation = this._lifecycleGeneration
+    return this._queueCompile(async () => {
+      if (generation !== this._lifecycleGeneration) return null
+      // An explicit compile revives a disposed canvas and re-enables its
+      // context-loss recovery.
+      const wasDisposed = this._isDisposed
+      this._isDisposed = false
+      try {
+        if (wasDisposed && !this.canvas.getContext('webgl2')?.isContextLost()) {
+          // A disposed renderer cannot build again; the canvas's live context
+          // can. A lost context is replaced on a fresh canvas in _compile.
+          this.renderer = this._createRenderer(this.canvas)
+        }
+        return await this._compile(dsl)
+      } catch (error) {
+        // A revive that fails leaves the canvas disposed: no pipeline was
+        // built, and no automatic recovery may schedule itself.
+        if (wasDisposed && !this.pipeline) {
+          this._isDisposed = true
+          this._clearContextRecovery()
+        }
+        throw error
+      }
+    })
   }
 
   async _compile(dsl) {
@@ -311,11 +346,12 @@ export class NoisemakerCanvas {
   }
 
   dispose() {
+    this._isDisposed = true
+    this._lifecycleGeneration++
     this._clearContextRecovery()
-    if (this.canvas) {
-      this.canvas.removeEventListener('webglcontextlost', this._boundContextLost)
-      this.canvas.removeEventListener('webglcontextrestored', this._boundContextRestored)
-    }
+    // The context-loss handlers stay attached: while disposed they only mark a
+    // loss, and an explicit compile() that revives this canvas needs the mark
+    // to recover on a fresh canvas.
     const pipeline = this.pipeline
     this.pipeline = null
     let firstError

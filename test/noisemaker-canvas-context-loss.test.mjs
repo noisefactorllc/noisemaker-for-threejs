@@ -182,6 +182,51 @@ async function runCase (page, name) {
       nc.renderFrame(0.5)
       return { changed: nc.canvas !== original, events, skipped, pixels: sanity(nc) }
     }
+    if (caseName === 'disposed-late-loss') {
+      const { nc, events, lose, original } = await setup(2)
+      await nc.dispose()
+      lose.loseContext()
+      // Observe beyond the recovery delay: an intentionally disposed canvas
+      // must not rebuild after the delayed loss event.
+      await sleep(3600)
+      const disposed = {
+        sameCanvas: nc.canvas === original,
+        noPipeline: nc.pipeline === null,
+        quiet: !events.includes('lost') && !events.includes('restored'),
+      }
+      await nc.compile(DSL)
+      nc.renderFrame(0.5)
+      return { disposed, pixels: sanity(nc), changed: nc.canvas !== original }
+    }
+    if (caseName === 'disposed-rejected-compile') {
+      const { nc, events, lose, original } = await setup(2)
+      await nc.dispose()
+      let rejected = null
+      try {
+        await nc.compile('search synth\nnoise(notAParam: 1).write(o0)')
+      } catch (error) {
+        rejected = error.code ?? error.message
+      }
+      lose.loseContext()
+      await sleep(3600)
+      const disposed = {
+        sameCanvas: nc.canvas === original,
+        noPipeline: nc.pipeline === null,
+        quiet: !events.includes('lost') && !events.includes('restored'),
+      }
+      await nc.compile(DSL)
+      nc.renderFrame(0.5)
+      return { rejected, disposed, pixels: sanity(nc), changed: nc.canvas !== original }
+    }
+    if (caseName === 'disposed-live-revive') {
+      const { nc, original } = await setup(2)
+      await nc.dispose()
+      // The context never got lost: an explicit compile revives the canvas on
+      // its live context.
+      await nc.compile(DSL)
+      nc.renderFrame(0.5)
+      return { sameCanvas: nc.canvas === original, pixels: sanity(nc) }
+    }
     throw new Error('unknown case ' + caseName)
   }, name)
 }
@@ -240,6 +285,25 @@ test('NoisemakerCanvas recovers on a fresh canvas after a lost WebGL context', {
     assert.ok(firstFrame.changed, 'first-frame loss: the canvas is still replaced')
     assert.ok(firstFrame.skipped, 'first-frame loss: the program is not rebuilt automatically')
     assert.ok(firstFrame.pixels.nonzero, 'first-frame loss: the next compile() builds')
+
+    const disposedLate = await runCase(page, 'disposed-late-loss')
+    assert.ok(disposedLate.disposed.sameCanvas, 'disposed: a late loss event does not replace the canvas')
+    assert.ok(disposedLate.disposed.noPipeline, 'disposed: a late loss event does not rebuild the pipeline')
+    assert.ok(disposedLate.disposed.quiet, 'disposed: the host hears no recovery events after disposal')
+    assert.ok(disposedLate.changed, 'disposed: an explicit compile() revives rendering')
+    assert.ok(disposedLate.pixels.nonzero, 'disposed: the revived canvas renders')
+
+    const disposedRejected = await runCase(page, 'disposed-rejected-compile')
+    assert.ok(disposedRejected.rejected, 'disposed: a rejected revive reports its error')
+    assert.ok(disposedRejected.disposed.sameCanvas, 'disposed: a rejected revive does not replace the canvas')
+    assert.ok(disposedRejected.disposed.noPipeline, 'disposed: a rejected revive does not build a pipeline')
+    assert.ok(disposedRejected.disposed.quiet, 'disposed: a rejected revive schedules no recovery')
+    assert.ok(disposedRejected.changed, 'disposed: a later explicit compile() recovers')
+    assert.ok(disposedRejected.pixels.nonzero, 'disposed: the recovered canvas renders')
+
+    const disposedRevive = await runCase(page, 'disposed-live-revive')
+    assert.ok(disposedRevive.sameCanvas, 'disposed: a revive keeps the canvas')
+    assert.ok(disposedRevive.pixels.nonzero, 'disposed: a revived canvas renders on its live context')
 
     assert.deepEqual(errors, [])
   } finally {
