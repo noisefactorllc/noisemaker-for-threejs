@@ -71,6 +71,22 @@ test('two reactionDiffusion instances in one chain have independent state and zo
   }
 })
 
+test('program B: reactionDiffusion instances after a synth starter have independent state and zoom sizes', { skip }, () => {
+  const { graph, pipeline } = build('perlin().blendMode(tex: reactionDiffusion(zoom: x4)).blendMode(tex: reactionDiffusion(zoom: x16)).write(o0)')
+  const nodes = instances(graph, 'reactionDiffusion', 'global_rd_state')
+  assert.equal(nodes.length, 2)
+  assert.notEqual(nodes[0].texture, nodes[1].texture, 'state textures must be distinct')
+  assertSize(pipeline, nodes[0].texture, 256)
+  assertSize(pipeline, nodes[1].texture, 64)
+  for (const [index, node] of nodes.entries()) {
+    const sizingParam = graph.textures.get(node.texture).width.screenDivide
+    for (const pass of node.passes) {
+      assert.equal(pass.scopedParams.zoom, sizingParam)
+      assert.equal(pass.uniforms[sizingParam], [4, 16][index])
+    }
+  }
+})
+
 test('repeated watercolor instances have independent ping-pong state', { skip }, () => {
   const { graph, pipeline } = build('perlin().watercolor().watercolor().write(o0)')
   const nodes = instances(graph, 'watercolor', 'global_wc_state')
