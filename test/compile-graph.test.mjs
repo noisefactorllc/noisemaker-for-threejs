@@ -619,6 +619,98 @@ test('Pipeline shouldDeferRender isolates throwing sinks and reports error', { s
   assert.equal(pipeline.sinkManager.stats.get(throwingSink).failed, 1)
 })
 
+// Ports upstream shaders/tests/test_pipeline.js (engine commit db2173e3): the pipeline gives
+// its SinkManager a reporter that passes each isolated sink failure to that sink's optional
+// onError(error). Sinks without onError, and sinks that do not throw, see the same calls,
+// order and counters; a throwing onError stays isolated from rendering and the other sinks.
+test('Pipeline passes a sink its own isolated configure, deferRender and submit errors', { skip }, () => {
+  const backend = {
+    textures: new Map(),
+    createTexture (id, spec) { this.textures.set(id, { ...spec }) },
+    destroyTexture (id) { this.textures.delete(id) },
+    destroy () {},
+    beginFrame () {},
+    endFrame () {}
+  }
+  const graph = { passes: [], textures: new Map(), renderSurface: 'o0' }
+  const pipeline = new eng.Pipeline(graph, backend)
+  pipeline.width = 320
+  pipeline.height = 240
+  pipeline.createSurfaces()
+
+  const configureError = new Error('configure failed')
+  const deferError = new Error('defer probe failed')
+  const submitError = new Error('submit failed')
+  const reported = []
+  let failing = false
+  const failed = {
+    configure () { if (failing) throw configureError },
+    deferRender () { if (failing) throw deferError; return false },
+    submit () { if (failing) throw submitError; return true },
+    close () {},
+    onError (error) { reported.push(['failed', error]) }
+  }
+  // A sink without onError fails exactly as before: counted and isolated.
+  const silent = {
+    configure () { if (failing) throw new Error('silent configure failed') },
+    submit () { if (failing) throw new Error('silent submit failed'); return true },
+    close () {}
+  }
+  // A sink whose reporter throws does not stop the resize or the frame.
+  let reporterCalls = 0
+  const throwingReporter = {
+    configure () { if (failing) throw new Error('configure failed again') },
+    submit () { return true },
+    close () {},
+    onError () {
+      reporterCalls++
+      throw new Error('reporter failed')
+    }
+  }
+  // A sink that does not fail sees the same calls as before and no report.
+  const healthyCalls = []
+  const healthy = {
+    configure (descriptor) { healthyCalls.push(['configure', descriptor.width, descriptor.height]) },
+    deferRender () { healthyCalls.push(['deferRender']); return false },
+    submit (textureId, timestamp) { healthyCalls.push(['submit', timestamp]); return true },
+    close () {},
+    onError (error) { reported.push(['healthy', error]) }
+  }
+  pipeline.addSink(failed)
+  pipeline.addSink(silent)
+  pipeline.addSink(throwingReporter)
+  pipeline.addSink(healthy)
+  healthyCalls.length = 0
+  failing = true
+
+  pipeline.resize(640, 480)
+  const deferred = pipeline.shouldDeferRender()
+  pipeline.render(0, 7)
+
+  assert.equal(deferred, false, 'a throwing deferRender must not defer the frame')
+  assert.deepEqual(
+    reported.map(([sink, error]) => [sink, error.message]),
+    [['failed', 'configure failed'], ['failed', 'defer probe failed'], ['failed', 'submit failed']],
+    'each error must reach only the sink that threw it'
+  )
+  assert.equal(reporterCalls, 1, 'the throwing reporter receives its configure error once')
+  assert.deepEqual(healthyCalls, [['configure', 640, 480], ['deferRender'], ['submit', 7]],
+    'a sink that does not fail sees the same calls')
+  const counters = [
+    [failed, { accepted: 0, dropped: 0, failed: 3 }],
+    [silent, { accepted: 0, dropped: 0, failed: 2 }],
+    [throwingReporter, { accepted: 1, dropped: 0, failed: 1 }],
+    [healthy, { accepted: 1, dropped: 0, failed: 0 }]
+  ]
+  for (const [sink, counts] of counters) {
+    assert.deepEqual(pipeline.sinkManager.stats.get(sink), counts)
+  }
+  const resizedTexture = backend.textures.get('global_o0_read')
+  assert.ok(resizedTexture, 'resize allocated the read surface')
+  assert.deepEqual([resizedTexture.width, resizedTexture.height], [640, 480],
+    'resize completed after reported sink errors')
+})
+
 test('DSL parser attaches structured diagnostic payload for output operations (P005)', { skip }, () => {
   const outputFailures = [
     ['invalid render target', 'search synth\nrender(1)', 'Expected output reference in render()', 2, 8],
