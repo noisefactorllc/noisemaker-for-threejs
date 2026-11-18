@@ -193,3 +193,50 @@ test('destroy() disposes MRT hosts, cached draw geometries, and depth renderbuff
   assert.ok(deletedRenderbuffers.includes(renderbuffers.at(-1)), 'depth renderbuffer was deleted')
   assert.equal(backend._pointGeoCache.size, 0)
 })
+
+test('releaseProgram disposes the rejected program material and nothing else', () => {
+  const { renderer } = makeMockRenderer()
+  const backend = new ThreeBackend(renderer)
+
+  const kept = new THREE.RawShaderMaterial()
+  let keptDisposed = false
+  kept.addEventListener('dispose', () => { keptDisposed = true })
+  const rejected = new THREE.RawShaderMaterial()
+  let rejectedDisposed = false
+  rejected.addEventListener('dispose', () => { rejectedDisposed = true })
+  backend.programs.set('kept', { material: kept, spec: {}, uniformSizes: {} })
+  backend.programs.set('rejected', { material: rejected, spec: {}, uniformSizes: {} })
+
+  backend.releaseProgram(backend.programs.get('rejected'))
+  assert.ok(rejectedDisposed, 'the rejected program material was disposed')
+  assert.ok(!keptDisposed, 'the accepted program material stayed')
+
+  // The engine calls releaseProgram for every entry of backend.programs, and an
+  // entry can be absent when the compile failed before anything was stored.
+  backend.releaseProgram(undefined)
+  backend.releaseProgram({})
+})
+
+test('a rejected compile keeps the accepted programs and releases the candidate', async () => {
+  const { renderer } = makeMockRenderer()
+  const backend = new ThreeBackend(renderer)
+  const { Pipeline } = await import('../src/engine-browser.js')
+
+  const kept = new THREE.RawShaderMaterial()
+  let keptDisposed = false
+  kept.addEventListener('dispose', () => { keptDisposed = true })
+  backend.programs.set('kept', { material: kept, spec: {}, uniformSizes: {} })
+
+  // The second pass has no program spec, so compilePrograms fails after the
+  // first candidate pass was already compiled into the backend.
+  const graph = {
+    passes: [{ id: 'c0', program: 'cand0' }, { id: 'c1', program: 'missing' }],
+    programs: new Map([['cand0', { glsl: 'void main() {}\n', defines: {} }]]),
+  }
+  const pipeline = new Pipeline(graph, backend)
+  await assert.rejects(pipeline.compilePrograms(graph), (error) => error.code === 'ERR_PROGRAM_SPEC_MISSING')
+
+  assert.equal(backend.programs.get('kept')?.material, kept, 'the accepted program stayed')
+  assert.ok(!backend.programs.has('cand0'), 'the rejected candidate left the program map')
+  assert.ok(!keptDisposed, 'the accepted program material was not disposed')
+})

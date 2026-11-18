@@ -337,6 +337,17 @@ export class ThreeBackend extends Backend {
     return { material }
   }
 
+  /**
+   * Delete a compiled program that no graph renders with (upstream
+   * WebGL2Backend.releaseProgram). The engine's Pipeline.compilePrograms calls
+   * this for programs compiled since a rejected compile began, so a failed
+   * candidate never leaves its GPU programs behind.
+   * @param {object} program - An entry of this.programs
+   */
+  releaseProgram(program) {
+    program?.material?.dispose()
+  }
+
   // --- surface name resolution (mirrors webgl2.parseGlobalName) ---
   parseGlobalName(texId) {
     if (typeof texId !== 'string') return null
