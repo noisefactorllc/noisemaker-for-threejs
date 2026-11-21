@@ -63,3 +63,14 @@ test('the kit dispatch waits for every installed-package consumer gate', () => {
   assert.ok(consumerJobs.length >= 2, `consumer jobs: ${consumerJobs}`)
   for (const name of consumerJobs) assert.ok(needs.includes(name), `dispatch must need ${name}`)
 })
+
+test('the live-input sweep and the live-stream probe gate the Linux and macOS parity job', () => {
+  const body = jobs().parity
+  for (const [script, log] of [['parity/sweep-live-inputs.mjs', 'live-inputs'], ['parity/probe-live-streams.mjs', 'live-streams']]) {
+    assert.deepEqual(platformsRunning(script), ['macos', 'ubuntu'], script)
+    const runs = body.filter((line) => line.includes(script))
+    assert.equal(runs.length, 1, `${script} runs once in the parity job`)
+    assert.match(runs[0], new RegExp(`^\\s+run: bash scripts/gate-step\\.sh parity/out/${log}\\.log node ${script.replace('.', '\\.')}$`))
+  }
+  assert.ok(!body.some((line) => line.includes('continue-on-error')), 'nothing in the parity job may soft-fail')
+})

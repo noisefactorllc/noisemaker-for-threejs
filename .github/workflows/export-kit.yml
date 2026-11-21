@@ -83,6 +83,16 @@ jobs:
       - name: Corpus gate
         if: ${{ !cancelled() }}
         run: npm run parity 2>&1 | tee parity/out/corpus.log
+      # The browser's own decoders (fixed PNG, WebM and WAV bytes) feed media,
+      # scope and spectrum on both backends, graded at tolerance 0.
+      - name: Live-input gate
+        if: ${{ !cancelled() }}
+        run: bash scripts/gate-step.sh parity/out/live-inputs.log node parity/sweep-live-inputs.mjs
+      # getUserMedia camera and microphone streams from Chromium's fake devices
+      # reach the shaders on both backends.
+      - name: Live-stream gate
+        if: ${{ !cancelled() }}
+        run: bash scripts/gate-step.sh parity/out/live-streams.log node parity/probe-live-streams.mjs
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
