@@ -19,6 +19,7 @@ import { deflateSync } from 'node:zlib'
 import { spawnSync } from 'node:child_process'
 import { parityBrowserConfig } from './launch-args.mjs'
 import { startLoopbackServer } from './loopback-server.mjs'
+import { captureMismatch, expectedCaptures } from './timeseries-captures.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const repoRoot = resolve(__dirname, '..')
@@ -42,12 +43,17 @@ function loadCase(raw) {
   const effectsSidecar = dslPath.replace(/\.dsl$/, '.effects.json')
   const effects = existsSync(effectsSidecar) ? JSON.parse(readFileSync(effectsSidecar, 'utf8')).effects : []
   if (!Array.isArray(effects)) throw new Error(`${effectsSidecar}: effects must be an array`)
+  const frames = Number(raw.frames ?? 1800)
+  const capture = Number(raw.capture ?? 300)
+  const captures = expectedCaptures(frames, capture)
+  if (captures < 1) throw new Error(`${basename(dslPath)}: ${frames} frames with a capture every ${capture} frames capture no frame`)
   return {
     dslPath,
     name: basename(dslPath).replace(/\.dsl$/, ''),
     dsl: readFileSync(dslPath, 'utf8'),
-    frames: Number(raw.frames ?? 1800),
-    capture: Number(raw.capture ?? 300),
+    frames,
+    capture,
+    captures,
     size: Number(raw.size ?? 256),
     loopFrames: Number(raw.loopFrames ?? 600),
     inject,
@@ -56,21 +62,28 @@ function loadCase(raw) {
 }
 
 let cases
-if (batchIdx >= 0) {
-  const manifest = JSON.parse(readFileSync(argv[batchIdx + 1], 'utf8'))
-  cases = manifest.cases.map(loadCase)
-} else {
-  const dslPath = argv[0]
-  if (!dslPath) { process.stderr.write('usage: node timeseries.mjs <program.dsl> [--frames N] [--capture K] [--size S] [--loop L]\n'); process.exit(2) }
-  const injectIdx = argv.indexOf('--inject')
-  cases = [loadCase({
-    dslPath,
-    frames: opt('--frames', 1800),
-    capture: opt('--capture', 300),
-    size: opt('--size', 256),
-    loopFrames: opt('--loop', 600),
-    injectPath: injectIdx >= 0 ? argv[injectIdx + 1] : null
-  })]
+try {
+  if (batchIdx >= 0) {
+    const manifest = JSON.parse(readFileSync(argv[batchIdx + 1], 'utf8'))
+    cases = manifest.cases.map(loadCase)
+  } else {
+    const dslPath = argv[0]
+    if (!dslPath) { process.stderr.write('usage: node timeseries.mjs <program.dsl> [--frames N] [--capture K] [--size S] [--loop L]\n'); process.exit(2) }
+    const injectIdx = argv.indexOf('--inject')
+    cases = [loadCase({
+      dslPath,
+      frames: opt('--frames', 1800),
+      capture: opt('--capture', 300),
+      size: opt('--size', 256),
+      loopFrames: opt('--loop', 600),
+      injectPath: injectIdx >= 0 ? argv[injectIdx + 1] : null
+    })]
+  }
+  // A run that compares nothing must fail, never pass.
+  if (cases.length === 0) throw new Error('the manifest lists no cases')
+} catch (error) {
+  process.stderr.write(`[ts] FAILED: ${error?.message || error}\n`)
+  process.exit(1)
 }
 
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.json': 'application/json', '.glsl': 'text/plain', '.vert': 'text/plain', '.frag': 'text/plain', '.wgsl': 'text/plain', '.png': 'image/png', '.wav': 'audio/wav', '.webm': 'video/webm' }
@@ -182,6 +195,11 @@ async function runCase(browser, port, testCase) {
     process.stderr.write(`[ts] ${name} golden: ${golden.length} captures\n`)
     const candidate = await runMode(browser, port, 'candidate', testCase)
     process.stderr.write(`[ts] ${name} candidate: ${candidate.length} captures\n`)
+    const mismatch = captureMismatch(testCase.captures, golden, candidate)
+    if (mismatch) {
+      process.stdout.write(`[FAIL] ${name}: ${mismatch}\n`)
+      return false
+    }
 
     let worst = 0
     let failed = false
