@@ -65,18 +65,19 @@ test('the kit dispatch waits for every installed-package consumer gate', () => {
 })
 
 
-// The block of a job: its header and its indented lines, up to the next job
-// or the next two-space comment, without trailing blank lines.
+// The block of a job: its header and its lines up to the next job header or
+// top-level key, without trailing blank or comment lines. A comment inside the
+// job does not end it, so a key after a comment is part of the comparison.
 function block (name) {
   const lines = text.split('\n')
   const start = lines.indexOf(`  ${name}:`)
   assert.ok(start >= 0, `no ${name} job`)
   const out = [lines[start]]
   for (const line of lines.slice(start + 1)) {
-    if (/^ {2}\S/.test(line) || /^\S/.test(line)) break
+    if (/^ {2}[A-Za-z0-9_-]+:\s*$/.test(line) || /^[^ #]/.test(line)) break
     out.push(line)
   }
-  while (out.length && !out[out.length - 1].trim()) out.pop()
+  while (out.length && (!out[out.length - 1].trim() || out[out.length - 1].trimStart().startsWith('#'))) out.pop()
   return out.join('\n')
 }
 
@@ -110,8 +111,8 @@ const PARITY_JOB = [
   "      - name: Corpus gate",
   "        if: ${{ !cancelled() }}",
   "        run: npm run parity 2>&1 | tee parity/out/corpus.log",
-  "      # The browser's own decoders (fixed PNG, WebM and WAV bytes) feed media,",
-  "      # scope and spectrum on both backends, graded at tolerance 0.",
+  "      # The browser's own decoders (fixed PNG, WebM, WAV and OBJ bytes) feed",
+  "      # media, scope, spectrum and mesh on both backends, graded at tolerance 0.",
   "      - name: Live-input gate",
   "        if: ${{ !cancelled() }}",
   "        run: bash scripts/gate-step.sh parity/out/live-inputs.log node parity/sweep-live-inputs.mjs",
@@ -128,8 +129,21 @@ const PARITY_JOB = [
   "          if-no-files-found: error"
 ].join('\n')
 
-// The reviewed workflow triggers.
-const ON_BLOCK = [
+// Everything before `jobs:`: the workflow's name, triggers, permissions,
+// concurrency and environment.
+const PREAMBLE = [
+  "name: Export kit",
+  "",
+  "# Public repo: holds NO deploy credentials. Dispatches the export-kit",
+  "# release workflow, which builds this repo's export kit at this exact",
+  "# SHA and ships it to kits.noisedeck.app.",
+  "#",
+  "# A push runs only the unit gate (lint + npm test). The rendered-parity gates",
+  "# render in software on hosted runners for over an hour, so they run weekly",
+  "# and on manual dispatch, and only a green full run dispatches the kit",
+  "# release: every published kit is parity-verified.",
+  "",
+  "on:",
   "  workflow_dispatch:",
   "  schedule:",
   "    - cron: '13 8 * * 1'",
@@ -146,34 +160,48 @@ const ON_BLOCK = [
   "      - \"parity/**\"",
   "      - \"test/**\"",
   "      - \"vendor/fetch.sh\"",
-  "      - \".github/actions/**\""
+  "      - \".github/actions/**\"",
+  "",
+  "permissions: {}",
+  "",
+  "concurrency:",
+  "  # The full gate and the push gate queue separately, so a weekly run never",
+  "  # holds up a push.",
+  "  group: export-kit-${{ github.ref }}-${{ github.event_name == 'push' && 'gate' || 'full' }}",
+  "  cancel-in-progress: false",
+  "",
+  "env:",
+  "  NM_PARITY_PYTHON: python",
+  ""
 ].join('\n')
 
 test('the Linux and macOS parity job is exactly the reviewed job', () => {
   assert.equal(block('parity'), PARITY_JOB)
-  assert.equal(text.split('\n').filter((line) => line === '  parity:').length, 1, 'one parity job')
+  assert.doesNotMatch(block('parity'), /continue-on-error/)
 })
 
-test('the kit dispatch waits for the parity job and runs only after every need succeeded', () => {
+test('the workflow runs under the reviewed preamble', () => {
+  assert.ok(text.includes('\njobs:\n'))
+  assert.equal(text.split('\njobs:\n')[0], PREAMBLE)
+})
+
+test('jobs is the last top-level key and every job id is plain and unique', () => {
+  const lines = text.split('\n')
+  const after = lines.slice(lines.indexOf('jobs:') + 1)
+  assert.deepEqual(after.filter((line) => /^[^ #]/.test(line)), [], 'no top-level key follows jobs:')
+  const ids = after.filter((line) => /^ {2}\S/.test(line) && !line.trimStart().startsWith('#'))
+  for (const line of ids) assert.match(line, /^ {2}[A-Za-z][A-Za-z0-9_-]*:$/)
+  const names = ids.map((line) => line.trim().slice(0, -1).toLowerCase())
+  assert.equal(new Set(names).size, names.length, 'job ids are unique')
+  assert.ok(names.includes('parity') && names.includes('dispatch'))
+})
+
+test('the kit dispatch waits for the parity job and is the only job that dispatches a workflow', () => {
   const dispatch = block('dispatch').split('\n')
   const needs = /^ {4}needs: \[([^\]]+)\]$/.exec(dispatch[1])
   assert.ok(needs, `dispatch needs: ${dispatch[1]}`)
   assert.ok(needs[1].split(',').map((name) => name.trim()).includes('parity'), 'dispatch must need parity')
   assert.equal(dispatch[2], "    if: github.ref == 'refs/heads/main' && github.event_name != 'push'")
-})
-
-test('no top-level default changes a job shell', () => {
-  assert.doesNotMatch(text, /^["']?defaults["']?\s*:/m)
-})
-
-test('the workflow runs on the reviewed triggers', () => {
-  const lines = text.split('\n')
-  const start = lines.indexOf('on:')
-  const on = []
-  for (const line of lines.slice(start + 1)) {
-    if (/^[^ #]/.test(line)) break
-    on.push(line)
-  }
-  while (on.length && !on[on.length - 1].trim()) on.pop()
-  assert.equal(on.join('\n'), ON_BLOCK)
+  const dispatching = Object.entries(jobs()).filter(([, body]) => body.some((line) => /gh\s+workflow\s+run|workflow_dispatch\b.*curl|actions\/workflows\/.*\/dispatches/.test(line)))
+  assert.deepEqual(dispatching.map(([name]) => name), ['dispatch'])
 })

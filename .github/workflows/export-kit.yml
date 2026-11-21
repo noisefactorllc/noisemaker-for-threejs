@@ -83,8 +83,8 @@ jobs:
       - name: Corpus gate
         if: ${{ !cancelled() }}
         run: npm run parity 2>&1 | tee parity/out/corpus.log
-      # The browser's own decoders (fixed PNG, WebM and WAV bytes) feed media,
-      # scope and spectrum on both backends, graded at tolerance 0.
+      # The browser's own decoders (fixed PNG, WebM, WAV and OBJ bytes) feed
+      # media, scope, spectrum and mesh on both backends, graded at tolerance 0.
       - name: Live-input gate
         if: ${{ !cancelled() }}
         run: bash scripts/gate-step.sh parity/out/live-inputs.log node parity/sweep-live-inputs.mjs
