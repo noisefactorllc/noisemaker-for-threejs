@@ -14,7 +14,8 @@
 //
 // Chromium fake-device flags provide the deterministic stream provider, so the
 // probe runs identically on every platform (headless SwiftShader, native
-// Metal, …). This is a manual qualification driver, not part of npm test.
+// Metal, …). It is not part of npm test; the weekly Linux and macOS parity
+// job in .github/workflows/export-kit.yml runs it as the live-stream gate.
 //
 // Usage: node parity/probe-live-streams.mjs   (exit 0 iff every case passes)
 
