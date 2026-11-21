@@ -19,7 +19,7 @@ import { deflateSync } from 'node:zlib'
 import { spawnSync } from 'node:child_process'
 import { parityBrowserConfig } from './launch-args.mjs'
 import { startLoopbackServer } from './loopback-server.mjs'
-import { captureMismatch, expectedCaptures } from './timeseries-captures.mjs'
+import { captureMismatch, expectedCaptures, samplePassed } from './timeseries-captures.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const repoRoot = resolve(__dirname, '..')
@@ -212,7 +212,10 @@ async function runCase(browser, port, testCase) {
       const r = spawnSync(PY, [join(repoRoot, 'parity', 'compare.py'), gPng, cPng, `--name=${name}@f${fr}`, '--tolerance', '0', '--ssim-min', '1', '--json'], { encoding: 'utf8' })
       const line = (r.stdout || r.stderr || '').trim()
       process.stdout.write(line + '\n')
-      if (r.status !== 0) failed = true
+      if (!samplePassed(r.status, line, `${name}@f${fr}`)) {
+        failed = true
+        if (r.status === 0) process.stdout.write(`[FAIL] ${name}@f${fr}: parity/compare.py exited 0 without a verdict\n`)
+      }
       const m = /max-abs-diff=([0-9.]+)/.exec(line)
       if (m) worst = Math.max(worst, Number(m[1]))
     }

@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
-import { captureMismatch, expectedCaptures } from '../parity/timeseries-captures.mjs'
+import { captureMismatch, expectedCaptures, samplePassed } from '../parity/timeseries-captures.mjs'
 
 // parity/timeseries.mjs compares every captured frame of a case. A case that
 // captures nothing, a golden or candidate run that returns fewer or more
@@ -36,6 +36,19 @@ test('only a full, equal set of captures can be compared', () => {
   assert.match(captureMismatch(2, two, two.slice(0, 1)), /candidate 1/)
   assert.match(captureMismatch(2, two.slice(0, 1), two), /golden returned 1/)
   assert.match(captureMismatch(2, two, [...two, { frame: 30 }]), /candidate 3/)
+})
+
+test('a capture passes only with the compare verdict for its own label', () => {
+  const pass = '[PASS] media@f10: max-abs-diff=0.000 mean-abs-diff=0.0000 ssim=1.00000 (tol=0.0, ssim_min=1.0)\nPARITY-SAMPLE {}'
+  assert.equal(samplePassed(0, pass, 'media@f10'), true)
+  assert.equal(samplePassed(0, '', 'media@f10'), false)
+  assert.equal(samplePassed(0, undefined, 'media@f10'), false)
+  assert.equal(samplePassed(null, pass, 'media@f10'), false)
+  assert.equal(samplePassed(1, pass, 'media@f10'), false)
+  assert.equal(samplePassed(0, pass, 'media@f20'), false)
+  assert.equal(samplePassed(0, pass, 'medi.@f10'), false)
+  assert.equal(samplePassed(0, pass.replace('[PASS]', '[FAIL]'), 'media@f10'), false)
+  assert.equal(samplePassed(0, '[PASS] media@f10: max-abs-diff=n/a', 'media@f10'), false)
 })
 
 function runManifest (cases) {

@@ -18,3 +18,12 @@ export function captureMismatch (expected, golden, candidate) {
   }
   return null
 }
+
+// A capture passes only when parity/compare.py exits 0 and prints its [PASS]
+// verdict with a measured max-abs-diff for this capture's own label. An exit 0
+// with no verdict (a stand-in interpreter, or nothing compared) fails.
+export function samplePassed (status, output, label) {
+  if (status !== 0) return false
+  const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return new RegExp(`^\\[PASS\\] ${escaped}: max-abs-diff=[0-9]+(?:\\.[0-9]+)? `, 'm').test(String(output ?? ''))
+}
