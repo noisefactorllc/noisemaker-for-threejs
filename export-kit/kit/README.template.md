@@ -43,6 +43,14 @@ import { NoisemakerTexture, NoisemakerPass } from './adapter/src/index.js'
 Both need the effects registered first. `index.html` does that in `registerEffects()`.
 Copy that function into your own app.
 
+`index.html` connects no inputs. In it, the image of `media` and the overlay of `text` read
+transparent black, `roll` reads an empty note grid, `scope` and `spectrum` read zeros,
+`meshRender` draws only its background, and a parameter automated with `midi()` or `audio()` takes
+the `min` of that call, scaled from 0 to 1 onto the parameter's range. In your own scene, connect
+them through the wrapper's `pipeline` after `compile()` resolves, as the Noisemaker for three.js
+[README](https://github.com/noisefactorllc/noisemaker-for-threejs#use-it-in-your-own-threejs-project)
+shows.
+
 ## The engine
 
 If you kept **include engine code** checked, the engine is at

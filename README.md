@@ -130,6 +130,53 @@ To post-process an existing scene instead, use a `NoisemakerPass` in an `EffectC
 Runnable examples: [`examples/texture-on-mesh.html`](examples/texture-on-mesh.html) and
 [`examples/effect-composer-pass.html`](examples/effect-composer-pass.html).
 
+The wrappers have no input methods of their own. Connect a program's inputs through the wrapper's
+`pipeline` and `pipeline.backend` once `compile()` resolves:
+
+```js
+import { core } from '/src/engine-browser.js'
+
+const p = nmTex.pipeline
+// media(): an image, canvas, ImageBitmap, video or VideoFrame. media() expects the top row first.
+// Upload each video frame again.
+const { width, height } = p.backend.updateTextureFromSource('imageTex_step_0', video, { flipY: false })
+p.setUniform('imageSize', [width, height])
+// ...or bind a THREE.Texture that is already on the GPU, and set imageSize to its size. It stays
+// yours to dispose.
+p.backend.setExternalTexture('imageTex_step_0', threeTexture)
+// text(): draw the overlay into an output-sized canvas yourself.
+p.backend.updateTextureFromSource('textTex_step_1', overlayCanvas)
+// roll() and midi(): feed the state with midi.handleMessage(bytes).
+const midi = new core.MidiState()
+p.setMidiState(midi)
+// scope() and spectrum(): feed the state with setWaveform() and setSpectrum().
+// audio(): feed it with updateFromAnalyser() or setBands().
+const audio = new core.AudioState()
+p.setAudioState(audio)
+// meshLoader(): RGBA Float32Arrays of width * height * 4, one texel per triangle-list vertex.
+p.backend.uploadMeshData('mesh0', positions, normals, uvs, meshWidth, meshHeight, vertexCount)
+```
+
+- `compile()` resolves to the graph, whose `mediaSteps` lists each texture id a host feeds:
+  `imageTex_step_<N>` or `textTex_step_<N>`, where N is the call's position among all calls in the
+  program, counted from 0 with `write` calls included.
+- `NoisemakerPass` binds the composer's input texture on every render to the `sourceId` you give
+  it, or else to every `*_step_<N>` id of the program it compiles first.
+- In the mesh data, a position texel is xyz with w = 1, a normal is xyz and a uv is xy. Fill the
+  unused texels with zeros: every texel is drawn, whatever `vertexCount` says, and a triangle of
+  zero texels draws nothing.
+- `p.backend.destroyTexture(id)` disconnects a `media` or `text` texture, and `setMidiState(null)`
+  disconnects MIDI. `setAudioState(null)` returns `audio()` to its minimum, but `scope` and
+  `spectrum` keep the last arrays; the state's `resetAggregate()` sets the waveform to 0.5 and the
+  spectrum to zeros.
+- Each `compile()`, and each rebuild after a lost WebGL context, makes a new pipeline. Connect the
+  inputs again after each one; `NoisemakerCanvas` calls its `onContextRestored` option after it
+  recovers, and its `pipeline` is null there when it did not rebuild the program.
+- An input that is not connected reads transparent black (`media`, `text`), an empty note grid
+  (`roll`) or zeros (`scope`, `spectrum`). Without mesh data `meshRender` draws only its
+  background. `midi()` and `audio()` automation take the `min` of that call, scaled from 0 to 1
+  onto the parameter's range. Nothing warns.
+
 ## What works today
 
 - **Essentially the whole published catalog renders** (~210 effects: 2D, 3D, particle/agent sims,
