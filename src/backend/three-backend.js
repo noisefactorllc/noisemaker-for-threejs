@@ -68,6 +68,24 @@ function fitVec(value, comps) {
 // `vec4 data[]` array, so we drive the binding by hand on the GL context three owns.
 const UBO_COMPONENT_OFFSET = { x: 0, y: 4, z: 8, w: 12 }
 
+// media()'s image input, `imageTex_step_<N>`. media() samples it top row first, the
+// way the reference engine's media upload passes it (flipY: false), so an upload to it
+// with no flipY option keeps the image upright. Every other upload defaults to flipY.
+const MEDIA_INPUT_ID = /^imageTex_step_\d+$/
+
+// A THREE.Texture keeps its bottom row first (uv v = 0 at the bottom, as three draws it
+// on a mesh). Bound to media()'s input, it is copied top row first once per frame, so
+// media() shows it the way three.js draws it.
+const MEDIA_TOP_DOWN_FRAGMENT = `precision highp float;
+uniform sampler2D tex;
+out vec4 fragColor;
+void main() {
+  ivec2 size = textureSize(tex, 0);
+  ivec2 p = ivec2(gl_FragCoord.xy);
+  fragColor = texelFetch(tex, ivec2(p.x, size.y - 1 - p.y), 0);
+}
+`
+
 function normalizePackedUniformLayout(layout) {
   if (Array.isArray(layout)) return layout
   const out = []
@@ -129,6 +147,14 @@ export class ThreeBackend extends Backend {
       glslVersion: THREE.GLSL3,
       vertexShader: DEFAULT_VERTEX_SHADER,
       fragmentShader: PRESENT_FRAGMENT,
+      uniforms: { tex: { value: null } },
+      depthTest: false,
+      depthWrite: false,
+    })
+    this.mediaTopDownMaterial = new THREE.RawShaderMaterial({
+      glslVersion: THREE.GLSL3,
+      vertexShader: DEFAULT_VERTEX_SHADER,
+      fragmentShader: MEDIA_TOP_DOWN_FRAGMENT,
       uniforms: { tex: { value: null } },
       depthTest: false,
       depthWrite: false,
@@ -276,6 +302,7 @@ export class ThreeBackend extends Backend {
     const info = this.textures.get(id)
     if (info?.target) info.target.dispose()
     if (info?.dataTexture) info.dataTexture.dispose()
+    if (info?.topDownTarget) info.topDownTarget.dispose()
     // Free a raw GL handle WE created for an HTML/canvas source (updateTextureFromSource);
     // never the caller's bound GPU texture (setExternalTexture) — that's owned elsewhere.
     if (info?.externalGL) this.gl.deleteTexture(info.externalGL)
@@ -376,7 +403,9 @@ export class ThreeBackend extends Backend {
       if (surf) return surf.texture
       return null
     }
-    return this.textures.get(texId)?.texture ?? null
+    const info = this.textures.get(texId)
+    if (info?.mediaTopDown && info.topDownTarget) return info.topDownTarget.texture
+    return info?.texture ?? null
   }
 
   resolveOutputTarget(pass, state) {
@@ -526,6 +555,35 @@ export class ThreeBackend extends Backend {
   // --- frame ---
   beginFrame(_state) {
     this.renderer.autoClear = false
+    for (const info of this.textures.values()) {
+      if (info.mediaTopDown) this._copyMediaTopDown(info)
+    }
+  }
+
+  // Copy a bound THREE.Texture into media()'s top-row-first layout (see
+  // MEDIA_TOP_DOWN_FRAGMENT). Runs every frame, so a live texture stays current.
+  // The copy is sized from the texture itself at copy time, so a caller's width and
+  // height, or an image that arrives after the bind, cannot misplace its rows.
+  _copyMediaTopDown(info) {
+    const image = info.texture?.image
+    const w = image?.videoWidth || image?.naturalWidth || image?.displayWidth || image?.width || info.width
+    const h = image?.videoHeight || image?.naturalHeight || image?.displayHeight || image?.height || info.height
+    if (!info.texture || !this.mediaTopDownMaterial || !w || !h) return
+    if (!info.topDownTarget) {
+      info.topDownTarget = new THREE.WebGLRenderTarget(w, h, {
+        type: THREE.HalfFloatType,
+        minFilter: THREE.LinearFilter,
+        magFilter: THREE.LinearFilter,
+        depthBuffer: false,
+      })
+    } else if (info.topDownTarget.width !== w || info.topDownTarget.height !== h) {
+      info.topDownTarget.setSize(w, h)
+    }
+    this.mediaTopDownMaterial.uniforms.tex.value = info.texture
+    this.mesh.material = this.mediaTopDownMaterial
+    this.renderer.setRenderTarget(info.topDownTarget)
+    this.renderer.render(this.scene, this.camera)
+    this.renderer.setRenderTarget(null)
   }
 
   endFrame() {}
@@ -778,11 +836,23 @@ export class ThreeBackend extends Backend {
   setExternalTexture(id, texture, width, height) {
     const existing = this.textures.get(id)
     if (existing && !existing.external) this.destroyTexture(id) // replace an owned RT
+    const w = width ?? texture?.image?.width ?? this.width ?? 0
+    const h = height ?? texture?.image?.height ?? this.height ?? 0
+    const mediaTopDown = MEDIA_INPUT_ID.test(id)
+    // Keep the top-down copy across rebinds (NoisemakerPass rebinds every frame; the copy
+    // resizes itself); release it when the id stops being media's.
+    let topDownTarget = existing?.topDownTarget ?? null
+    if (topDownTarget && !mediaTopDown) {
+      topDownTarget.dispose()
+      topDownTarget = null
+    }
     this.textures.set(id, {
       texture,
       external: true,
-      width: width ?? texture?.image?.width ?? this.width ?? 0,
-      height: height ?? texture?.image?.height ?? this.height ?? 0,
+      width: w,
+      height: h,
+      mediaTopDown,
+      topDownTarget,
     })
   }
 
@@ -798,7 +868,7 @@ export class ThreeBackend extends Backend {
   updateTextureFromSource(id, source, opts = {}) {
     const gl = this.gl
     if (!gl) return { width: 0, height: 0 }
-    const flipY = opts.flipY !== false
+    const flipY = opts.flipY === undefined ? !MEDIA_INPUT_ID.test(id) : opts.flipY !== false
 
     let width, height
     if (typeof VideoFrame === 'function' && source instanceof VideoFrame) {
@@ -837,6 +907,7 @@ export class ThreeBackend extends Backend {
     // same contract as setExternalTexture; overwriting silently would leak it.
     if (info?.target && !info.external) this.destroyTexture(id)
     else if (info?.dataTexture) info.dataTexture.dispose()
+    if (info?.topDownTarget) info.topDownTarget.dispose()
     if (!info?.externalGL || info.width !== width || info.height !== height) {
       if (info?.externalGL) gl.deleteTexture(info.externalGL)
       const handle = gl.createTexture()
@@ -890,6 +961,7 @@ export class ThreeBackend extends Backend {
     if (info?.target && !info.external) this.destroyTexture(id)
     else if (info?.externalGL) this.gl.deleteTexture(info.externalGL)
     else if (info?.dataTexture) info.dataTexture.dispose()
+    if (info?.topDownTarget) info.topDownTarget.dispose()
     const tex = new THREE.DataTexture(data, width, height, THREE.RGBAFormat, THREE.FloatType)
     tex.colorSpace = THREE.NoColorSpace
     tex.magFilter = THREE.NearestFilter
@@ -1052,6 +1124,7 @@ export class ThreeBackend extends Backend {
     }
     this.geometry?.dispose?.()
     this.presentMaterial?.dispose?.()
+    this.mediaTopDownMaterial?.dispose?.()
     this.defaultTexture?.dispose?.()
   }
 }

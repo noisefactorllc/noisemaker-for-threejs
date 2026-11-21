@@ -315,3 +315,167 @@ test('Three frame export reads real WebGL2 pixels asynchronously', async (t) => 
     if (server) await new Promise(resolveClose => server.close(resolveClose))
   }
 })
+
+// media() samples its upload top row first. A host that uploads with no options, the
+// documented call, must see the image as authored: never flipped or mirrored.
+test('media() presents a default upload upright and unmirrored', { timeout: 90000 }, async (t) => {
+  let server
+  let port
+  let browser
+  try {
+    try {
+      ({ server, port } = await startServer())
+      browser = await chromium.launch({ headless: true, args: chromiumLaunchArgs(), timeout: 30000 })
+    } catch (error) {
+      if (!isEnvironmentUnavailable(error)) throw error
+      process.stderr.write(`[SKIP] media orientation browser test: ${error.message}\n`)
+      t.skip(error.message)
+      return
+    }
+    const page = await browser.newPage()
+    const errors = []
+    page.on('pageerror', error => errors.push(error.message))
+    page.on('console', message => {
+      if (message.type() === 'error') errors.push(message.text())
+    })
+    await page.goto(`http://127.0.0.1:${port}/__frame_export_test__.html`)
+    const result = await page.evaluate(async () => {
+      const { NoisemakerCanvas } = await import('/src/integration/canvas.js')
+      const size = 16
+      // Quadrants as authored: red top left, green top right, blue bottom left,
+      // white bottom right.
+      const source = document.createElement('canvas')
+      source.width = size
+      source.height = size
+      const paint = source.getContext('2d')
+      const quadrants = [['#ff0000', 0, 0], ['#00ff00', 8, 0], ['#0000ff', 0, 8], ['#ffffff', 8, 8]]
+      for (const [color, x, y] of quadrants) {
+        paint.fillStyle = color
+        paint.fillRect(x, y, 8, 8)
+      }
+
+      document.body.innerHTML = `<canvas width="${size}" height="${size}"></canvas>`
+      const target = document.querySelector('canvas')
+      const canvas = new NoisemakerCanvas(target, { width: size, height: size })
+      const graph = await canvas.compile('search synth\nmedia().write(o0)\nrender(o0)\n')
+      const textureId = graph.mediaSteps[0].textureId
+      const uploaded = canvas.pipeline.backend.updateTextureFromSource(textureId, source)
+      canvas.pipeline.setUniform('imageSize', [uploaded.width, uploaded.height])
+      canvas.renderFrame(0)
+
+      // Read the presented canvas the way a viewer sees it: row 0 is the top.
+      const view = document.createElement('canvas')
+      view.width = size
+      view.height = size
+      const viewer = view.getContext('2d')
+      viewer.drawImage(target, 0, 0)
+      const sample = (x, y) => Array.from(viewer.getImageData(x, y, 1, 1).data)
+      const samples = {
+        topLeft: sample(4, 4),
+        topRight: sample(12, 4),
+        bottomLeft: sample(4, 12),
+        bottomRight: sample(12, 12),
+      }
+      canvas.dispose()
+      return { textureId, uploaded, samples }
+    })
+    assert.deepEqual(errors, [])
+    assert.equal(result.textureId, 'imageTex_step_0')
+    assert.deepEqual(result.uploaded, { width: 16, height: 16 })
+    assert.deepEqual(result.samples, {
+      topLeft: [255, 0, 0, 255],
+      topRight: [0, 255, 0, 255],
+      bottomLeft: [0, 0, 255, 255],
+      bottomRight: [255, 255, 255, 255],
+    })
+    t.diagnostic(JSON.stringify(result.samples))
+  } finally {
+    if (browser) await browser.close()
+    if (server) await new Promise(resolveClose => server.close(resolveClose))
+  }
+})
+
+// NoisemakerPass feeds the composer's scene to media(). The pass must present that scene
+// the way the renderer draws it to the screen: never flipped or mirrored.
+test('NoisemakerPass presents the incoming scene upright and unmirrored', { timeout: 90000 }, async (t) => {
+  let server
+  let port
+  let browser
+  try {
+    try {
+      ({ server, port } = await startServer())
+      browser = await chromium.launch({ headless: true, args: chromiumLaunchArgs(), timeout: 30000 })
+    } catch (error) {
+      if (!isEnvironmentUnavailable(error)) throw error
+      process.stderr.write(`[SKIP] NoisemakerPass orientation browser test: ${error.message}\n`)
+      t.skip(error.message)
+      return
+    }
+    const page = await browser.newPage()
+    const errors = []
+    page.on('pageerror', error => errors.push(error.message))
+    page.on('console', message => {
+      if (message.type() === 'error') errors.push(message.text())
+    })
+    await page.goto(`http://127.0.0.1:${port}/__frame_export_test__.html`)
+    const result = await page.evaluate(async () => {
+      const THREE = await import('three')
+      const { NoisemakerPass } = await import('/src/integration/pass.js')
+      const size = 16
+      document.body.innerHTML = `<canvas width="${size}" height="${size}"></canvas>`
+      const target = document.querySelector('canvas')
+      const renderer = new THREE.WebGLRenderer({ canvas: target, preserveDrawingBuffer: true })
+      renderer.setSize(size, size, false)
+
+      // The scene as authored: red top left, green top right, blue bottom left,
+      // white bottom right, with world +y up the screen.
+      const scene = new THREE.Scene()
+      const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 10)
+      camera.position.z = 1
+      for (const [color, x, y] of [[0xff0000, -0.5, 0.5], [0x00ff00, 0.5, 0.5], [0x0000ff, -0.5, -0.5], [0xffffff, 0.5, -0.5]]) {
+        const quad = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ color }))
+        quad.position.set(x, y, 0)
+        scene.add(quad)
+      }
+      const sample = () => {
+        const view = document.createElement('canvas')
+        view.width = size
+        view.height = size
+        const viewer = view.getContext('2d')
+        viewer.drawImage(target, 0, 0)
+        const at = (x, y) => Array.from(viewer.getImageData(x, y, 1, 1).data)
+        return { topLeft: at(4, 4), topRight: at(12, 4), bottomLeft: at(4, 12), bottomRight: at(12, 12) }
+      }
+
+      renderer.setRenderTarget(null)
+      renderer.render(scene, camera)
+      const direct = sample()
+
+      const readBuffer = new THREE.WebGLRenderTarget(size, size)
+      renderer.setRenderTarget(readBuffer)
+      renderer.render(scene, camera)
+      renderer.setRenderTarget(null)
+      const pass = new NoisemakerPass(renderer, { width: size, height: size, time: 0 })
+      await pass.compile('search synth\nmedia().write(o0)\nrender(o0)\n')
+      pass.renderToScreen = true
+      pass.render(renderer, null, readBuffer, 0)
+      const presented = sample()
+      pass.dispose()
+      readBuffer.dispose()
+      renderer.dispose()
+      return { direct, presented }
+    })
+    assert.deepEqual(errors, [])
+    assert.deepEqual(result.direct, {
+      topLeft: [255, 0, 0, 255],
+      topRight: [0, 255, 0, 255],
+      bottomLeft: [0, 0, 255, 255],
+      bottomRight: [255, 255, 255, 255],
+    })
+    assert.deepEqual(result.presented, result.direct)
+    t.diagnostic(JSON.stringify(result))
+  } finally {
+    if (browser) await browser.close()
+    if (server) await new Promise(resolveClose => server.close(resolveClose))
+  }
+})

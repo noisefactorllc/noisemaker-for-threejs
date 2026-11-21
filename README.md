@@ -137,12 +137,11 @@ The wrappers have no input methods of their own. Connect a program's inputs thro
 import { core } from '/src/engine-browser.js'
 
 const p = nmTex.pipeline
-// media(): an image, canvas, ImageBitmap, video or VideoFrame. media() expects the top row first.
-// Upload each video frame again.
-const { width, height } = p.backend.updateTextureFromSource('imageTex_step_0', video, { flipY: false })
+// media(): an image, canvas, ImageBitmap, video or VideoFrame. Upload each video frame again.
+const { width, height } = p.backend.updateTextureFromSource('imageTex_step_0', video)
 p.setUniform('imageSize', [width, height])
-// ...or bind a THREE.Texture that is already on the GPU, and set imageSize to its size. It stays
-// yours to dispose.
+// ...or bind a THREE.Texture that is already on the GPU, and set imageSize to its size.
+// media() shows it the way three.js draws it on a mesh. It stays yours to dispose.
 p.backend.setExternalTexture('imageTex_step_0', threeTexture)
 // text(): draw the overlay into an output-sized canvas yourself.
 p.backend.updateTextureFromSource('textTex_step_1', overlayCanvas)

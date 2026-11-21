@@ -90,6 +90,9 @@ export class NoisemakerPass {
       for (const id of this.sourceIds) {
         this.pipeline.backend.setExternalTexture(id, readBuffer.texture, readBuffer.width, readBuffer.height)
       }
+      // media() fits the image by imageSize; without it media() assumes its default size
+      // and shows the scene at the wrong scale.
+      this.pipeline.setUniform('imageSize', [readBuffer.width, readBuffer.height])
     }
     this._elapsed += deltaTime
     const t =
