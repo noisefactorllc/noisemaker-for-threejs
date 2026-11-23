@@ -12,7 +12,7 @@
 #   VERSION=2 bash vendor/fetch.sh  # bump the pinned engine version
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
-VERSION="${VERSION:-1.0.356}"
+VERSION="${VERSION:-1.0.357}"
 BASE="https://shaders.noisedeck.app/${VERSION}"
 OUT="$HERE/noisemaker"
 EFFECTS="$OUT/effects"
