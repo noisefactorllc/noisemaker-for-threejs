@@ -12,7 +12,12 @@
 #   VERSION=2 bash vendor/fetch.sh  # bump the pinned engine version
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
-VERSION="${VERSION:-1}"
+# Pinned engine version: the earliest published release whose build contains this
+# port's synced source range (upstream build 75027859; the prior release 1.0.355
+# builds 7f3721e9 and lacks the range's heightGrid and landscape changes). The
+# rolling /1 alias would drift ahead of the synced range, so the default binds the
+# fetch to this release; bump it only with a sync whose range it contains.
+VERSION="${VERSION:-1.0.356}"
 BASE="https://shaders.noisedeck.app/${VERSION}"
 OUT="$HERE/noisemaker"
 EFFECTS="$OUT/effects"

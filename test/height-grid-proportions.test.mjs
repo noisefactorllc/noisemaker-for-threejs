@@ -195,7 +195,7 @@ function litBox (png) {
 }
 
 // Points inside the box, toward its corners. Each sample averages the lit pixels
-// of a 7 by 7 window, so the gaps between particles do not count. (Upstream, verbatim.)
+// of the sample window, so the gaps between particles do not count. (Upstream, verbatim.)
 function sample (png, box) {
   const dx = Math.round(box.width * 0.27), dy = Math.round(box.height * 0.27)
   const corners = {
