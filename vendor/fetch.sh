@@ -1,18 +1,14 @@
 #!/usr/bin/env bash
 # vendor/fetch.sh — vendor the PUBLISHED Noisemaker shader engine from the production CDN.
 #
-# Noisemaker for Three.js is a THIN ADAPTER: it reuses the engine verbatim (same JS/WebGL2 runtime —
-# nothing is translated, only `ThreeBackend` is new). We fetch the published distribution
-# (https://shaders.noisedeck.app/<VERSION>) so the repo depends on NO sibling checkout and
-# commits NO engine bytes (node_modules posture). This is the same artifact noisedeck.app ships:
-# a core ESM engine bundle + per-effect "mini-bundles" (production pre-fetches these; each
-# mini-bundle carries its GLSL inline, so the compiled graph is self-contained).
+# Fetch the published reference and effect bundles, then derive the stable core
+# from the release source. The reviewed source overlay excludes experimental
+# features. Engine bytes stay ignored, and no sibling checkout is required.
 #
 #   bash vendor/fetch.sh            # refresh from the pinned version
-#   VERSION=2 bash vendor/fetch.sh  # bump the pinned engine version
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
-VERSION="${VERSION:-1.0.357}"
+VERSION="${VERSION:-1.5.6}"
 BASE="https://shaders.noisedeck.app/${VERSION}"
 OUT="$HERE/noisemaker"
 EFFECTS="$OUT/effects"
@@ -21,8 +17,9 @@ mkdir -p "$EFFECTS"
 echo "[vendor] engine $BASE -> $OUT"
 
 # 1. Engine core (exports Pipeline, compileGraph, Backend, WebGL2Backend, registerEffect, …).
-curl -fsSL --max-time 60 "$BASE/noisemaker-shaders-core.esm.js" -o "$OUT/noisemaker-shaders-core.esm.js"
-echo "[vendor]   core: $(wc -c < "$OUT/noisemaker-shaders-core.esm.js") bytes"
+curl -fsSL --max-time 60 "$BASE/noisemaker-shaders-core.esm.js" -o "$OUT/noisemaker-shaders-reference.esm.js"
+curl -fsSL --max-time 30 "$BASE/deployment-meta.json" -o "$OUT/deployment-meta.json"
+node "$HERE/build-stable-core.mjs"
 
 # 2. Manifest (effect descriptors, keyed "<namespace>/<effect>").
 curl -fsSL --max-time 30 "$BASE/effects/manifest.json" -o "$EFFECTS/manifest.json"

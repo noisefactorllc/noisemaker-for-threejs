@@ -3,7 +3,7 @@
   "id": "threejs",
   "series": "0.1",
   "shaderSource": "runtime",
-  "engineSource": "cdn",
+  "engineSource": "kit",
   "shaderDialects": ["glsl"],
   "pageTemplate": true,
   "gatedTopLevelDirs": {
@@ -12,7 +12,15 @@
     "shaders": "shaders"
   },
   "subtrees": [
-    { "from": "src", "to": "adapter/src" }
+    { "from": "src", "to": "adapter/src" },
+    { "from": "export-kit/engine", "to": "engine" }
+  ],
+  "overlays": [
+    {
+      "file": "adapter/src/engine-browser.js",
+      "with": "export-kit/overlay/engine-browser.js",
+      "anchor": "const EFFECTS_BASE = new URL('../vendor/noisemaker/effects/', import.meta.url)"
+    }
   ],
   "licenses": [
     { "from": "LICENSE", "to": "LICENSES/noisemaker-for-threejs-LICENSE.txt" }
@@ -27,7 +35,7 @@
   "compat": {
     "mode": "all"
   },
-  "engineBytesFrom": ["hostlib/"],
+  "engineBytesFrom": ["hostlib/", "engine/"],
   "hostLib": {
     "package": "three",
     "version": "0.171.0",

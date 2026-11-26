@@ -1,7 +1,7 @@
 {
   "name": "noisemaker-for-threejs",
   "version": "0.0.1",
-  "description": "Noisemaker for Three.js \u2014 reuses the reference DSL compiler and pipeline verbatim, adding a Three.js backend and integration surface",
+  "description": "Noisemaker for Three.js \u2014 runs the stable Noisemaker compiler and pipeline through a Three.js backend",
   "type": "module",
   "license": "MIT",
   "author": "Noise Factor LLC <team@noisefactor.io>",

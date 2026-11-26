@@ -1,8 +1,9 @@
 # {{NM_PROGRAM_NAME}}
 
 Your program as a Three.js scene, exported from Noisedeck. It runs on **Noisemaker for Three.js**.
-This thin adapter supplies the unmodified Noisemaker engine with a `ThreeBackend`.
-The effects, shaders and compiler are the same ones the app uses. It fetches nothing at runtime.
+This adapter runs the stable Noisemaker engine through a `ThreeBackend`.
+The engine is reproduced from the port's reviewed source lock, with experimental surfaces excluded.
+It fetches nothing from the network at runtime.
 
 ## Run it
 
@@ -20,7 +21,7 @@ Open <http://localhost:8000/>. No backend, no build step, no npm.
 | --- | --- |
 | `index.html` | The page. Your program is inlined at the top of its module script. |
 | `adapter/src/` | Noisemaker for Three.js — `NoisemakerCanvas`, `NoisemakerTexture`, `NoisemakerPass`. |
-| `adapter/vendor/noisemaker/` | The Noisemaker engine `{{NM_ENGINE_VERSION}}`. Present if you kept **include engine code** checked. |
+| `engine/` | The stable Noisemaker engine and effect bundles. Present if you kept **include engine code** checked. |
 | `hostlib/three/` | Three.js 0.171.0. Same checkbox. |
 | `program.dsl` | Your program's source, exactly as Noisedeck had it. |
 | `noisedeck-export.json` | What was exported, when, against which engine build. |
@@ -54,9 +55,9 @@ shows.
 ## The engine
 
 If you kept **include engine code** checked, the engine is at
-`adapter/vendor/noisemaker/` and Three.js is at `hostlib/three/`. Open the page to run it offline.
+`engine/` and Three.js is at `hostlib/three/`. Open the page to run it offline.
 
-If you unchecked it, copy your engine to `adapter/vendor/noisemaker/`. Copy Three.js to `hostlib/three/`.
+If you unchecked it, restore this kit's `engine/` directory. Copy Three.js to `hostlib/three/`.
 Alternatively, point the imports at your copies. The adapter reaches the engine through one static import in
 `adapter/src/engine-browser.js`:
 
@@ -64,12 +65,14 @@ Alternatively, point the imports at your copies. The adapter reaches the engine 
 import * as core from '../vendor/noisemaker/noisemaker-shaders-core.esm.js'
 ```
 
-That path is fixed at the module level — there is no constructor option and no global — which is
-why the engine has to sit beside `adapter/src/`. The page resolves `three` through its import map:
+The page maps that module import to its stable engine and resolves `three` through its import map:
 
 ```html
 <script type="importmap">
-{ "imports": { "three": "./hostlib/three/three.module.min.js" } }
+{ "imports": {
+  "three": "./hostlib/three/three.module.min.js",
+  "./adapter/vendor/noisemaker/noisemaker-shaders-core.esm.js": "./engine/noisemaker-shaders-core.esm.min.js"
+} }
 </script>
 ```
 
@@ -77,14 +80,14 @@ why the engine has to sit beside `adapter/src/`. The page resolves `three` throu
 which it imports. Keep them together.
 
 Effect mini-bundles are loaded by the page rather than by the adapter. `registerEffects()` reads
-`BUNDLE_PATH` — `./adapter/vendor/noisemaker/effects` — and registers through the adapter's own
+`BUNDLE_PATH` — `./engine/effects` — and registers through the adapter's own
 `register-effect.js`, so registration can never drift from the adapter's internal loader.
 
 Three.js is pinned to **0.171.0**, the version the adapter is parity-tested against. Its peer range
 is `>=0.160.0`, so a newer build will very likely work. Replace the files in `hostlib/three/`.
 
-This export is pinned to Noisemaker `{{NM_ENGINE_VERSION}}`. Pinning is deliberate: the page keeps
-rendering the same way after the engine moves on.
+The program was exported from Noisemaker `{{NM_ENGINE_VERSION}}`. The included stable engine's
+source version is recorded in `engine/deployment-meta.json` and displayed by the page.
 
 ## Editing it
 
@@ -94,9 +97,8 @@ rendering the same way after the engine moves on.
 const DSL = "...";
 ```
 
-Replace it with anything the Noisemaker language accepts. Reload the page. Only the effects your original
-program used are under `adapter/vendor/noisemaker/effects/`, so a new effect will fail to load.
-Stay within the set below, or add the bundles you need.
+Replace it with a program the stable Noisemaker language accepts, then reload the page.
+The available effect bundles are listed in `engine/effects/manifest.json`.
 
 Playback loops every 15 seconds (`LOOP_SECONDS`). The canvas is measured once at load, capped at 2x
 device pixel ratio.

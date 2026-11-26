@@ -12,7 +12,7 @@
  * 3D/cube, and external media are staged (clearly marked) for later phases.
  */
 import * as THREE from 'three'
-import { Backend, FrameExportQueue } from '../engine-browser.js'
+import { Backend, FrameExportQueue, WebGL2Backend } from '../engine-browser.js'
 import { formatToType, fullscreenTriangle, stripVersion, parseUniformSizes, DEFAULT_VERTEX_SHADER } from './three-resources.js'
 import { ThreeFrameExportAdapter } from './three-frame-export.js'
 
@@ -587,6 +587,10 @@ export class ThreeBackend extends Backend {
   }
 
   endFrame() {}
+
+  waitForIdle() {
+    return WebGL2Backend.prototype.waitForIdle.call(this)
+  }
 
   // Bind globals, pass uniforms (override), input textures, and blend state onto a
   // pass's material. Shared by all draw paths (single / MRT / points).

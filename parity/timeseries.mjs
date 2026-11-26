@@ -146,7 +146,12 @@ async function runMode(browser, port, mode, testCase) {
   page.on('console', (m) => msgs.push(`[${m.type()}] ${m.text()}`))
   page.on('pageerror', (e) => msgs.push(`[pageerror] ${e.message}`))
   await page.goto(`http://127.0.0.1:${port}/parity/page-timeseries.html`, { timeout: 60000 })
-  await page.waitForFunction(() => window.__nm_ts_ready === true, { timeout: 30000 })
+  try {
+    await page.waitForFunction(() => window.__nm_ts_ready === true, { timeout: 30000 })
+  } catch (error) {
+    process.stderr.write(`${msgs.join('\n')}\n`)
+    throw error
+  }
   // Per-mode watchdog: a case that never finishes must not hang the whole
   // batched run (an earlier windows CI leg lost its runner after ~55 minutes
   // with no timeout in place). The timeout marks the case ERR, not a pass.

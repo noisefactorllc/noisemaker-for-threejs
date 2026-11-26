@@ -111,7 +111,7 @@
 {
   "imports": {
     "three": "./hostlib/three/three.module.min.js",
-    "./adapter/vendor/noisemaker/noisemaker-shaders-core.esm.js": "./adapter/vendor/noisemaker/noisemaker-shaders-core.esm.min.js"
+    "./adapter/vendor/noisemaker/noisemaker-shaders-core.esm.js": "./engine/noisemaker-shaders-core.esm.min.js"
   }
 }
 </script>
@@ -129,7 +129,7 @@
 </main>
 
 <footer>
-  <span>noisemaker {{NM_ENGINE_VERSION}} · three.js 0.171.0</span>
+  <span>noisemaker <span id="engine-version"></span> · three.js 0.171.0</span>
   <span>made with Noisedeck</span>
 </footer>
 
@@ -141,15 +141,13 @@
   import { NoisemakerCanvas } from './adapter/src/index.js'
   import { core, extractEffectNamesFromDsl } from './adapter/src/engine-browser.js'
   import { bootCore, registerEffectInstance, finalizeEnums } from './adapter/src/effects/register-effect.js'
+  import { version } from './engine/version.js'
 
   // ---- exported program -------------------------------------------------
   const PROGRAM_NAME = {{NM_PROGRAM_NAME_JSON}};
   const DSL = {{NM_DSL_JSON}};
-  // Where the effect mini-bundles and their manifest live: the packaged
-  // engine beside adapter/src/ when the engine shipped, the pinned CDN when it
-  // did not. One value drives both, so the page can never load a manifest from
-  // one build and effects from another.
-  const BUNDLE_PATH = './adapter/vendor/noisemaker/effects';
+  // Effects and the stable core come from the same reviewed engine release.
+  const BUNDLE_PATH = './engine/effects';
   const LOOP_SECONDS = 15;
 
   const canvas = document.getElementById('nm-canvas');
@@ -158,6 +156,7 @@
   const nameEl = document.getElementById('program-name');
 
   nameEl.textContent = PROGRAM_NAME;
+  document.getElementById('engine-version').textContent = version;
 
   function setStatus(text, state) {
     statusEl.className = state || '';

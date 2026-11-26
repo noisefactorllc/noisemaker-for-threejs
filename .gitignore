@@ -5,9 +5,8 @@ parity/.venv/
 *.log
 .DS_Store
 
-# Vendored engine — NEVER commit. Fetched from the production CDN (shaders.noisedeck.app)
-# by `bash vendor/fetch.sh` into vendor/noisemaker/ (node_modules posture: commit the
-# fetch script + loader, never the bytes). src/vendor/ is the older local-mirror layout.
+# Engine fetch and source-derivation cache. The reproducible stable export-kit
+# engine is committed separately under export-kit/engine/.
 vendor/noisemaker/
 src/vendor/
 
