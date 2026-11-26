@@ -74,3 +74,53 @@ test('scene, object literals and ordinary mixed argument calls stay unavailable'
     assert.ok(!(name in core.CanvasRenderer.prototype), name)
   }
 })
+
+for (const [field, input] of Object.entries({
+  outputTex: 'inputTex', outputXyz: 'inputXyz', outputVel: 'inputVel', outputRgba: 'inputRgba',
+})) {
+  test(`effect configuration hands ${field} to the next effect`, () => {
+    const source = `sync${field}Source`
+    const reader = `sync${field}Reader`
+    const shader = { glsl: 'precision highp float; out vec4 color; void main() { color = vec4(1.0); }' }
+    for (const [name, definition] of [
+      [source, {
+        [field]: 'stateTex', textures: { stateTex: { width: 8, height: 8, format: 'rgba16f' } },
+        passes: [{ program: 'main', outputs: { color: 'stateTex' } }],
+      }],
+      [reader, { passes: [{ program: 'main', inputs: { data: input }, outputs: { color: 'outputTex' } }] }],
+    ]) {
+      core.registerOp(`user.${name}`, { name, args: [] })
+      core.registerEffect(`user.${name}`, new core.Effect({ name, func: name, shaders: { main: shader }, ...definition }))
+    }
+    core.registerStarterOps([`user.${source}`])
+    const graph = compileGraph(`search user\n${source}().${reader}().write(o0)\nrender(o0)`)
+    assert.equal(graph.passes.find(pass => pass.effectKey === `user.${reader}`).inputs.data, 'node_0_stateTex')
+  })
+}
+
+test('a same-size texture is recreated when its required usage grows, then reused', async () => {
+  const backend = new Backend()
+  const flags = { render: 1, sample: 2, storage: 4, copySrc: 8, copyDst: 16 }
+  backend.init = async () => {}
+  backend.resolveUsage = names => names.reduce((bits, name) => bits | flags[name], 0)
+  backend.createTexture = (id, spec) => {
+    const texture = { ...spec, usage: backend.resolveUsage(spec.usage) }
+    backend.textures.set(id, texture)
+    return texture
+  }
+  backend.destroyTexture = id => backend.textures.delete(id)
+  const spec = { width: 8, height: 8, format: 'rgba16f', usage: ['render', 'sample'] }
+  const graph = { passes: [], textures: new Map([['node_0_out', spec]]) }
+  const pipeline = new Pipeline(graph, backend)
+  await pipeline.init(8, 8)
+  const original = backend.textures.get('node_0_out')
+  assert.equal(original.usage, 3)
+  graph.textures.set('node_0_out', { ...spec, usage: ['render', 'sample', 'storage'] })
+  pipeline.resize(8, 8)
+  const writable = backend.textures.get('node_0_out')
+  assert.notEqual(writable, original)
+  assert.equal(writable.usage, 7)
+  pipeline.resize(8, 8)
+  assert.equal(backend.textures.get('node_0_out'), writable)
+  pipeline.dispose()
+})

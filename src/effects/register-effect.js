@@ -188,6 +188,9 @@ export async function registerPortableEffect (core, definition) {
   // The served bundle fails ANY paramAliases outright (it enforces the retirement from
   // upstream a1a3fa2), so the adapter mirrors that contract with the bundle's exact message.
   if (definition.paramAliases !== undefined) fail('paramAliases is no longer supported')
+  for (const field of ['outputTex', 'outputXyz', 'outputVel', 'outputRgba']) {
+    if (definition[field] !== undefined && !hasSource(definition[field])) fail(`${field} must be a nonempty texture name`)
+  }
   if (core.getEffect(`user.${func}`) || core.getEffect(`user/${func}`)) fail(`user.${func} is already registered`)
 
   const instance = new core.Effect({ ...definition, func, namespace: 'user' })

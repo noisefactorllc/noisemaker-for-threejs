@@ -1000,6 +1000,15 @@
                      // Skip surface arguments (already processed in first pass)
                      if (isTextureArg(arg)) {
                          continue
+@@ -756,7 +759,7 @@
+                     conditions: passDef.conditions,
+                     workgroups: passDef.workgroups,
+                     storageBuffers: passDef.storageBuffers,
+-                    storageTextures: passDef.storageTextures,
++                    storageTextures: passDef.storageTextures ? {} : undefined,
+                     // Pass labels and per-pass execution controls are
+                     // copied verbatim. `name`/`type` stay queryable metadata
+                     // (backend shader-kind dispatch remains source-derived);
 @@ -846,6 +849,9 @@
                  if (step.args) {
                      for (const [argName, arg] of Object.entries(step.args)) {
@@ -1011,6 +1020,58 @@
 +
                          // Skip texture arguments (handled in inputs)
                          if (isTextureArg(arg)) {
+@@ -1070,6 +1076,50 @@
+                             pass.inputs[uniformName] = `${nodeId}_${texRef}`
+                         }
+                     }
++                }
++
++                // Map storage texture targets into the same virtual namespace as
++                // sampled inputs and render outputs. Portable definitions name
++                // effect-local textures, while backends consume scoped IDs.
++                if (passDef.storageTextures) {
++                    for (const [binding, texRef] of Object.entries(passDef.storageTextures)) {
++                        if (texRef === 'outputTex') {
++                            const isLastStep = step === plan.chain[plan.chain.length - 1]
++                            const isLastPass = i === effectPasses.length - 1
++                            const nextStep = plan.chain[plan.chain.indexOf(step) + 1]
++                            const inlineWrite = isLastPass && nextStep?.builtin && nextStep.op === '_write'
++                                ? nextStep.args?.tex : null
++                            if (inlineWrite && inlineWrite.name !== 'none') {
++                                const prefix = inlineWrite.kind === 'feedback' ? 'feedback' : 'global'
++                                pass.storageTextures[binding] = `${prefix}_${inlineWrite.name}`
++                                lastWrittenSurface = inlineWrite.name
++                            } else if (isLastStep && isLastPass && plan.write) {
++                                const outName = typeof plan.write === 'object' ? plan.write.name : plan.write
++                                const outKind = plan.write.kind || 'output'
++                                const prefix = outKind === 'feedback' ? 'feedback' : 'global'
++                                pass.storageTextures[binding] = `${prefix}_${outName}`
++                                lastWrittenSurface = outName
++                            } else {
++                                pass.storageTextures[binding] = `${nodeId}_out`
++                            }
++                            textureMap.set(`${nodeId}_out`, pass.storageTextures[binding])
++                        } else if (texRef.startsWith('global_')) {
++                            pass.storageTextures[binding] = scopeChainTex(texRef)
++                        } else {
++                            pass.storageTextures[binding] = `${nodeId}_${texRef}`
++                            const storageSpec = textureSpecs[pass.storageTextures[binding]]
++                            if (storageSpec) {
++                                storageSpec.usage = [...new Set([
++                                    ...(storageSpec.usage || ['render', 'sample', 'copySrc', 'copyDst']),
++                                    'storage'
++                                ])]
++                            }
++                        }
++                    }
++                    // Pipeline allocation falls back from render outputs to
++                    // storage outputs. Do not mask the latter with the empty
++                    // render-output map created for every pass.
++                    if (!passDef.outputs) delete pass.outputs
+                 }
+-
++
+                 // Map Outputs
 --- a/shaders/src/runtime/compiler.js
 +++ b/shaders/src/runtime/compiler.js
 @@ -72,7 +72,7 @@
@@ -1022,7 +1083,46 @@
      const pipeline = await createPipeline(graph, options)
      return pipeline
  }
-@@ -209,7 +209,7 @@
+@@ -98,7 +98,7 @@
+             // via copyTextureToTexture, and so updateTextureFromSource /
+             // copyExternalImageToTexture can write into it without Dawn rejecting
+             // with "Destination texture needs to have CopyDst usage".
+-            usage: ['render', 'sample', 'copySrc', 'copyDst']
++            usage: effectSpec.usage || ['render', 'sample', 'copySrc', 'copyDst']
+         }
+         // Handle 3D textures
+         if (effectSpec.is3D) {
+@@ -145,6 +145,27 @@
+         }
+     }
+-
++
++    // A pass that writes only through storageTextures has no outputs, so
++    // its targets that no effect declares (such as the node's own output
++    // when the chain continues past it) are allocated here, with storage usage.
++    for (const pass of passes) {
++        if (!pass.storageTextures) continue
++        for (const texId of Object.values(pass.storageTextures)) {
++            if (typeof texId !== 'string' || texId.startsWith('global_')) continue
++            const spec = textures.get(texId)
++            if (spec) {
++                if (!spec.usage.includes('storage')) spec.usage = [...spec.usage, 'storage']
++                continue
++            }
++            textures.set(texId, {
++                width: 'screen',
++                height: 'screen',
++                format: 'rgba16f',
++                usage: ['render', 'sample', 'storage', 'copySrc', 'copyDst']
++            })
++        }
++    }
++
+     return textures
+ }
+-
++
+@@ -209,7 +230,7 @@
   */
  export function compileGraphFor(pipeline, newSource, options = {}) {
      try {
@@ -1096,7 +1196,49 @@
          this.surfaces = new Map()        // Global surfaces (o0-o7)
          this._mipTargets = []            // Texture ids whose mip chains regenerate each frame
          this.globalUniforms = {}
-@@ -1949,7 +1968,8 @@
+@@ -1678,12 +1697,15 @@
+                 const storageId = this._textureAliases.get(texId)
+                 if (storageId && storageId !== texId) continue
+-
++
+-                // Reuse only when dimensions, format, and depth all match.
++                // Reuse only when dimensions, format, and depth all match, and
++                // the texture's usage covers the spec's (a recompile can make a
++                // node's output a storage target at the same size).
+                 const existingTex = this.backend.textures?.get?.(texId)
+                 if (existingTex &&
+                     existingTex.width === width &&
+                     existingTex.height === height &&
+-                    existingTex.format === spec.format) {
++                    existingTex.format === spec.format &&
++                    this.textureUsageCovers(existingTex, spec.usage)) {
+                     // For 3D textures, also check depth
+                     if (!spec.is3D || existingTex.depth === this.resolveDimension(spec.depth, width, uniforms)) {
+                         continue  // No change needed
+@@ -1712,6 +1734,21 @@
+         }
+         this.applyTextureAliases()
+         this.refreshMipTargets()
++    }
++
++    /**
++     * Whether a backend texture was created with every usage a spec asks for.
++     * WebGPU records its usage flags; a backend that records none (WebGL2)
++     * covers any usage.
++     * @param {object} texture - Backend texture record
++     * @param {string[]} [usage] - Spec usage names
++     * @returns {boolean}
++     */
++    textureUsageCovers(texture, usage) {
++        if (!Array.isArray(usage) || typeof texture.usage !== 'number' ||
++            typeof this.backend.resolveUsage !== 'function') return true
++        const needed = this.backend.resolveUsage(usage)
++        return (texture.usage & needed) === needed
+     }
+-
++
+     /**
+@@ -1949,7 +1986,8 @@
 -
 +
      /**
@@ -1107,7 +1249,7 @@
       *
       * The returned array is reused and its entries overwritten on every call;
       * copy the faces (or their `data`) if you need to retain them across calls.
-@@ -1957,38 +1977,46 @@
+@@ -1957,38 +1995,46 @@
       * graph ends in (renderCubemap3d / renderCubemapSurface) — not a parameter here.
       * yieldBetweenFaces awaits an animation frame before each face render so a
       * host render loop keeps painting during large (e.g. 1024px) captures.
@@ -1181,7 +1323,7 @@
      }
 -
 +
-@@ -2011,7 +2039,10 @@
+@@ -2011,7 +2057,10 @@
          }
 -
 +
@@ -1194,7 +1336,7 @@
          if (this.isVolumeSizeUniform(name) && typeof value === 'number') {
              value = this.clampVolumeSize(value)
          }
-@@ -2324,6 +2355,7 @@
+@@ -2324,6 +2373,7 @@
       */
      syncTime(time) {
          this.lastTime = time
@@ -1203,7 +1345,7 @@
 -
 +
      /**
-@@ -2339,14 +2371,10 @@
+@@ -2339,14 +2389,10 @@
              return
          }
 -
@@ -1226,7 +1368,20 @@
          this.updateGlobalUniforms(time, deltaTime)
 --- a/shaders/src/renderer/canvas.js
 +++ b/shaders/src/renderer/canvas.js
-@@ -2260,14 +2260,11 @@
+@@ -1812,6 +1812,11 @@
+             }
+         }
+         if (definition.paramAliases !== undefined) fail('paramAliases is no longer supported')
++        // The 2D and agent textures an effect hands on are texture names: the
++        // expander reads them as strings.
++        for (const field of ['outputTex', 'outputXyz', 'outputVel', 'outputRgba']) {
++            if (definition[field] !== undefined && !hasSource(definition[field])) fail(`${field} must be a nonempty texture name`)
++        }
+         if (getEffect(`user.${func}`) || getEffect(`user/${func}`)) fail(`user.${func} is already registered`)
+-
++
+         const instance = new Effect({ ...definition, func, namespace: 'user' })
+@@ -2260,14 +2265,11 @@
      // Mesh Loading (for meshLoader effect OBJ import)
      // =========================================================================
 -
@@ -1245,7 +1400,7 @@
          this._meshCache.set(meshId, {
              positionData: packed.positionData,
              normalData: packed.normalData,
-@@ -2296,11 +2293,11 @@
+@@ -2296,11 +2298,11 @@
 -
 +
          try {
@@ -1263,7 +1418,7 @@
              return { success: true, vertexCount: result.vertexCount }
          } catch (err) {
              console.error('[Canvas] Failed to load OBJ:', err)
-@@ -2321,10 +2318,10 @@
+@@ -2321,10 +2323,10 @@
          }
 -
 +
@@ -1399,6 +1554,16 @@
 -
 +
      /**
+@@ -1586,7 +1636,7 @@
+         }
+-
++
+         // If outputs exist but use compute conventions (outputBuffer -> fragColor)
+-        if (pass.outputs) {
++        if (pass.outputs && Object.keys(pass.outputs).length > 0) {
+             renderPass.outputs = {}
+             for (const [key, texId] of Object.entries(pass.outputs)) {
+                 // Normalize output names
 @@ -1653,11 +1703,15 @@
                  texture = this.defaultTexture
              }

@@ -658,6 +658,9 @@ export class ThreeBackend extends Backend {
   }
 
   executePass(pass, state) {
+    if (pass.storageTextures || (pass.outputs && pass.outputs.outputBuffer)) {
+      pass = WebGL2Backend.prototype.convertComputeToRender.call(this, pass)
+    }
     const outputKeys = Object.keys(pass.outputs || {})
     const isMRT = pass.drawBuffers > 1 || outputKeys.length > 1
     const material = this.bindMaterial(pass, state)

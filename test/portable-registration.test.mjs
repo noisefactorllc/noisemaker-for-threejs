@@ -122,6 +122,21 @@ test('Portable names that search user cannot call are rejected', { skip }, async
   }
 })
 
+for (const field of ['outputTex', 'outputXyz', 'outputVel', 'outputRgba']) {
+  test(`Portable ${field} rejects invalid names without claiming the effect`, { skip }, async () => {
+    const func = `portable${field}Validation`
+    for (const value of [42, '', '   ', false, null, [], {}]) {
+      await assert.rejects(
+        () => registerPortableEffect(core, definition(func, { [field]: value })),
+        new RegExp(`${field} must be a nonempty texture name`)
+      )
+      assert.equal(core.getEffect(`user.${func}`), undefined)
+    }
+    const registered = await registerPortableEffect(core, definition(func, { [field]: 'stateTex' }))
+    assert.equal(registered.instance[field], 'stateTex')
+  })
+}
+
 test('A name-only Portable effect preserves an existing bare built-in name', { skip }, async () => {
   const prior = new core.Effect({ namespace: 'synth', func: 'portableNameOnly' })
   core.registerEffect('portableNameOnly', prior)
