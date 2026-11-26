@@ -234,13 +234,16 @@ async function runCase(browser, port, testCase) {
 // 36542869365, shard 47of48). Race close() with 30 s, then SIGKILL the
 // browser process so the next case starts clean.
 async function closeBrowser(browser) {
+  let closeTimer
   try {
     await Promise.race([
       browser.close(),
-      new Promise((resolve) => setTimeout(resolve, 30000)),
+      new Promise((resolve) => { closeTimer = setTimeout(resolve, 30000) }),
     ])
   } catch {
     // fall through to the SIGKILL below
+  } finally {
+    clearTimeout(closeTimer)
   }
   try {
     browser.process()?.kill('SIGKILL')
