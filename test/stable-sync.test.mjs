@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { OneFactor, ZeroFactor } from 'three'
 import { bootEngine } from '../vendor/engine.mjs'
 
 const { core, compileGraph, Pipeline, Backend } = await bootEngine()
@@ -64,6 +65,53 @@ test('ThreeBackend waits for submitted GPU work and releases its fence', async (
   }
   await ThreeBackend.prototype.waitForIdle.call({ gl })
   assert.deepEqual(calls, [['fence', 1, 0], ['flush'], ['wait', fence, 0, 0], ['delete', fence]])
+})
+
+test('triangle passes honor positive counts and fall back to mesh capacity', async () => {
+  const { ThreeBackend } = await import('../src/backend/three-backend.js')
+  const backend = Object.create(ThreeBackend.prototype)
+  backend.textures = new Map([['mesh', { width: 3, height: 2 }]])
+  const state = { globalUniforms: { vertices: 9 } }
+  const pass = { drawMode: 'triangles', inputs: { meshPositions: 'mesh' }, countUniform: 'vertices' }
+  const resolveOnGPU = (pass, state) => core.WebGPUBackend.prototype.resolveMeshVertexCount.call(backend, pass, state)
+  for (const count of ['auto', 'screen', 'input']) {
+    for (const resolve of [backend.resolveTriangleCount.bind(backend), resolveOnGPU]) {
+      assert.equal(resolve({ ...pass, count }, state), 9)
+      assert.equal(resolve({ ...pass, count, uniforms: { vertices: 3 } }, state), 3)
+      for (const vertices of [0, -1, '3']) {
+        assert.equal(resolve({ ...pass, count, uniforms: { vertices } }, state), 6)
+      }
+      assert.equal(resolve({ ...pass, count, inputs: {} }, {}), 3)
+    }
+  }
+  assert.equal(backend.resolveTriangleCount({ ...pass, count: 12 }, {}), 12)
+  assert.equal(backend.resolveTriangleCount({ ...pass, count: 12 }, state), 9)
+  assert.equal(backend.resolveTriangleCount(pass, {}), 3)
+})
+
+test('the stable WebGL2 backend and ThreeBackend preserve ZERO', async () => {
+  const { ThreeBackend } = await import('../src/backend/three-backend.js')
+  const gl = { ZERO: 0, ONE: 1 }
+  for (const zero of ['ZERO', 'zero', 0]) {
+    assert.equal(core.WebGL2Backend.prototype.resolveBlendFactor.call({ gl }, zero), gl.ZERO)
+    assert.equal(ThreeBackend.prototype._blendFactor(zero), ZeroFactor)
+  }
+  assert.equal(ThreeBackend.prototype._blendFactor('unknown'), OneFactor)
+})
+
+test('the stable WebGPU backend resolves GL color blend factors in both slots', () => {
+  for (const [name, expected] of Object.entries({
+    SRC_COLOR: 'src', DST_COLOR: 'dst',
+    ONE_MINUS_SRC_COLOR: 'one-minus-src', ONE_MINUS_DST_COLOR: 'one-minus-dst',
+  })) {
+    for (const [blend, srcFactor, dstFactor] of [
+      [[name, 'ZERO'], expected, 'zero'], [['ZERO', name], 'zero', expected],
+    ]) {
+      const state = core.WebGPUBackend.prototype.resolveBlendState(blend)
+      assert.deepEqual(state.color, { srcFactor, dstFactor, operation: 'add' })
+      assert.deepEqual(state.alpha, state.color)
+    }
+  }
 })
 
 test('scene, object literals and ordinary mixed argument calls stay unavailable', () => {

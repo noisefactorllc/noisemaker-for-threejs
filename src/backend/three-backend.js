@@ -642,6 +642,7 @@ export class ThreeBackend extends Backend {
 
   // Map a reference blend-factor name (e.g. 'ONE', 'ONE_MINUS_SRC_ALPHA') to a THREE factor.
   _blendFactor(name) {
+    if (name === 0) return THREE.ZeroFactor
     switch (String(name).toLowerCase()) {
       case 'zero': return THREE.ZeroFactor
       case 'one': return THREE.OneFactor
@@ -1033,12 +1034,19 @@ export class ThreeBackend extends Backend {
     return null
   }
 
-  // Triangle count = mesh position texture w*h (reference: meshPositions || inputTex).
   resolveTriangleCount(pass, state) {
-    const id = pass.inputs?.meshPositions || pass.inputs?.inputTex
-    const tex = id ? this.resolveMeshTexInfo(id, state) : null
-    if (tex?.width && tex?.height) return (tex.width * tex.height) | 0
-    return (Number(pass.count) | 0) || 0
+    let count = pass.count || 3
+    if (pass.countUniform) {
+      const local = pass.uniforms?.[pass.countUniform]
+      const uniform = local === undefined ? state.globalUniforms?.[pass.countUniform] : local
+      if (typeof uniform === 'number' && uniform > 0) count = uniform
+    }
+    if (count === 'auto' || count === 'screen' || count === 'input') {
+      const id = pass.inputs?.meshPositions || pass.inputs?.inputTex
+      const tex = id ? this.resolveMeshTexInfo(id, state) : null
+      count = tex?.width && tex?.height ? tex.width * tex.height : 3
+    }
+    return count | 0
   }
 
   // Attach a cached DEPTH_COMPONENT24 renderbuffer to three's FBO for `rt` (three RTs are

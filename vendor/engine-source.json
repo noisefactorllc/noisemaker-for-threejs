@@ -1,6 +1,6 @@
 {
-  "version": "1.5.11",
-  "source": "78aff2a5ee946bac680ed690f07448ca60d92e9c",
+  "version": "1.5.17",
+  "source": "5596e69fd6e3b9014e9df0f8674e10e70c332e11",
   "baseline": "478f94eae7ebe34116dfc661ac52b373b884008b",
   "overrides": {
     "shaders/src/lang/parser.js": {
@@ -33,11 +33,11 @@
     },
     "shaders/src/runtime/backends/webgl2.js": {
       "inputSha256": "5fc082e03c6b8435a3dc99f8ea72c1793991c6db893a5929aa1a231538df243a",
-      "outputSha256": "51a6bf8aac37f3d6f356a163ab09058aa89324b67d96fec4466dafc6ff47f567"
+      "outputSha256": "82fe3619b99d379965fdbe98caaf94b5ea1ed85ca5037ad8522ec5ca626d7ce2"
     },
     "shaders/src/runtime/backends/webgpu.js": {
       "inputSha256": "4eba9ecca020406997520eb87d93154a787decfb5108dd210cf5fed508dcd159",
-      "outputSha256": "84d39fc348aede39ad90c15cbb293f56f662e8b5937964faf682c1b470a3e9d7"
+      "outputSha256": "2f79ed9d86351f8fec20efbf46a7811e4dba4dac610ded20788831d39cdaa6e8"
     }
   },
   "inputs": {

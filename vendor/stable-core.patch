@@ -1554,7 +1554,11 @@
 -
 +
      /**
-@@ -1586,7 +1636,7 @@
+@@ -1493,1 +1543,2 @@
+-            } else if (count === 'auto' || count === 'input') {
++            }
++            if (count === 'auto' || count === 'screen' || count === 'input') {
+@@ -1586,7 +1637,7 @@
          }
 -
 +
@@ -1564,7 +1568,7 @@
              renderPass.outputs = {}
              for (const [key, texId] of Object.entries(pass.outputs)) {
                  // Normalize output names
-@@ -1653,11 +1703,15 @@
+@@ -1653,11 +1704,15 @@
                  texture = this.defaultTexture
              }
 -
@@ -1585,7 +1589,7 @@
 +
              // Bind sampler uniform
              const uniform = program.uniforms[samplerName]
-@@ -1901,6 +1955,34 @@
+@@ -1901,6 +1956,34 @@
          }
      }
 -
@@ -1621,6 +1625,9 @@
      present(textureId) {
          const gl = this.gl
          const tex = this.textures.get(textureId)
+@@ -2112,1 +2195,1 @@
+-        return factors[factor] || gl.ONE
++        return factors[factor] ?? gl.ONE
 --- a/shaders/src/runtime/backends/webgpu.js
 +++ b/shaders/src/runtime/backends/webgpu.js
 @@ -118,6 +118,90 @@
@@ -1939,7 +1946,22 @@
 -
 +
      /**
-@@ -3330,6 +3475,21 @@
+@@ -2454,1 +2599,10 @@
+-                if (typeof factor === 'string') return factor.toLowerCase().replace(/_/g, '-')
++                if (typeof factor === 'string') {
++                    const normalized = factor.toLowerCase().replace(/_/g, '-')
++                    switch (normalized) {
++                        case 'src-color': return 'src'
++                        case 'dst-color': return 'dst'
++                        case 'one-minus-src-color': return 'one-minus-src'
++                        case 'one-minus-dst-color': return 'one-minus-dst'
++                        default: return normalized
++                    }
++                }
+@@ -2544,1 +2698,1 @@
+-        if (count === 'auto' || count === 'input' || count <= 0) {
++        if (count === 'auto' || count === 'screen' || count === 'input' || count <= 0) {
+@@ -3330,6 +3484,21 @@
       * Legacy bind group creation for shaders that don't have parsed bindings.
       */
      createLegacyBindGroup(pass, program, state) {
@@ -1962,7 +1984,7 @@
          let binding = 0
 -
 +
-@@ -3835,6 +3995,15 @@
+@@ -3835,6 +4004,15 @@
          }
      }
 -
@@ -1980,7 +2002,7 @@
          if (!this.context) return
 -
 +
-@@ -3877,13 +4046,23 @@
+@@ -3877,13 +4055,23 @@
              this.textures.clear()
          }
 -
@@ -2011,7 +2033,7 @@
 -
 +
          this.programs.clear()
-@@ -4236,6 +4415,17 @@
+@@ -4236,6 +4424,17 @@
      /**
       * Read pixels from a texture for testing purposes.
       * Note: This is async due to WebGPU's buffer mapping requirements.
@@ -2029,7 +2051,7 @@
       * @param {string} textureId - The texture ID to read from
       * @returns {Promise<{width: number, height: number, data: Uint8Array}>}
       */
-@@ -4253,6 +4443,10 @@
+@@ -4253,6 +4452,10 @@
              bytesPerPixel = 8 // 2 bytes per channel * 4 channels
          } else if (gpuFormat === 'rgba32float') {
              bytesPerPixel = 16 // 4 bytes per channel * 4 channels
@@ -2041,7 +2063,7 @@
 -
 +
          const bytesPerRow = Math.ceil(width * bytesPerPixel / 256) * 256 // Align to 256 bytes
-@@ -4310,6 +4504,27 @@
+@@ -4310,6 +4513,27 @@
                      }
                  }
              }

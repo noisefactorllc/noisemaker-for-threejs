@@ -8,7 +8,7 @@
 #   bash vendor/fetch.sh            # refresh from the pinned version
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
-VERSION="${VERSION:-1.5.11}"
+VERSION="${VERSION:-1.5.17}"
 BASE="https://shaders.noisedeck.app/${VERSION}"
 OUT="$HERE/noisemaker"
 EFFECTS="$OUT/effects"
