@@ -313,19 +313,16 @@
 +++ b/shaders/src/lang/validator.js
 @@ -41,6 +41,7 @@
  const STARTER_OPS = new Set()
--
-+
+ 
  const SURFACE_PASSTHROUGH_CALLS = new Set(['read'])
 +
  const validatorHooks = {}
--
-+
+ 
  const AUTOMATION_FIELDS = {
 @@ -183,6 +184,19 @@
      const render = ast.render ? ast.render.name : null
      let tempIndex = 0
--
-+
+ 
 +    // Element ids (`_id:`). Noisemaker 2 keys an element's state by its id;
 +    // 1.x keys state by position, so an id has no effect here. It is kept in
 +    // its step's args so that the unparser writes it back, and a program saved
@@ -345,8 +342,7 @@
 @@ -240,6 +254,14 @@
          return false
      }
--
-+
+ 
 +    // A call written with both positional and keyword arguments. A call
 +    // merged from a `let` (see resolveCall) has both too, but is not written
 +    // this way.
@@ -410,7 +406,7 @@
              if (node.kwargs) {
                  const kw = {}
                  for (const [k,v] of Object.entries(node.kwargs)) kw[k] = substitute(v, resolving)
-@@ -375,7 +409,60 @@
+@@ -375,9 +409,62 @@
              }
              return resolveCall(mappedCall)
          }
@@ -453,8 +449,8 @@
 +            }
 +        }
          return node
-+    }
-+
+     }
+ 
 +    // Remove the marks this function leaves on call and array literal nodes
 +    // while it compiles. They are its own, and no compiled plan carries one:
 +    // outside scene() an array literal keeps only its elements as written.
@@ -468,10 +464,11 @@
 +            delete node.positionalsByIndex
 +        }
 +        for (const value of Object.values(node)) dropMarks(value)
-     }
--
++    }
 +
      function declareVar(v) {
+         const expr = substitute(clone(v.expr), [v.name])
+         if (expr && isStarterChain(expr)) {
 @@ -784,6 +871,7 @@
                      if (original._skip === true) {
                          stepArgs._skip = true
@@ -597,11 +594,30 @@
                      // Array literal — additive input form. Only fires when
                      // the source contains a literal `[…]`. Existing programs
                      // can never produce ArrayLiteral nodes (the lexer only
-@@ -1491,6 +1634,12 @@
+@@ -1127,14 +1270,12 @@
+                             }
+                         }
+                         args[argKey] = surf
+-                    } else if (node && node.type === 'Call' && node.args?.length === (node.name === 'vec2' ? 2 : 4) && (
++                    } else if (node && node.type === 'Call' && node.args?.length === (node.name === 'vec2' ? 2 : node.name === 'vec3' ? 3 : 4) && (
+                         (def.type === 'vec2' && node.name === 'vec2') ||
+-                        (def.type === 'color' && node.name === 'vec4' && Array.isArray(def.default) && def.default.length === 4))) {
+-                        // vec2(x, y) on a vec2 parameter, and vec4(x, y, z, w) on a
+-                        // vec4 parameter. The loader registers vec4 parameters as
+-                        // `color`; their default keeps its four components. Any
+-                        // other form, including a wrong component count, takes
+-                        // the branches below.
++                        (def.type === 'color' && !node.kwargs && (node.name === 'vec3' || node.name === 'vec4')))) {
++                        // Color constructors preserve the supplied components,
++                        // independently of the parameter's default length.
++                        // Invalid constructor arity takes the branches below.
+                         args[argKey] = node.args.map(arg => {
+                             if (arg.type === 'Number') return arg.value
+                             pushDiag('S002', arg, `Argument out of range for '${def.name}' in ${call.name}()`)
+@@ -1491,6 +1632,12 @@
                      }
                  }
--
-+
+ 
 +                // The element id (`_id:` meta-argument)
 +                if (kw && kw._id !== undefined) {
 +                    keepElementId(kw._id, args)
@@ -611,11 +627,10 @@
                  // Handle _skip meta-argument (skip this step in the pipeline)
                  if (kw && kw._skip !== undefined) {
                      const skipNode = kw._skip
-@@ -1508,6 +1657,16 @@
-                             pushDiag('S001', kw[key], `Unknown argument '${key}' for ${call.name}()`)
+@@ -1509,6 +1656,16 @@
                          }
                      }
-+                }
+                 }
 +
 +                // Positionals left over after every slot is filled correspond to
 +                // no parameter. They bind to nothing, and the call renders
@@ -625,16 +640,16 @@
 +                if (posCursor < call.args.length) {
 +                    const extra = call.args[posCursor]
 +                    pushDiag('S009', extra || call, `Too many positional arguments for ${call.name}(): '${call.name}' takes ${specArgs.length}`)
-                 }
++                }
                  const hook = typeof call.name === 'string' ? validatorHooks[call.name] : null
                  if (typeof hook === 'function') {
-@@ -1643,6 +1802,7 @@
+                     const starterInfo = getStarterInfo(original)
+@@ -1643,6 +1800,7 @@
          if (compiled) plans.push(compiled)
      }
      declareVarsBefore(Infinity)
 +    dropMarks(plans)
--
-+
+ 
      // Include original variable declarations for unparsing
      const vars = ast.vars || []
 --- a/shaders/src/lang/unparser.js

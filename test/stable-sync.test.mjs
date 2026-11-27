@@ -172,3 +172,54 @@ test('a same-size texture is recreated when its required usage grows, then reuse
   assert.equal(backend.textures.get('node_0_out'), writable)
   pipeline.dispose()
 })
+
+test('color parameters accept vec3 and vec4 constructors like their array literals', () => {
+  for (const [op, call] of [
+    ['synth.solid', color => `solid(color: ${color})`],
+    ['filter.tint', color => `solid().tint(color: ${color})`],
+  ]) {
+    for (const [constructor, array] of [
+      ['vec3(0.3, 0.2, 0.25)', '[0.3, 0.2, 0.25]'],
+      ['vec4(0.3, 0.2, 0.25, 0.4)', '[0.3, 0.2, 0.25, 0.4]'],
+    ]) {
+      // The constructor binds the supplied components exactly like the array
+      // literal; the unparser writes colors back as hex, which quantizes to
+      // 8-bit channels.
+      const expected = JSON.parse(array)
+      const reference = core.compile(`search synth, filter\n${call(array)}.write(o0)\nrender(o0)`)
+      assert.deepEqual(reference.diagnostics, [], array)
+      const compiled = core.compile(`search synth, filter\n${call(constructor)}.write(o0)\nrender(o0)`)
+      assert.deepEqual(compiled.diagnostics, [], constructor)
+      const args = compiled.plans[0].chain.find(step => step.op === op).args
+      assert.deepEqual(args.color, expected, constructor)
+      assert.deepEqual(args.color, reference.plans[0].chain.find(step => step.op === op).args.color, constructor)
+      const again = core.compile(core.unparse(compiled))
+      assert.deepEqual(again.diagnostics, [], constructor)
+      // The unparser writes colors back as hex, which quantizes to 8-bit channels.
+      const roundTripped = again.plans[0].chain.find(step => step.op === op).args.color
+      for (let i = 0; i < expected.length; i++) {
+        assert.ok(Math.abs(roundTripped[i] - expected[i]) <= 1 / 255, `${constructor} channel ${i}`)
+      }
+    }
+  }
+})
+
+test('malformed color constructors keep the parameter default and report S002', () => {
+  for (const [op, call] of [
+    ['synth.solid', color => `solid(color: ${color})`],
+    ['filter.tint', color => `solid().tint(color: ${color})`],
+  ]) {
+    const fallback = core.compile(`search synth, filter\n${op === 'synth.solid' ? 'solid()' : 'solid().tint()'}.write(o0)\nrender(o0)`)
+    assert.deepEqual(fallback.diagnostics, [])
+    const expected = fallback.plans[0].chain.find(step => step.op === op).args.color
+    for (const input of ['vec2(0.3, 0.2)', 'vec3(0.3, 0.2)', 'vec3(0.3, 0.2, 0.25, 0.4)', 'vec4(0.3, 0.2, 0.25)', 'vec4(0.3, 0.2, 0.25, 0.4, 1)']) {
+      const compiled = core.compile(`search synth, filter\n${call(input)}.write(o0)\nrender(o0)`)
+      assert.deepEqual(compiled.diagnostics.map(d => d.code), ['S002'], input)
+      assert.deepEqual(compiled.plans[0].chain.find(step => step.op === op).args.color, expected, input)
+    }
+    // Keyword-argument mixes stay unavailable in the stable grammar.
+    for (const input of ['vec3(0.3, 0.2, 0.25, bogus: 1)', 'vec4(0.3, 0.2, 0.25, 0.4, bogus: 1)']) {
+      assert.throws(() => core.compile(`search synth, filter\n${call(input)}.write(o0)\nrender(o0)`), /Cannot mix positional and keyword arguments/, input)
+    }
+  }
+})

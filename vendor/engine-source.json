@@ -1,6 +1,6 @@
 {
-  "version": "1.5.17",
-  "source": "5596e69fd6e3b9014e9df0f8674e10e70c332e11",
+  "version": "1.5.26",
+  "source": "f4a1382a1dc863bebe5a3204acfdec425a19c983",
   "baseline": "478f94eae7ebe34116dfc661ac52b373b884008b",
   "overrides": {
     "shaders/src/lang/parser.js": {
@@ -9,7 +9,7 @@
     },
     "shaders/src/lang/validator.js": {
       "inputSha256": "6a7b98baf0bc19abce3fa3deb7b068d57d28ebb64b30d21ae7e748b7d33b0a2a",
-      "outputSha256": "09aa8dfafee4a278587c5f339e2a3b70259545e9f602ab78ebbd31e658672390"
+      "outputSha256": "e31f2799d1a1db85475461ad8dbdbebc25bbeaa95a712c543130028ae1b684d6"
     },
     "shaders/src/lang/unparser.js": {
       "inputSha256": "0f0067d265cd6bbbe52a4f50ea511f77408c55c8047065e102982c2dc8f9ea8b",
