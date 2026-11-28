@@ -31,10 +31,12 @@
 import { chromium } from '@playwright/test'
 import { startLoopbackServer } from './loopback-server.mjs'
 import { parityHeadless, chromiumLaunchArgs } from './launch-args.mjs'
+import { stableSourceIdentity } from './stable-source-identity.mjs'
 import { createHash } from 'node:crypto'
 import { mkdirSync, writeFileSync, readFileSync, readdirSync } from 'node:fs'
 import http from 'node:http'
 import { extname, join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 const consumerDir = resolve(process.argv[2])
 const outDir = resolve(process.argv[3])
@@ -66,6 +68,7 @@ const walk = (dir) => {
 walk(effectsDir)
 const manifestEntries = Object.keys(JSON.parse(vendorManifestBytes.toString('utf8'))).length
 const vendor = {
+  stableSource: stableSourceIdentity(join(installedPkg, 'vendor', 'noisemaker'), fileURLToPath(new URL('../vendor/noisemaker/', import.meta.url))),
   coreSha256: sha256(vendorCoreBytes),
   coreBytes: vendorCoreBytes.length,
   manifestSha256: sha256(vendorManifestBytes),

@@ -3,17 +3,18 @@
 // Assembles the SERVED export kit into an isolated consumer directory, then exercises
 // the kit's own `index.html` host page in headless Chromium:
 //
-//   PLAYWRIGHT_BROWSERS_PATH=<dir> node parity/kit-consumer.mjs <outDir>
+//   PLAYWRIGHT_BROWSERS_PATH=<dir> node parity/kit-consumer.mjs <outDir> [builtKitDir]
 //
 // The consumer tree is downloaded from the production distribution, never from this
-// checkout, so the run qualifies the artifact a real kit consumer receives:
+// checkout by default, so the run qualifies the artifact a real kit consumer receives.
+// An explicit builtKitDir qualifies an assembled candidate before publication:
 //
 // 1. Fetch `deployment-meta.json` (kit version, source SHA) and `kit.json` (per-file
 //    sha256/bytes inventory) from kits.noisedeck.app, then download every inventory file
 //    and verify each byte count and SHA-256 against the inventory (hard fail on mismatch).
-// 2. Fetch the pinned engine (`shaders.noisedeck.app/<engineVersion>`): the minified core
-//    ESM bundle the kit's import map points at, plus `effects/manifest.json` and every
-//    mini-bundle it lists; the gate requires bundle count === manifest entries.
+// 2. Read the inventoried stable engine without replacing it. Require its source and
+//    core digest to match the checkout's generated kit engine, and verify every
+//    mini-bundle listed in its manifest.
 // 3. Build `index.html` from the kit's own `index.template.html` with the placeholders
 //    the exporter injects filled in (program name, DSL, engine version), using the
 //    committed `parity/programs/adjust.dsl` as the program. Build `index-invalid.html`
@@ -35,6 +36,7 @@
 import { chromium } from '@playwright/test'
 import { parityHeadless, chromiumLaunchArgs } from './launch-args.mjs'
 import { startLoopbackServer } from './loopback-server.mjs'
+import { kitConsumerPassed } from './kit-consumer-verdict.mjs'
 import { createHash } from 'node:crypto'
 import http from 'node:http'
 import { mkdirSync, existsSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
@@ -42,8 +44,9 @@ import { extname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const outDir = process.argv[2] ? resolve(process.argv[2]) : null
+const builtKitDir = process.argv[3] ? resolve(process.argv[3]) : null
 if (!outDir) {
-  console.error('usage: PLAYWRIGHT_BROWSERS_PATH=<dir> node parity/kit-consumer.mjs <outDir>')
+  console.error('usage: PLAYWRIGHT_BROWSERS_PATH=<dir> node parity/kit-consumer.mjs <outDir> [builtKitDir]')
   process.exit(1)
 }
 mkdirSync(outDir, { recursive: true })
@@ -62,17 +65,24 @@ const step = (name, ok, detail) => {
 }
 
 // ---- 1. served kit inventory -----------------------------------------------------------
-const meta = await (await fetch(`${KIT_BASE}/deployment-meta.json`)).json()
-out.kit.deploymentMeta = meta
-const kitJson = await (await fetch(`${KIT_BASE}/kit.json`)).json()
+const kitJson = builtKitDir
+  ? JSON.parse(readFileSync(join(builtKitDir, 'kit.json')))
+  : await (await fetch(`${KIT_BASE}/kit.json`)).json()
+out.kit.deploymentMeta = builtKitDir
+  ? { localBuild: true, source: kitJson.source }
+  : await (await fetch(`${KIT_BASE}/deployment-meta.json`)).json()
 out.kit.kitVersion = kitJson.version
 out.kit.sourceSha = kitJson.source && kitJson.source.sha
 
 const consumer = join(outDir, 'consumer')
 for (const f of kitJson.files) {
-  const res = await fetch(`${KIT_BASE}/${f.path}`)
-  if (!res.ok) throw new Error(`kit file ${f.path}: HTTP ${res.status}`)
-  const bytes = Buffer.from(await res.arrayBuffer())
+  let bytes
+  if (builtKitDir) bytes = readFileSync(join(builtKitDir, f.path))
+  else {
+    const res = await fetch(`${KIT_BASE}/${f.path}`)
+    if (!res.ok) throw new Error(`kit file ${f.path}: HTTP ${res.status}`)
+    bytes = Buffer.from(await res.arrayBuffer())
+  }
   const hash = sha256(bytes)
   const ok = hash === f.sha256 && bytes.length === f.bytes
   if (!ok) throw new Error(`kit file ${f.path}: expected sha ${f.sha256}/${f.bytes}B, got ${hash}/${bytes.length}B`)
@@ -83,32 +93,27 @@ for (const f of kitJson.files) {
 const okFiles = kitJson.files.length
 step('kit-inventory', true, `${okFiles}/${okFiles} served files match kit.json sha256+bytes`)
 
-// ---- 2. pinned engine ------------------------------------------------------------------
-const engineVersion = await (await fetch('https://shaders.noisedeck.app/1/deployment-meta.json')).json()
-out.engine.deploymentMeta = engineVersion
-const engineDir = join(consumer, 'adapter/vendor/noisemaker')
+// ---- 2. the kit's own stable engine ----------------------------------------------------
+if (kitJson.engineSource !== 'kit') throw new Error('The served kit does not carry its stable engine')
+const engineDir = join(consumer, 'engine')
 const effectsDir = join(engineDir, 'effects')
-mkdirSync(effectsDir, { recursive: true })
-
-const coreMin = Buffer.from(await (await fetch('https://shaders.noisedeck.app/1/noisemaker-shaders-core.esm.min.js')).arrayBuffer())
-writeFileSync(join(engineDir, 'noisemaker-shaders-core.esm.min.js'), coreMin)
+const engineVersion = JSON.parse(readFileSync(join(engineDir, 'deployment-meta.json')))
+const expectedEngine = join(HERE, '../export-kit/engine')
+const expectedMetadata = JSON.parse(readFileSync(join(expectedEngine, 'deployment-meta.json')))
+if (JSON.stringify(engineVersion) !== JSON.stringify(expectedMetadata)) throw new Error('Kit engine source differs from the reviewed candidate')
+out.engine.deploymentMeta = engineVersion
+const coreMin = readFileSync(join(engineDir, 'noisemaker-shaders-core.esm.min.js'))
 out.engine.coreMinSha256 = sha256(coreMin)
 out.engine.coreMinBytes = coreMin.length
-
-const manifestBytes = Buffer.from(await (await fetch('https://shaders.noisedeck.app/1/effects/manifest.json')).arrayBuffer())
-writeFileSync(join(effectsDir, 'manifest.json'), manifestBytes)
+step('engine-source', out.engine.coreMinSha256 === sha256(readFileSync(join(expectedEngine, 'noisemaker-shaders-core.esm.min.js'))),
+  `stable core sha ${out.engine.coreMinSha256}`)
+const manifestBytes = readFileSync(join(effectsDir, 'manifest.json'))
 out.engine.manifestSha256 = sha256(manifestBytes)
-const manifest = JSON.parse(manifestBytes)
-const effectIds = Object.keys(manifest)
-const fetchOne = async (id) => {
-  const [ns, name] = id.split('/')
-  const dest = join(effectsDir, ns, `${name}.js`)
-  mkdirSync(dest.slice(0, dest.lastIndexOf('/')), { recursive: true })
-  const res = await fetch(`https://shaders.noisedeck.app/1/effects/${ns}/${name}.js`)
-  if (!res.ok) throw new Error(`mini-bundle ${id}: HTTP ${res.status}`)
-  writeFileSync(dest, Buffer.from(await res.arrayBuffer()))
+const effectIds = Object.keys(JSON.parse(manifestBytes))
+for (const id of effectIds) {
+  const bytes = readFileSync(join(effectsDir, `${id}.js`))
+  if (!bytes.equals(readFileSync(join(expectedEngine, 'effects', `${id}.js`)))) throw new Error(`Kit effect source differs: ${id}`)
 }
-await Promise.all(effectIds.map(fetchOne))
 const countBundles = (dir) => readdirSync(dir, { withFileTypes: true })
   .flatMap((e) => e.isDirectory()
     ? countBundles(join(dir, e.name))
@@ -236,7 +241,7 @@ out.removal.removed = removed
 out.removal.detail = removed ? 'consumer tree deleted; index.html no longer readable' : 'index.html still readable after removal'
 step('removal', removed, out.removal.detail)
 
-const pass = out.steps.every((s) => s.ok)
+const pass = kitConsumerPassed(out)
 out.gate = pass ? [] : out.gate.concat(['one or more steps failed'])
 out.verdict = pass ? 'pass' : 'fail'
 writeFileSync(join(outDir, 'results.json'), JSON.stringify(out, null, 2))

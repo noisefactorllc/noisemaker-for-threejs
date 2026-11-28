@@ -1,8 +1,8 @@
-// engine.mjs — load the FETCHED published Noisemaker engine in Node (build-time / tooling).
+// engine.mjs — load the derived stable Noisemaker engine in Node (build-time / tooling).
 //
-// The engine bundle + per-effect mini-bundles are fetched from shaders.noisedeck.app by
-// vendor/fetch.sh into vendor/noisemaker/ (GITIGNORED — never committed, like node_modules).
-// This loader + the fetch script are the only committed pieces. The bundle is browser-oriented
+// vendor/fetch.sh prepares the reviewed core and published effect bundles in the
+// ignored vendor/noisemaker/ cache. Export kits carry a reproducible stable bundle.
+// The core is browser-oriented
 // (defines a custom element at module scope), so Node needs a tiny DOM shim before evaluating it.
 // We then load the per-effect mini-bundles exactly as production does (pre-fetch each effect),
 // registering every one — each carries its GLSL inline, so the compiled graph already has shader

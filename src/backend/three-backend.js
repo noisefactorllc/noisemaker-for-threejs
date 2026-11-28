@@ -12,7 +12,7 @@
  * 3D/cube, and external media are staged (clearly marked) for later phases.
  */
 import * as THREE from 'three'
-import { Backend, FrameExportQueue } from '../engine-browser.js'
+import { Backend, FrameExportQueue, WebGL2Backend } from '../engine-browser.js'
 import { formatToType, fullscreenTriangle, stripVersion, parseUniformSizes, DEFAULT_VERTEX_SHADER } from './three-resources.js'
 import { ThreeFrameExportAdapter } from './three-frame-export.js'
 
@@ -588,6 +588,10 @@ export class ThreeBackend extends Backend {
 
   endFrame() {}
 
+  waitForIdle() {
+    return WebGL2Backend.prototype.waitForIdle.call(this)
+  }
+
   // Bind globals, pass uniforms (override), input textures, and blend state onto a
   // pass's material. Shared by all draw paths (single / MRT / points).
   bindMaterial(pass, state) {
@@ -638,6 +642,7 @@ export class ThreeBackend extends Backend {
 
   // Map a reference blend-factor name (e.g. 'ONE', 'ONE_MINUS_SRC_ALPHA') to a THREE factor.
   _blendFactor(name) {
+    if (name === 0) return THREE.ZeroFactor
     switch (String(name).toLowerCase()) {
       case 'zero': return THREE.ZeroFactor
       case 'one': return THREE.OneFactor
@@ -654,6 +659,9 @@ export class ThreeBackend extends Backend {
   }
 
   executePass(pass, state) {
+    if (pass.storageTextures || (pass.outputs && pass.outputs.outputBuffer)) {
+      pass = WebGL2Backend.prototype.convertComputeToRender.call(this, pass)
+    }
     const outputKeys = Object.keys(pass.outputs || {})
     const isMRT = pass.drawBuffers > 1 || outputKeys.length > 1
     const material = this.bindMaterial(pass, state)
@@ -1026,12 +1034,19 @@ export class ThreeBackend extends Backend {
     return null
   }
 
-  // Triangle count = mesh position texture w*h (reference: meshPositions || inputTex).
   resolveTriangleCount(pass, state) {
-    const id = pass.inputs?.meshPositions || pass.inputs?.inputTex
-    const tex = id ? this.resolveMeshTexInfo(id, state) : null
-    if (tex?.width && tex?.height) return (tex.width * tex.height) | 0
-    return (Number(pass.count) | 0) || 0
+    let count = pass.count || 3
+    if (pass.countUniform) {
+      const local = pass.uniforms?.[pass.countUniform]
+      const uniform = local === undefined ? state.globalUniforms?.[pass.countUniform] : local
+      if (typeof uniform === 'number' && uniform > 0) count = uniform
+    }
+    if (count === 'auto' || count === 'screen' || count === 'input') {
+      const id = pass.inputs?.meshPositions || pass.inputs?.inputTex
+      const tex = id ? this.resolveMeshTexInfo(id, state) : null
+      count = tex?.width && tex?.height ? tex.width * tex.height : 3
+    }
+    return count | 0
   }
 
   // Attach a cached DEPTH_COMPONENT24 renderbuffer to three's FBO for `rt` (three RTs are

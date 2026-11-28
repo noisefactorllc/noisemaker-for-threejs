@@ -11,10 +11,8 @@
     <canvas id="c" width="256" height="256"></canvas>
     <script type="module">
       import * as THREE from 'three'
-      // Engine from the CDN bundle (vendor/fetch.sh). Golden = core's createPipeline (WebGL2Backend),
-      // candidate = core's Pipeline + ThreeBackend (via createThreePipeline). Same engine both sides.
-      import { compileGraph, createPipeline, loadEffectsForDsl, registerPortableEffectInstance, core } from '/src/engine-browser.js'
-      import { createThreePipeline } from '/src/runtime/create-three-pipeline.js'
+      // Keep the published reference independent of the stable core derivation.
+      let core
 
       THREE.ColorManagement.enabled = false
 
@@ -353,6 +351,9 @@
       }
 
       window.__nm_timeseries = async ({ dsl, mode, size, frames, captureEvery, loopFrames, inject, effects = [] }) => {
+        const engine = await import(mode === 'candidate' ? '/src/engine-browser.js' : '/parity/reference-engine.mjs')
+        const { compileGraph, createPipeline, loadEffectsForDsl, registerPortableEffectInstance } = engine
+        core = engine.core
         const canvas = document.getElementById('c')
         canvas.width = size
         canvas.height = size
@@ -372,6 +373,7 @@
         let pipeline
         let readback
         if (mode === 'candidate') {
+          const { createThreePipeline } = await import('/src/runtime/create-three-pipeline.js')
           const renderer = new THREE.WebGLRenderer({ canvas, preserveDrawingBuffer: true, alpha: true })
           renderer.setPixelRatio(1)
           renderer.setSize(size, size, false)

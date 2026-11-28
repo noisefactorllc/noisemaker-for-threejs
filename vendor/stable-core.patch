@@ -1,0 +1,2108 @@
+--- a/shaders/src/lang/parser.js
++++ b/shaders/src/lang/parser.js
+@@ -19,11 +19,12 @@
+  * SubchainCall   ::= 'subchain' '(' SubchainArgs? ')' '{' ( Comment* '.' Comment* Call )+ Comment* '}'
+  * SubchainArgs   ::= String | SubchainPair ( ','? SubchainPair )* ','?
+  * SubchainPair   ::= Ident ':' String
+- * WriteCall      ::= 'write' '(' WriteTarget ')'       // Chainable - writes to surface & passes through
++ * WriteCall      ::= 'write' '(' WriteTarget ElementId? ')'   // Chainable - writes to surface & passes through
+  * WriteTarget    ::= OutputRef | XyzRef | VelRef | RgbaRef | MeshRef | 'none'
+- * Write3DCall    ::= 'write3d' '(' ( VolRef | OutputRef | Ident ) ',' ( GeoRef | OutputRef | Ident ) ')'
++ * Write3DCall    ::= 'write3d' '(' ( VolRef | OutputRef | Ident ) ',' ( GeoRef | OutputRef | Ident ) ElementId? ')'
++ * ElementId      ::= ',' '_id' ':' Expr                  // Kept when it is a String of the id form
+  * Call           ::= Ident '(' ArgList? ')'
+- * ArgList        ::= Expr ( ',' Expr )* ','? | Kwarg ( ',' Kwarg )* ','?   // midi() and audio() may mix (P007)
++ * ArgList        ::= ( Expr | Kwarg ) ( ',' ( Expr | Kwarg ) )* ','?
+  * Kwarg          ::= Ident ':' Expr
+  * Expr           ::= Term ( ( '+' | '-' ) Term )*      // Operands must be numbers (P001)
+  * Term           ::= Unary ( ( '*' | '/' ) Unary )*
+@@ -134,6 +135,23 @@
+         return comments
+     }
+-
++
++    /**
++     * Discard any pending COMMENT tokens.
++     *
++     * Comments were consumed only between statements and between chain links,
++     * so one written inside a call's parentheses — or an array or object
++     * literal — was `Unexpected token COMMENT`. scene() is the one construct
++     * that routinely runs to forty lines, and annotating its children is the
++     * first thing anyone tries.
++     *
++     * These are DROPPED rather than attached: an argument list is re-emitted on
++     * one line (see formatSceneAst in unparser.js), where a line comment would
++     * swallow everything after it and the text would no longer reparse.
++     */
++    function skipComments() {
++        while (peek()?.type === 'COMMENT') advance()
++    }
++
+     const exprStartTokens = new Set([
+         'PLUS', 'MINUS', 'NUMBER', 'HEX', 'FUNC', 'STRING',
+         'IDENT', 'OUTPUT_REF', 'SOURCE_REF', 'VOL_REF', 'GEO_REF', 'MESH_REF',
+@@ -173,8 +191,8 @@
+      * All params except 'type' are optional and support kwargs.
+      *
+      * type: oscKind enum (sine, tri, saw, sawInv, square, noise)
+-     * min: minimum output value (default 0)
+-     * max: maximum output value (default 1)
++     * min: low end of the normalized [0, 1] output sub-range (default 0)
++     * max: high end of the normalized [0, 1] output sub-range (default 1)
+      * speed: integer multiplier for animation duration (default 1)
+      * offset: phase offset 0..1 (default 0)
+      * seed: noise seed (default 1, only used for noise type)
+@@ -205,12 +223,18 @@
+         const resolved = {}
+-
++
+         // Resolve each parameter from positional args or kwargs
++        // Positionals are dense — a keyword does not occupy a slot in `args` —
++        // so they are consumed with their own cursor against the parameters a
++        // keyword has not filled. Indexing by slot drops every positional
++        // written after a keyword.
++        let posCursor = 0
+         for (let i = 0; i < paramOrder.length; i++) {
+             const paramName = paramOrder[i]
+             if (kwargs[paramName] !== undefined) {
+                 resolved[paramName] = kwargs[paramName]
+-            } else if (i < args.length) {
+-                resolved[paramName] = args[i]
++            } else if (posCursor < args.length) {
++                resolved[paramName] = args[posCursor]
++                posCursor++
+             } else if (defaults[paramName] !== undefined) {
+                 resolved[paramName] = defaults[paramName]
+             }
+@@ -238,8 +262,8 @@
+      *
+      * channel: MIDI channel 1-16 (required)
+      * mode: midiMode enum (default midiMode.velocity)
+-     * min: minimum output value (default 0)
+-     * max: maximum output value (default 1)
++     * min: low end of the normalized [0, 1] output sub-range (default 0)
++     * max: high end of the normalized [0, 1] output sub-range (default 1)
+      * sensitivity: trigger falloff rate (default 1)
+      * name: readable MIDIPort.name selector (keyword-only)
+      * id: exact MIDIPort.id selector (keyword-only, requires name)
+@@ -819,12 +843,15 @@
+             } else {
+                 throw parserError('P005', `write() requires an explicit surface reference (e.g., o0, o1, xyz0, vel0, rgba0, mesh0, none) at line ${peek().line} col ${peek().col}`, peek())
+             }
++            const id = parseWriteId()
+             expect('RPAREN', "Expect ')'")
+-            return {
++            const node = {
+                 type: 'Write',
+                 surface: surface,
+                 loc: { line: tokenLine, col: tokenCol }
+             }
++            if (id !== undefined) node._id = id
++            return node
+         } else if (tokenType === 'WRITE3D') {
+             advance() // consume 'write3d'
+             expect('LPAREN', "Expect '('")
+@@ -853,15 +880,36 @@
+             } else {
+                 throw parserError('P005', `Expected geo reference in write3d() at line ${peek().line} col ${peek().col}`, peek())
+             }
++            const id = parseWriteId()
+             expect('RPAREN', "Expect ')'")
+-            return {
++            const node = {
+                 type: 'Write3D',
+                 tex3d: tex3d,
+                 geo: geo,
+                 loc: { line: tokenLine, col: tokenCol }
+             }
++            if (id !== undefined) node._id = id
++            return node
+         }
+         throw parserError('P005', `Expected write or write3d at line ${tokenLine} col ${tokenCol}`, { line: tokenLine, col: tokenCol })
++    }
++
++    /**
++     * The optional element id after a write target: `write(o0, _id: "out")`
++     * or `write3d(vol0, geo0, _id: "out")`. Returns its value node, or
++     * undefined when the call has none.
++     */
++    function parseWriteId() {
++        // Anything else after the targets is left for the closing paren's
++        // error, as before element ids.
++        const key = tokens[current + 1]
++        if (peek().type !== 'COMMA' || key?.type !== 'IDENT' || key.lexeme !== '_id' || tokens[current + 2]?.type !== 'COLON') {
++            return undefined
++        }
++        advance() // consume ','
++        const kwargs = {}
++        parseKwarg(kwargs)
++        return kwargs._id
+     }
+-
++
+     /**
+@@ -1033,14 +1081,16 @@
+         let keyword = false
+         let positional = false
+         const allowMixed = nameToken.lexeme === 'midi' || nameToken.lexeme === 'audio'
++        skipComments()
+         if (peek().type !== 'RPAREN') {
+             while (true) {
++                skipComments()
+                 if (peek().type === 'IDENT' && tokens[current + 1]?.type === 'COLON') {
+-                    if (positional && !allowMixed) {
++                    if (positional && !allowMixed && peek().lexeme !== '_id') {
+                         const t = peek()
+                         throw parserError('P007', `Cannot mix positional and keyword arguments at line ${t.line} col ${t.col}`, t)
+                     }
+-                    keyword = true
++                    if (peek().lexeme !== '_id') keyword = true
+                     parseKwarg(kwargs)
+                 } else {
+                     if (keyword && !allowMixed) {
+@@ -1050,14 +1100,19 @@
+                     positional = true
+                     args.push(parseArg())
+                 }
++                skipComments()
+                 if (peek().type !== 'COMMA') break
+                 advance()
++                skipComments()
+                 if (peek().type === 'RPAREN') break
+             }
+         }
+         expect('RPAREN', "Expect ')'")
+-        const call = {type: 'Call', name: nameToken.lexeme, args}
+-        if (keyword) call.kwargs = kwargs
++        // Record where the call was written. Scene nodes are handed to the
++        // scene compiler as raw AST and it reports errors from `loc`; without
++        // this every scene diagnostic reads "line 0 col 0".
++        const call = {type: 'Call', name: nameToken.lexeme, args, loc: {line: nameToken.line, col: nameToken.col}}
++        if (Object.keys(kwargs).length) call.kwargs = kwargs
+         if (nameToken.lexeme === 'from') {
+             return transformFromInvocation(call, nameToken)
+         }
+@@ -1096,6 +1151,8 @@
+             if (kwargs._skip?.type === 'Boolean' && kwargs._skip.value === true) {
+                 node._skip = true
+             }
++            // The element id, kept by the validator
++            if (kwargs._id !== undefined) node._id = kwargs._id
+             return node
+         }
+         // read3d() reads from tex3d (and optionally geo) surfaces
+@@ -1114,9 +1171,22 @@
+             if (kwargs._skip?.type === 'Boolean' && kwargs._skip.value === true) {
+                 node._skip = true
+             }
++            // The element id, kept by the validator
++            if (kwargs._id !== undefined) node._id = kwargs._id
+             return node
+         }
+         return call
++    }
++
++    /**
++     * Source position of the token a literal starts at.
++     *
++     * Value nodes carried no `loc`, so every scene diagnostic anchored to one
++     * — an unknown keyword's argument, a mesh type string, a rejected mesh
++     * parameter — reported "line 0 col 0".
++     */
++    function locOf(token) {
++        return { line: token.line, col: token.col }
+     }
+-
++
+     function parseArg() {
+@@ -1130,7 +1200,7 @@
+             const right = parseMultiplicative()
+             const l = toNumber(node)
+             const r = toNumber(right)
+-            node = {type: 'Number', value: op === 'PLUS' ? l + r : l - r}
++            node = {type: 'Number', value: op === 'PLUS' ? l + r : l - r, loc: node.loc}
+         }
+         return node
+     }
+@@ -1142,7 +1212,7 @@
+             const right = parseUnary()
+             const l = toNumber(node)
+             const r = toNumber(right)
+-            node = {type: 'Number', value: op === 'STAR' ? l * r : l / r}
++            node = {type: 'Number', value: op === 'STAR' ? l * r : l / r, loc: node.loc}
+         }
+         return node
+     }
+@@ -1155,7 +1225,7 @@
+         if (peek().type === 'MINUS') {
+             advance()
+             const val = parseUnary()
+-            return {type: 'Number', value: -toNumber(val)}
++            return {type: 'Number', value: -toNumber(val), loc: val.loc}
+         }
+         return parsePrimary()
+     }
+@@ -1165,10 +1235,10 @@
+         switch (token.type) {
+             case 'NUMBER':
+                 advance()
+-                return {type: 'Number', value: parseFloat(token.lexeme)}
++                return {type: 'Number', value: parseFloat(token.lexeme), loc: locOf(token)}
+             case 'STRING':
+                 advance()
+-                return {type: 'String', value: token.lexeme}
++                return {type: 'String', value: token.lexeme, loc: locOf(token)}
+             case 'HEX': {
+                 advance()
+                 const hex = token.lexeme.slice(1)
+@@ -1187,7 +1257,7 @@
+                     b = parseInt(hex.slice(4, 6), 16)
+                     a = parseInt(hex.slice(6, 8), 16) / 255
+                 }
+-                return {type: 'Color', value: [r / 255, g / 255, b / 255, a]}
++                return {type: 'Color', value: [r / 255, g / 255, b / 255, a], loc: locOf(token)}
+             }
+             case 'LBRACKET': {
+                 // Array literal — comma-separated arg expressions, used as
+@@ -1200,11 +1270,16 @@
+                 const bracketPosition = token.position
+                 advance()
+                 const elements = []
++                skipComments()
+                 if (peek().type !== 'RBRACKET') {
+                     elements.push(parseArg())
++                    skipComments()
+                     while (peek().type === 'COMMA') {
+                         advance()
++                        skipComments()
++                        if (peek().type === 'RBRACKET') break
+                         elements.push(parseArg())
++                        skipComments()
+                     }
+                 }
+                 if (peek().type !== 'RBRACKET') {
+@@ -1231,16 +1306,16 @@
+                 return {type: 'Func', src: token.lexeme}
+             case 'TRUE':
+                 advance()
+-                return {type: 'Boolean', value: true}
++                return {type: 'Boolean', value: true, loc: locOf(token)}
+             case 'FALSE':
+                 advance()
+-                return {type: 'Boolean', value: false}
++                return {type: 'Boolean', value: false, loc: locOf(token)}
+             case 'IDENT': {
+                 if (token.lexeme === 'Math' && tokens[current + 1]?.type === 'DOT' && tokens[current + 2]?.type === 'IDENT' && tokens[current + 2].lexeme === 'PI') {
+                     advance()
+                     advance()
+                     advance()
+-                    return {type: 'Number', value: Math.PI}
++                    return {type: 'Number', value: Math.PI, loc: locOf(token)}
+                 }
+                 if (tokens[current + 1]?.type === 'LPAREN' || hasCallAfterDot(current)) {
+                     const chain = parseChain('expression')
+@@ -1331,6 +1406,7 @@
+     function parseKwarg(obj) {
+         const key = expect('IDENT', 'Expected identifier').lexeme
+         expect('COLON', "Expect ':'")
++        skipComments()
+         if (!exprStartTokens.has(peek().type)) {
+             const t = peek()
+             throw parserError('P001', `Expected expression after '=' at line ${t.line} col ${t.col}`, t)
+--- a/shaders/src/lang/validator.js
++++ b/shaders/src/lang/validator.js
+@@ -41,6 +41,7 @@
+ const STARTER_OPS = new Set()
+ 
+ const SURFACE_PASSTHROUGH_CALLS = new Set(['read'])
++
+ const validatorHooks = {}
+ 
+ const AUTOMATION_FIELDS = {
+@@ -183,6 +184,19 @@
+     const render = ast.render ? ast.render.name : null
+     let tempIndex = 0
+ 
++    // Element ids (`_id:`). Noisemaker 2 keys an element's state by its id;
++    // 1.x keys state by position, so an id has no effect here. It is kept in
++    // its step's args so that the unparser writes it back, and a program saved
++    // with ids keeps them. The value is kept when it is a string literal of
++    // letters, digits and '_' that starts with a letter, the form Noisemaker 2
++    // accepts; 1.x reports no diagnostic for an id and ignores any other value.
++    const ELEMENT_ID = /^[A-Za-z][A-Za-z0-9_]*$/
++    function keepElementId(idNode, args) {
++        if (idNode?.type === 'String' && idNode._varRef === undefined && ELEMENT_ID.test(idNode.value)) {
++            args._id = idNode.value
++        }
++    }
++
+     const programSearchOrder = ast.namespace?.searchOrder
+     if (!programSearchOrder || programSearchOrder.length === 0) {
+         throw new Error("Missing required 'search' directive. Every program must start with 'search <namespace>, ...' to specify namespace search order.")
+@@ -240,6 +254,14 @@
+         return false
+     }
+ 
++    // A call written with both positional and keyword arguments. A call
++    // merged from a `let` (see resolveCall) has both too, but is not written
++    // this way.
++    function isWrittenMixed(call) {
++        if (call.positionalsByIndex) return false
++        return !!(call.args && call.args.length > 0 && call.kwargs && Object.keys(call.kwargs).length > 0)
++    }
++
+     function resolveCall(call) {
+         // console.log('Resolving call:', call.name, symbols.has(call.name));
+         if (symbols.has(call.name)) {
+@@ -267,6 +289,26 @@
+                     for (const [k, v] of Object.entries(call.kwargs)) mergedKw[k] = v
+                 }
+                 const merged = {type:'Call', name: val.name, args: mergedArgs}
++                // Keywords and positionals that meet only through this merge
++                // are not a call in the mixed form: neither part is written
++                // that way, so the positionals bind by index (see the binding
++                // loop).
++                if (mergedKw && mergedArgs.length > 0 && !isWrittenMixed(val) && !isWrittenMixed(call)) {
++                    // A stored colour still supplies r/g/b when later keywords
++                    // override it. Positionals added after a parameter keyword
++                    // bind only their indexed slot. Meta keywords bind no slot.
++                    const hasBoundKeyword = Object.keys(val.kwargs || {}).some(key => key !== '_skip' && key !== '_id')
++                    merged.positionalsByIndex = {
++                        colorSplatLimit: hasBoundKeyword
++                            ? val.positionalsByIndex?.colorSplatLimit ?? val.args.length
++                            : mergedArgs.length
++                    }
++                }
++                // Carry a source position across the rebuild, preferring the
++                // call site over the binding. Without it every diagnostic about
++                // a `let`-aliased call reported "line 0 col 0".
++                const loc = call.loc ?? val.loc
++                if (loc) merged.loc = loc
+                 if (mergedKw) merged.kwargs = mergedKw
+                 if (call.namespace) {
+                     merged.namespace = {...call.namespace}
+@@ -353,21 +395,13 @@
+             return mapped
+         }
+         if (node.type === 'Chain') {
+-            const mapped = node.chain.map(c => {
+-                const mappedArgs = c.args.map(a => substitute(a, resolving))
+-                let mappedCall = {type:'Call', name:c.name, args:mappedArgs}
+-                if (c.kwargs) {
+-                    const kw = {}
+-                    for (const [k,v] of Object.entries(c.kwargs)) kw[k] = substitute(v, resolving)
+-                    mappedCall.kwargs = kw
+-                }
+-                return resolveCall(mappedCall)
+-            })
+-            return {type:'Chain', chain:mapped}
++            return {type:'Chain', chain:node.chain.map(entry => substitute(entry, resolving))}
+         }
+         if (node.type === 'Call') {
+             const mappedArgs = node.args.map(a => substitute(a, resolving))
+             let mappedCall = {type:'Call', name:node.name, args:mappedArgs}
++            if (node.loc) mappedCall.loc = node.loc
++            if (node.positionalsByIndex) mappedCall.positionalsByIndex = node.positionalsByIndex
+             if (node.kwargs) {
+                 const kw = {}
+                 for (const [k,v] of Object.entries(node.kwargs)) kw[k] = substitute(v, resolving)
+@@ -375,9 +409,62 @@
+             }
+             return resolveCall(mappedCall)
+         }
++        // The three animation descriptors carry their arguments as named
++        // fields rather than in `args`, so a generic walk misses them and the
++        // binding never resolves. Rebuilding only Oscillator left the other two
++        // behind: the 2D path's resolveMidiParam/resolveAudioParam see an Ident,
++        // return undefined and fall back to the parameter's DEFAULT, so
++        // `let ch = 5; midi(channel: ch)` silently played channel 1; inside a
++        // scene() the same node reaches the scene compiler and throws.
++        if (node.type === 'Oscillator') {
++            return {
++                ...node,
++                oscType: substitute(node.oscType),
++                min: substitute(node.min),
++                max: substitute(node.max),
++                speed: substitute(node.speed),
++                offset: substitute(node.offset),
++                seed: substitute(node.seed)
++            }
++        }
++        if (node.type === 'Midi') {
++            return {
++                ...node,
++                channel: substitute(node.channel),
++                mode: substitute(node.mode),
++                min: substitute(node.min),
++                max: substitute(node.max),
++                sensitivity: substitute(node.sensitivity),
++                name: substitute(node.name),
++                id: substitute(node.id)
++            }
++        }
++        if (node.type === 'Audio') {
++            return {
++                ...node,
++                band: substitute(node.band),
++                min: substitute(node.min),
++                max: substitute(node.max)
++            }
++        }
+         return node
+     }
+ 
++    // Remove the marks this function leaves on call and array literal nodes
++    // while it compiles. They are its own, and no compiled plan carries one:
++    // outside scene() an array literal keeps only its elements as written.
++    function dropMarks(node) {
++        if (!node || typeof node !== 'object') return
++        if (Array.isArray(node)) {
++            for (const item of node) dropMarks(item)
++            return
++        }
++        if (node.type === 'Call') {
++            delete node.positionalsByIndex
++        }
++        for (const value of Object.values(node)) dropMarks(value)
++    }
++
+     function declareVar(v) {
+         const expr = substitute(clone(v.expr), [v.name])
+         if (expr && isStarterChain(expr)) {
+@@ -784,6 +871,7 @@
+                     if (original._skip === true) {
+                         stepArgs._skip = true
+                     }
++                    keepElementId(original._id, stepArgs)
+                     const step = {
+                         op: '_read',
+                         args: stepArgs,
+@@ -830,6 +918,7 @@
+                     if (original._skip === true) {
+                         stepArgs._skip = true
+                     }
++                    keepElementId(original._id, stepArgs)
+                     const step = {
+                         op: '_read3d',
+                         args: stepArgs,
+@@ -855,9 +944,11 @@
+                         continue
+                     }
+                     const idx = tempIndex++
++                    const writeArgs = { tex: surface }
++                    keepElementId(original._id, writeArgs)
+                     const step = {
+                         op: '_write',
+-                        args: { tex: surface },
++                        args: writeArgs,
+                         from: current,
+                         temp: idx,
+                         builtin: true
+@@ -891,9 +982,11 @@
+                         continue
+                     }
+                     const idx = tempIndex++
++                    const write3dArgs = { tex3d, geo }
++                    keepElementId(original._id, write3dArgs)
+                     const step = {
+                         op: '_write3d',
+-                        args: { tex3d, geo },
++                        args: write3dArgs,
+                         from: current,
+                         temp: idx,
+                         builtin: true
+@@ -1032,22 +1125,72 @@
+                 }
+                 const seen = new Set()
+                 const specArgs = spec.args || []
++                // Positional arguments are consumed in source order against the
++                // slots a keyword has not already filled. `call.args` holds only
++                // the positionals (the parser routes keywords into `kw`), so it
++                // must be walked with its own cursor rather than indexed by slot
++                // — otherwise the first keyword shifts every later positional
++                // and the trailing one falls off the end.
++                let posCursor = 0
++                // A call not written in the mixed form binds each positional
++                // to the slot at its own index instead: a call with no
++                // keyword, or one whose keywords and positionals met through
++                // a `let`. There a positional whose slot a keyword holds binds
++                // to nothing.
++                const byIndex = !kw || !!call.positionalsByIndex
++                const colorSplatLimit = call.positionalsByIndex?.colorSplatLimit ?? Infinity
++                // Members a positional hex colour has claimed but not yet
++                // reached, by parameter name. See the splat branch below.
++                let splatValues = null
+                 for (let i = 0; i < specArgs.length; i++) {
+                     const def = specArgs[i]
+-                    let node = kw && kw[def.name] !== undefined ? kw[def.name] : call.args[i]
++                    if (byIndex) posCursor = i
++                    const fromKeyword = kw && kw[def.name] !== undefined
++                    // A single positional hex colour claims a whole r/g/b
++                    // triple, and a keyword overrides its own member of it.
++                    // Detected at the 'r' slot whether or not a keyword has
++                    // filled that slot: gating the detection on `!fromKeyword`
++                    // stood the splat down for `tint(#804020, r: 0.25)`, so the
++                    // Color fell into the 'g' float slot, defaulted g AND b and
++                    // reported a bogus S002 about 'g'.
++                    //
++                    // In a call bound by index the colour stands in the places
++                    // of r, g and b, so the next slot takes the fourth
++                    // positional.
++                    if (posCursor < colorSplatLimit && def.type !== 'color' && def.name === 'r' &&
++                        specArgs[i + 1]?.name === 'g' && specArgs[i + 2]?.name === 'b') {
++                        const positional = substitute(call.args[posCursor])
++                        if (positional && positional.type === 'Color') {
++                            posCursor++
++                            const [r, g, b] = positional.value
++                            splatValues = {
++                                [def.name]: r,
++                                [specArgs[i + 1].name]: g,
++                                [specArgs[i + 2].name]: b
++                            }
++                        }
++                    }
++                    // A splatted colour supplies this slot: take the component
++                    // rather than consuming a positional for it.
++                    if (!fromKeyword && splatValues && splatValues[def.name] !== undefined) {
++                        args[def.name] = splatValues[def.name]
++                        continue
++                    }
++                    let node
++                    if (fromKeyword) {
++                        node = kw[def.name]
++                    } else if (posCursor < call.args.length) {
++                        node = call.args[posCursor]
++                        posCursor++
++                    }
+                     node = substitute(node)
+                     const argKey = def.name
+-                    if (!kw && node && node.type === 'Color' && def.type !== 'color' && def.name === 'r' && specArgs[i + 1]?.name === 'g' && specArgs[i + 2]?.name === 'b') {
+-                        const [r, g, b] = node.value
+-                        args[argKey] = r
+-                        const defG = specArgs[i + 1]
+-                        args[defG.name] = g
+-                        const defB = specArgs[i + 2]
+-                        args[defB.name] = b
+-                        i += 2
++                    if (kw && kw[def.name] !== undefined) seen.add(def.name)
++                    if (node?.type === 'Chain' && node.chain.some(entry => entry.type !== 'Call')) {
++                        pushDiag('S001', node.chain[0], `Chain for argument '${def.name}' in ${call.name}() may contain only effect calls`)
++                        args[argKey] = null
+                         continue
+                     }
+-                    if (kw && kw[def.name] !== undefined) seen.add(def.name)
+                     // Array literal — additive input form. Only fires when
+                     // the source contains a literal `[…]`. Existing programs
+                     // can never produce ArrayLiteral nodes (the lexer only
+@@ -1127,14 +1270,12 @@
+                             }
+                         }
+                         args[argKey] = surf
+-                    } else if (node && node.type === 'Call' && node.args?.length === (node.name === 'vec2' ? 2 : 4) && (
++                    } else if (node && node.type === 'Call' && node.args?.length === (node.name === 'vec2' ? 2 : node.name === 'vec3' ? 3 : 4) && (
+                         (def.type === 'vec2' && node.name === 'vec2') ||
+-                        (def.type === 'color' && node.name === 'vec4' && Array.isArray(def.default) && def.default.length === 4))) {
+-                        // vec2(x, y) on a vec2 parameter, and vec4(x, y, z, w) on a
+-                        // vec4 parameter. The loader registers vec4 parameters as
+-                        // `color`; their default keeps its four components. Any
+-                        // other form, including a wrong component count, takes
+-                        // the branches below.
++                        (def.type === 'color' && !node.kwargs && (node.name === 'vec3' || node.name === 'vec4')))) {
++                        // Color constructors preserve the supplied components,
++                        // independently of the parameter's default length.
++                        // Invalid constructor arity takes the branches below.
+                         args[argKey] = node.args.map(arg => {
+                             if (arg.type === 'Number') return arg.value
+                             pushDiag('S002', arg, `Argument out of range for '${def.name}' in ${call.name}()`)
+@@ -1491,6 +1632,12 @@
+                     }
+                 }
+ 
++                // The element id (`_id:` meta-argument)
++                if (kw && kw._id !== undefined) {
++                    keepElementId(kw._id, args)
++                    seen.add('_id')
++                }
++
+                 // Handle _skip meta-argument (skip this step in the pipeline)
+                 if (kw && kw._skip !== undefined) {
+                     const skipNode = kw._skip
+@@ -1509,6 +1656,16 @@
+                         }
+                     }
+                 }
++
++                // Positionals left over after every slot is filled correspond to
++                // no parameter. They bind to nothing, and the call renders
++                // without them. That is a warning, not an error: a program
++                // that passes them compiled before this was reported.
++                if (byIndex) posCursor = specArgs.length
++                if (posCursor < call.args.length) {
++                    const extra = call.args[posCursor]
++                    pushDiag('S009', extra || call, `Too many positional arguments for ${call.name}(): '${call.name}' takes ${specArgs.length}`)
++                }
+                 const hook = typeof call.name === 'string' ? validatorHooks[call.name] : null
+                 if (typeof hook === 'function') {
+                     const starterInfo = getStarterInfo(original)
+@@ -1643,6 +1800,7 @@
+         if (compiled) plans.push(compiled)
+     }
+     declareVarsBefore(Infinity)
++    dropMarks(plans)
+ 
+     // Include original variable declarations for unparsing
+     const vars = ast.vars || []
+--- a/shaders/src/lang/unparser.js
++++ b/shaders/src/lang/unparser.js
+@@ -92,6 +92,129 @@
+  * @param {object} midi - MIDI configuration object
+  * @returns {string} DSL representation of the midi() call
+  */
++function formatLiteralAst(node, indent = null) {
++    if (node === null || node === undefined) return 'null'
++    // A let binding that reached this arg was inlined by the validator's
++    // substitute(), which tags the copy with the name it came from. Emitting
++    // the literal instead dissolves the binding the user wrote; the 2D path
++    // has honoured this tag all along.
++    if (typeof node._varRef === 'string') return node._varRef
++    switch (node.type) {
++        case 'Call': {
++            const positionals = node.args ?? []
++            const keywords = Object.entries(node.kwargs ?? {})
++            const parts = positionals.map(arg => formatLiteralAst(arg))
++            for (const [key, value] of keywords) {
++                parts.push(`${key}: ${formatLiteralAst(value)}`)
++            }
++            return `${node.name}(${parts.join(', ')})`
++        }
++        case 'Chain':
++            return (node.chain ?? []).map(el => formatLiteralAst(el, indent)).join('.')
++        case 'ArrayLiteral':
++            return `[${(node.elements ?? []).map(formatLiteralAst).join(', ')}]`
++        case 'Oscillator': {
++            // Field order matches the parser's parameter order so the emitted
++            // call reparses to the same node.
++            const parts = []
++            if (node.oscType !== undefined) parts.push(`type: ${formatLiteralAst(node.oscType)}`)
++            for (const key of ['min', 'max', 'speed', 'offset', 'seed']) {
++                if (node[key] !== undefined) parts.push(`${key}: ${formatLiteralAst(node[key])}`)
++            }
++            return `osc(${parts.join(', ')})`
++        }
++        case 'Audio': {
++            const parts = []
++            for (const key of ['band', 'min', 'max', 'channel', 'name', 'id']) {
++                if (node[key] !== undefined) parts.push(`${key}: ${formatLiteralAst(node[key])}`)
++            }
++            return `audio(${parts.join(', ')})`
++        }
++        case 'Midi': {
++            const parts = []
++            for (const key of ['channel', 'mode', 'min', 'max', 'sensitivity', 'cc', 'nrpn', 'zone', 'members', 'name', 'id']) {
++                if (node[key] !== undefined) parts.push(`${key}: ${formatLiteralAst(node[key])}`)
++            }
++            return `midi(${parts.join(', ')})`
++        }
++        case 'Member':
++            return (node.path ?? []).join('.')
++        case 'Ident':
++            return node.name
++        case 'OutputRef':
++        case 'VolRef':
++        case 'GeoRef':
++        case 'SourceRef':
++        case 'MeshRef':
++        case 'RgbaRef':
++        case 'VelRef':
++        case 'XyzRef':
++            return node.name
++        case 'String':
++            // The lexer stores the raw slice between the quotes and never
++            // decodes escapes, so re-escaping here would double every
++            // backslash on each pass through the unparser.
++            return `"${node.value}"`
++        case 'Boolean':
++            return node.value ? 'true' : 'false'
++        case 'Number':
++            return formatNumber(node.value)
++        case 'Color':
++            return formatColorLiteral(node.value)
++        default:
++            // Returning '' here spliced the node out of the emitted source —
++            // `intensity: audio(...)` became `intensity: )` — silently
++            // corrupting the user's program. A loud failure is strictly
++            // better than a mangled round-trip.
++            throw new Error(`unparse: no literal emitter for AST node type '${node.type}'`)
++    }
++}
++
++/** Shortest representation that reparses to the same number. */
++function formatNumber(value) {
++    if (!Number.isFinite(value)) return '0'
++    const shortest = Number.isInteger(value) ? value : parseFloat(value.toPrecision(10))
++    return toPlainDecimal(shortest)
++}
++
++/**
++ * Expand exponent notation into plain decimal digits.
++ *
++ * String() switches to exponent form outside [1e-6, 1e21), and the number
++ * lexer reads only `digits[.digits]` — so `1e-7` and `1e+21` round-tripped
++ * into source that does not parse at all. The expansion is exact: it only
++ * moves the decimal point, so the text still reparses to the same value.
++ */
++function toPlainDecimal(value) {
++    const text = String(value)
++    if (!/[eE]/.test(text)) return text
++    const negative = text.startsWith('-')
++    const [mantissa, exponentText] = (negative ? text.slice(1) : text).split(/[eE]/)
++    const exponent = Number(exponentText)
++    const [intPart, fracPart = ''] = mantissa.split('.')
++    const digits = intPart + fracPart
++    // Where the decimal point lands inside `digits` once the exponent applies.
++    const point = intPart.length + exponent
++    let out
++    if (point <= 0) {
++        out = `0.${'0'.repeat(-point)}${digits}`
++    } else if (point >= digits.length) {
++        out = digits + '0'.repeat(point - digits.length)
++    } else {
++        out = `${digits.slice(0, point)}.${digits.slice(point)}`
++    }
++    if (out.includes('.')) out = out.replace(/0+$/, '').replace(/\.$/, '')
++    return negative ? `-${out}` : out
++}
++
++/** Format an [r,g,b,a] colour back to a #RRGGBB / #RRGGBBAA literal. */
++function formatColorLiteral(components) {
++    const hex = (v) => Math.max(0, Math.min(255, Math.round(v * 255))).toString(16).padStart(2, '0')
++    const [r, g, b, a = 1] = components
++    const base = `#${hex(r)}${hex(g)}${hex(b)}`
++    return a >= 1 ? base : `${base}${hex(a)}`
++}
++
+ function formatMidi(midi) {
+     if ((midi.channel && typeof midi.channel === 'object') ||
+         (midi.zone && typeof midi.zone === 'object')) return formatLetExpr(midi)
+@@ -654,18 +777,21 @@
+         // Handle Read node (pipeline built-in)
+         if (value.type === 'Read') {
+             const surfaceName = value.surface?.name || value.surface
+-            return `read(${surfaceName})`
++            const id = elementIdValue(value._id)
++            return id !== undefined ? `read(_id: ${formatStringLiteral(id)}, surface: ${surfaceName})` : `read(${surfaceName})`
+         }
+         // Handle Read3D node (pipeline built-in)
+         // 1 arg: read3d(vol0) - for param use
+         // 2 args: read3d(vol0, geo0) - starter node
+         if (value.type === 'Read3D') {
+             const tex3dName = value.tex3d?.name || value.tex3d
++            const id = elementIdValue(value._id)
++            const idPart = id !== undefined ? `_id: ${formatStringLiteral(id)}, ` : ''
+             if (value.geo) {
+                 const geoName = value.geo?.name || value.geo
+-                return `read3d(${tex3dName}, ${geoName})`
++                return id !== undefined ? `read3d(${idPart}tex3d: ${tex3dName}, geo: ${geoName})` : `read3d(${tex3dName}, ${geoName})`
+             } else {
+-                return `read3d(${tex3dName})`
++                return id !== undefined ? `read3d(${idPart}tex3d: ${tex3dName})` : `read3d(${tex3dName})`
+             }
+         }
+         if (value.type === 'OutputRef') {
+@@ -723,6 +849,31 @@
+ }
+-
++
+ /**
++ * The `_id:` keyword a builtin step writes back, or null when it has none.
++ * An override that holds an `_id` key takes precedence over the step's, and a
++ * null or undefined one removes the id, as for an effect call.
++ * @param {object} step - Compiled builtin step
++ * @param {object} [override] - The step's overrides
++ * @returns {string|null}
++ */
++function builtinIdPart(step, override) {
++    const id = override && Object.hasOwn(override, '_id') ? override._id : step.args?._id
++    return typeof id === 'string' ? `_id: ${formatStringLiteral(id)}` : null
++}
++
++/**
++ * An element id as a string: a compiled step carries it as a string, and a
++ * `let` value or a parsed node as a String node.
++ * @param {*} value
++ * @returns {string|undefined}
++ */
++function elementIdValue(value) {
++    if (typeof value === 'string') return value
++    if (value && typeof value === 'object' && value.type === 'String' && typeof value.value === 'string') return value.value
++    return undefined
++}
++
++/**
+  * Unparse a Call node
+  * @param {object} call - Call AST node
+  * @param {object} options - Unparse options (includes customFormatter, multilineKwargs)
+@@ -737,9 +888,27 @@
+     const parentIndent = ' '.repeat(Math.max(0, baseIndent))
+     const childIndent = ' '.repeat(Math.max(0, baseIndent + 2))
+-
++
++    // Let declarations retain parser nodes. The host's value formatter works
++    // on compiled parameters, so write the binding's expressions as DSL here.
++    const formatArgument = (value, spec, sourceForm) => {
++        if (options.letArguments && value?.type) {
++            if (value.type === 'Color') return formatColorLiteral(value.value)
++            return formatLetExpr(value, options)
++        }
++        return formatValue(value, spec, options, sourceForm)
++    }
++
++    // The element id goes first among the keywords
++    const elementId = elementIdValue(call.kwargs?._id)
++    if (elementId !== undefined) {
++        parts.push(`_id: ${formatStringLiteral(elementId)}`)
++    }
++
+     // Handle kwargs (named arguments)
+     if (call.kwargs && Object.keys(call.kwargs).length > 0) {
+         for (const [key, value] of Object.entries(call.kwargs)) {
++            // An override of null or undefined removes the id
++            if (key === '_id' && (elementId !== undefined || value === null || value === undefined)) continue
+             // Skip _skip: false
+             if (key === '_skip' && value === false) continue
+-
++
+@@ -760,7 +929,7 @@
+-
++
+             // Check against default value
+             if (defaultSpec && defaultSpec.default !== undefined) {
+-                const formattedValue = formatValue(value, spec, options, sourceForm)
++                const formattedValue = formatArgument(value, spec, sourceForm)
+                 const formattedDefault = formatValue(defaultSpec.default, spec, options)
+-
++
+                 // For surface params, 'none' must always be explicit when set
+@@ -772,14 +941,14 @@
+                 }
+             }
+-
++
+-            parts.push(`${key}: ${formatValue(value, spec, options, sourceForm)}`)
++            parts.push(`${key}: ${formatArgument(value, spec, sourceForm)}`)
+         }
+     }
+-
++
+     // Handle positional args
+     if (call.args && call.args.length > 0) {
+         for (const arg of call.args) {
+-            parts.push(formatValue(arg, null, options))
++            parts.push(formatArgument(arg, null))
+         }
+     }
+-
++
+@@ -804,6 +973,16 @@
+     const parts = chain.map((call, idx) => unparseCall(call, { ...options, indent: idx === 0 ? 0 : 2 }))
+     // Join with line break after closing paren, 2-space indent on next line
+     return parts.join('\n  .')
++}
++
++// An effect expression in a binding needs the AST writer for the whole chain,
++// including sibling arguments. Keep ordinary bindings on the host formatter.
++function formatLetBinding(expr, options) {
++    const calls = expr?.type === 'Chain' ? expr.chain : [expr]
++    const isExpression = arg => arg?.type === 'Call' || arg?.type === 'Chain' || arg?.type === 'Ident'
++    const hasExpression = calls.some(call => call?.type === 'Call' &&
++        (call.args?.some(isExpression) || Object.values(call.kwargs || {}).some(isExpression)))
++    return formatLetExpr(expr, hasExpression ? { ...options, letArguments: true } : options)
+ }
+-
++
+ /**
+@@ -830,6 +1009,10 @@
+             return expr.name
+         case 'Member':
+             return expr.path.join('.')
++        case 'ArrayLiteral':
++            // Without a case here an array binding fell to formatValue and
++            // stringified as `let p = [object Object]`.
++            return formatLiteralAst(expr)
+         case 'Oscillator': {
+             // Raw AST Oscillator: sub-fields are AST nodes
+             let typeStr = 'oscKind.sine'
+@@ -976,7 +1159,7 @@
+         text = value ? `return ${formatLetExpr(value, options)}` : 'return'
+     } else if (plan.type === 'VarAssign') {
+         // A `let` inside a block body
+-        text = `let ${plan.name} = ${formatLetExpr(plan.expr, options)}`
++        text = `let ${plan.name} = ${formatLetBinding(plan.expr, options)}`
+     } else {
+         return null
+     }
+@@ -1036,7 +1219,7 @@
+                     lines.push(c)
+                 }
+             }
+-            const exprStr = formatLetExpr(v.expr, options)
++            const exprStr = formatLetBinding(v.expr, options)
+             lines.push(`let ${v.name} = ${exprStr}`)
+         }
+         // Blank line separator after a let block that comes before a plan
+@@ -1144,10 +1327,12 @@
+                 const isSkipped = hasOverride
+                     ? overrides[globalStepIndex]._skip === true
+                     : step.args?._skip === true
+-                // Use positional form when no _skip, keyword form when _skip is present
++                const idPart = builtinIdPart(step, overrides[globalStepIndex])
++                // Positional form with neither _skip nor _id, keyword form with
++                // either, so a call never mixes the two forms
+                 let readCode
+-                if (isSkipped) {
+-                    readCode = `read(surface: ${texName}, _skip: true)`
++                if (isSkipped || idPart) {
++                    readCode = `read(${idPart ? `${idPart}, ` : ''}surface: ${texName}${isSkipped ? ', _skip: true' : ''})`
+                 } else {
+                     readCode = `read(${texName})`
+                 }
+@@ -1169,10 +1354,12 @@
+                 const isSkipped = hasOverride
+                     ? overrides[globalStepIndex]._skip === true
+                     : step.args?._skip === true
+-                // Use positional form when no _skip, keyword form when _skip is present
++                const idPart = builtinIdPart(step, overrides[globalStepIndex])
++                // Positional form with neither _skip nor _id, keyword form with
++                // either, so a call never mixes the two forms
+                 let read3dCode
+-                if (isSkipped) {
+-                    read3dCode = `read3d(tex3d: ${tex3d}, geo: ${geo}, _skip: true)`
++                if (isSkipped || idPart) {
++                    read3dCode = `read3d(${idPart ? `${idPart}, ` : ''}tex3d: ${tex3d}, geo: ${geo}${isSkipped ? ', _skip: true' : ''})`
+                 } else {
+                     read3dCode = `read3d(${tex3d}, ${geo})`
+                 }
+@@ -1183,7 +1370,8 @@
+             // Handle builtin write operations (mid-chain writes)
+             if (step.builtin && step.op === '_write') {
+                 const texName = step.args?.tex?.name || step.args?.tex
+-                currentChain.push(makeChainElement(`write(${texName})`))
++                const idPart = builtinIdPart(step, overrides[globalStepIndex])
++                currentChain.push(makeChainElement(`write(${texName}${idPart ? `, ${idPart}` : ''})`))
+                 globalStepIndex++
+                 continue
+             }
+@@ -1191,7 +1379,8 @@
+             if (step.builtin && step.op === '_write3d') {
+                 const tex3dName = step.args?.tex3d?.name || step.args?.tex3d
+                 const geoName = step.args?.geo?.name || step.args?.geo
+-                currentChain.push(makeChainElement(`write3d(${tex3dName}, ${geoName})`))
++                const idPart = builtinIdPart(step, overrides[globalStepIndex])
++                currentChain.push(makeChainElement(`write3d(${tex3dName}, ${geoName}${idPart ? `, ${idPart}` : ''})`))
+                 globalStepIndex++
+                 continue
+             }
+--- a/shaders/src/runtime/expander.js
++++ b/shaders/src/runtime/expander.js
+@@ -678,6 +678,9 @@
+                 for (const [argName, arg] of Object.entries(step.args)) {
+                     const isObjectArg = arg !== null && typeof arg === 'object'
+-
++
++                    // The element id names the element; it is no uniform
++                    if (argName === '_id') continue
++
+                     // Skip surface arguments (already processed in first pass)
+                     if (isTextureArg(arg)) {
+                         continue
+@@ -756,7 +759,7 @@
+                     conditions: passDef.conditions,
+                     workgroups: passDef.workgroups,
+                     storageBuffers: passDef.storageBuffers,
+-                    storageTextures: passDef.storageTextures,
++                    storageTextures: passDef.storageTextures ? {} : undefined,
+                     // Pass labels and per-pass execution controls are
+                     // copied verbatim. `name`/`type` stay queryable metadata
+                     // (backend shader-kind dispatch remains source-derived);
+@@ -846,6 +849,9 @@
+                 if (step.args) {
+                     for (const [argName, arg] of Object.entries(step.args)) {
+                         const isObjectArg = arg !== null && typeof arg === 'object'
++
++                        // The element id names the element; it is no uniform
++                        if (argName === '_id') continue
+-
++
+                         // Skip texture arguments (handled in inputs)
+                         if (isTextureArg(arg)) {
+@@ -1070,6 +1076,50 @@
+                             pass.inputs[uniformName] = `${nodeId}_${texRef}`
+                         }
+                     }
++                }
++
++                // Map storage texture targets into the same virtual namespace as
++                // sampled inputs and render outputs. Portable definitions name
++                // effect-local textures, while backends consume scoped IDs.
++                if (passDef.storageTextures) {
++                    for (const [binding, texRef] of Object.entries(passDef.storageTextures)) {
++                        if (texRef === 'outputTex') {
++                            const isLastStep = step === plan.chain[plan.chain.length - 1]
++                            const isLastPass = i === effectPasses.length - 1
++                            const nextStep = plan.chain[plan.chain.indexOf(step) + 1]
++                            const inlineWrite = isLastPass && nextStep?.builtin && nextStep.op === '_write'
++                                ? nextStep.args?.tex : null
++                            if (inlineWrite && inlineWrite.name !== 'none') {
++                                const prefix = inlineWrite.kind === 'feedback' ? 'feedback' : 'global'
++                                pass.storageTextures[binding] = `${prefix}_${inlineWrite.name}`
++                                lastWrittenSurface = inlineWrite.name
++                            } else if (isLastStep && isLastPass && plan.write) {
++                                const outName = typeof plan.write === 'object' ? plan.write.name : plan.write
++                                const outKind = plan.write.kind || 'output'
++                                const prefix = outKind === 'feedback' ? 'feedback' : 'global'
++                                pass.storageTextures[binding] = `${prefix}_${outName}`
++                                lastWrittenSurface = outName
++                            } else {
++                                pass.storageTextures[binding] = `${nodeId}_out`
++                            }
++                            textureMap.set(`${nodeId}_out`, pass.storageTextures[binding])
++                        } else if (texRef.startsWith('global_')) {
++                            pass.storageTextures[binding] = scopeChainTex(texRef)
++                        } else {
++                            pass.storageTextures[binding] = `${nodeId}_${texRef}`
++                            const storageSpec = textureSpecs[pass.storageTextures[binding]]
++                            if (storageSpec) {
++                                storageSpec.usage = [...new Set([
++                                    ...(storageSpec.usage || ['render', 'sample', 'copySrc', 'copyDst']),
++                                    'storage'
++                                ])]
++                            }
++                        }
++                    }
++                    // Pipeline allocation falls back from render outputs to
++                    // storage outputs. Do not mask the latter with the empty
++                    // render-output map created for every pass.
++                    if (!passDef.outputs) delete pass.outputs
+                 }
+-
++
+                 // Map Outputs
+--- a/shaders/src/runtime/compiler.js
++++ b/shaders/src/runtime/compiler.js
+@@ -72,7 +72,7 @@
+  * @returns {Promise<Pipeline>} Initialized pipeline ready to render
+  */
+ export async function createRuntime(source, options = {}) {
+-    const graph = compileGraph(source, options)
++    const graph = options.graph ?? compileGraph(source, options)
+     const pipeline = await createPipeline(graph, options)
+     return pipeline
+ }
+@@ -98,7 +98,7 @@
+             // via copyTextureToTexture, and so updateTextureFromSource /
+             // copyExternalImageToTexture can write into it without Dawn rejecting
+             // with "Destination texture needs to have CopyDst usage".
+-            usage: ['render', 'sample', 'copySrc', 'copyDst']
++            usage: effectSpec.usage || ['render', 'sample', 'copySrc', 'copyDst']
+         }
+         // Handle 3D textures
+         if (effectSpec.is3D) {
+@@ -145,6 +145,27 @@
+         }
+     }
+-
++
++    // A pass that writes only through storageTextures has no outputs, so
++    // its targets that no effect declares (such as the node's own output
++    // when the chain continues past it) are allocated here, with storage usage.
++    for (const pass of passes) {
++        if (!pass.storageTextures) continue
++        for (const texId of Object.values(pass.storageTextures)) {
++            if (typeof texId !== 'string' || texId.startsWith('global_')) continue
++            const spec = textures.get(texId)
++            if (spec) {
++                if (!spec.usage.includes('storage')) spec.usage = [...spec.usage, 'storage']
++                continue
++            }
++            textures.set(texId, {
++                width: 'screen',
++                height: 'screen',
++                format: 'rgba16f',
++                usage: ['render', 'sample', 'storage', 'copySrc', 'copyDst']
++            })
++        }
++    }
++
+     return textures
+ }
+-
++
+@@ -209,7 +230,7 @@
+  */
+ export function compileGraphFor(pipeline, newSource, options = {}) {
+     try {
+-        return compileGraph(newSource, {
++        return options.graph ?? compileGraph(newSource, {
+             width: pipeline.width,
+             height: pipeline.height,
+             shaderOverrides: options.shaderOverrides
+--- a/shaders/src/runtime/pipeline.js
++++ b/shaders/src/runtime/pipeline.js
+@@ -318,7 +318,7 @@
+  * @param {number} normalizedTime - Time normalized to animation duration (0..1)
+  * @returns {number} The evaluated oscillator value
+  */
+-function evaluateOscillator(osc, normalizedTime, externalState, depth = 0, stack = new Set(), context) {
++export function evaluateOscillator(osc, normalizedTime, externalState, depth = 0, stack = new Set(), context) {
+     const { oscType } = osc
+     const min = resolveAutomationField(
+         osc.min, normalizedTime, AUTOMATION_FIELD_RANGES.unit, externalState, depth, stack, 0, context)
+@@ -381,7 +381,7 @@
+  * @param {number} currentTime - Current time (Date.now())
+  * @returns {number} The evaluated value in min..max range
+  */
+-function evaluateMidi(config, midiState, currentTime, min = config.min, max = config.max,
++export function evaluateMidi(config, midiState, currentTime, min = config.min, max = config.max,
+     sensitivity = config.sensitivity) {
+     if (config._invalid || !midiState) return min
+-
++
+@@ -496,7 +496,7 @@
+  * @param {import('./external-input.js').AudioState} audioState - Current audio state
+  * @returns {number} The evaluated value in min..max range
+  */
+-function evaluateAudio(config, audioState, min = config.min, max = config.max) {
++export function evaluateAudio(config, audioState, min = config.min, max = config.max) {
+     if (config._invalid) return min
+     if (!audioState) return min
+-
++
+@@ -546,6 +546,24 @@
+     if (typeof sink?.onError === 'function') sink.onError(error)
+ }
+-
++
++/**
++ * Turn the rows of a read-back image over in place: its last row becomes its
++ * first.
++ * @param {{width:number, height:number, data:Uint8Array}} image
++ * @returns {{width:number, height:number, data:Uint8Array}} image
++ */
++function reverseRows(image) {
++    const { width, height, data } = image
++    const rowBytes = width * 4
++    const row = new Uint8Array(rowBytes)
++    for (let top = 0, bottom = (height - 1) * rowBytes; top < bottom; top += rowBytes, bottom -= rowBytes) {
++        row.set(data.subarray(top, top + rowBytes))
++        data.copyWithin(top, bottom, bottom + rowBytes)
++        data.set(row, bottom)
++    }
++    return image
++}
++
+ export class Pipeline {
+     constructor(graph, backend, options = {}) {
+         this.graph = graph
+@@ -576,6 +594,7 @@
+         this._warnedDimensionFallbacks = new Set()
+         this.frameIndex = 0
+         this.lastTime = 0
++        this._hasTimeReference = false
+         this.surfaces = new Map()        // Global surfaces (o0-o7)
+         this._mipTargets = []            // Texture ids whose mip chains regenerate each frame
+         this.globalUniforms = {}
+@@ -1678,12 +1697,15 @@
+                 const storageId = this._textureAliases.get(texId)
+                 if (storageId && storageId !== texId) continue
+-
++
+-                // Reuse only when dimensions, format, and depth all match.
++                // Reuse only when dimensions, format, and depth all match, and
++                // the texture's usage covers the spec's (a recompile can make a
++                // node's output a storage target at the same size).
+                 const existingTex = this.backend.textures?.get?.(texId)
+                 if (existingTex &&
+                     existingTex.width === width &&
+                     existingTex.height === height &&
+-                    existingTex.format === spec.format) {
++                    existingTex.format === spec.format &&
++                    this.textureUsageCovers(existingTex, spec.usage)) {
+                     // For 3D textures, also check depth
+                     if (!spec.is3D || existingTex.depth === this.resolveDimension(spec.depth, width, uniforms)) {
+                         continue  // No change needed
+@@ -1712,6 +1734,21 @@
+         }
+         this.applyTextureAliases()
+         this.refreshMipTargets()
++    }
++
++    /**
++     * Whether a backend texture was created with every usage a spec asks for.
++     * WebGPU records its usage flags; a backend that records none (WebGL2)
++     * covers any usage.
++     * @param {object} texture - Backend texture record
++     * @param {string[]} [usage] - Spec usage names
++     * @returns {boolean}
++     */
++    textureUsageCovers(texture, usage) {
++        if (!Array.isArray(usage) || typeof texture.usage !== 'number' ||
++            typeof this.backend.resolveUsage !== 'function') return true
++        const needed = this.backend.resolveUsage(usage)
++        return (texture.usage & needed) === needed
+     }
+-
++
+     /**
+@@ -1949,7 +1986,8 @@
+-
++
+     /**
+      * Render the current graph once per cube face into 6 face pixel buffers.
+-     * Faces are ordered +X,-X,+Y,-Y,+Z,-Z (GL cubemap order).
++     * Faces are ordered +X,-X,+Y,-Y,+Z,-Z (GL cubemap order). Each face is an
++     * image with its top row first, on both backends.
+      *
+      * The returned array is reused and its entries overwritten on every call;
+      * copy the faces (or their `data`) if you need to retain them across calls.
+@@ -1957,38 +1995,46 @@
+      * graph ends in (renderCubemap3d / renderCubemapSurface) — not a parameter here.
+      * yieldBetweenFaces awaits an animation frame before each face render so a
+      * host render loop keeps painting during large (e.g. 1024px) captures.
+-     * @param {{size?:number, outputSurface?:string, time?:number, yieldBetweenFaces?:boolean}} cfg
+      * @returns {Promise<Array<{width:number,height:number,data:Uint8Array}>>} reused buffer — copy if retaining
+      */
+     async renderCubemap({ size = 512, outputSurface = 'o0', time = 0, yieldBetweenFaces = false } = {}) {
+         const prevW = this.width, prevH = this.height
+         if (this.width !== size || this.height !== size) this.resize(size, size)
+         if (!this._cubeFaces) this._cubeFaces = new Array(6)
+-        for (let face = 0; face < 6; face++) {
+-            if (yieldBetweenFaces) {
+-                // Race rAF against a timer: rAF alone never fires in a
+-                // hidden/backgrounded tab, which would otherwise stall this
+-                // loop indefinitely instead of just yielding a paint.
+-                await new Promise((resolve) => {
+-                    let settled = false
+-                    const finish = () => {
+-                        if (settled) return
+-                        settled = true
+-                        resolve()
+-                    }
+-                    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(finish)
+-                    setTimeout(finish, 120)
+-                })
+-            }
+-            this.setUniform('cubeBasis', CUBE_FACE_BASES[face])
+-            this.render(time)
+-            const surface = this.surfaces.get(outputSurface)
+-            if (!surface) {
+-                throw new Error(`renderCubemap: output surface "${outputSurface}" not found — the composition must write its cubemap-renderer result to it (e.g. .renderCubemapSurface().write(${outputSurface}))`)
+-            }
+-            this._cubeFaces[face] = await this.backend.readPixels(surface.read)
+-        }
+-        if (prevW !== size || prevH !== size) this.resize(prevW, prevH)
++        try {
++            for (let face = 0; face < 6; face++) {
++                if (yieldBetweenFaces) {
++                    // Race rAF against a timer: rAF alone never fires in a
++                    // hidden/backgrounded tab, which would otherwise stall this
++                    // loop indefinitely instead of just yielding a paint.
++                    await new Promise((resolve) => {
++                        let settled = false
++                        const finish = () => {
++                            if (settled) return
++                            settled = true
++                            resolve()
++                        }
++                        if (typeof requestAnimationFrame === 'function') requestAnimationFrame(finish)
++                        setTimeout(finish, 120)
++                    })
++                }
++                this.setUniform('cubeBasis', CUBE_FACE_BASES[face])
++                this.render(time)
++                const surface = this.surfaces.get(outputSurface)
++                if (!surface) {
++                    throw new Error(`renderCubemap: output surface "${outputSurface}" not found — the composition must write its result to it (e.g. .renderCubemapSurface().write(${outputSurface}))`)
++                }
++                const pixels = await this.backend.readPixels(surface.read)
++                // WebGPU holds a surface bottom row first and reads it back as
++                // it holds it. WebGL2's readback is already top row first.
++                this._cubeFaces[face] = this.backend.getName() === 'WebGPU' ? reverseRows(pixels) : pixels
++            }
++        } finally {
++            // In a finally: a face that throws — a missing surface, a failed
++            // readback, a scene hook that rejected — must not strand the canvas
++            // at export resolution until something else happens to resize it.
++            if (prevW !== size || prevH !== size) this.resize(prevW, prevH)
++        }
+         return this._cubeFaces
+     }
+-
++
+@@ -2011,7 +2057,10 @@
+         }
+-
++
+         // Clamp volumeSize so the 3D volume atlas (volumeSize × volumeSize²)
+-        // fits the device's max texture size — see clampVolumeSize().
++        // fits the device's max texture size — see clampVolumeSize(). A chain
++        // a scene volume() marches is pinned instead: the volN globals are a
++        // fixed size regardless of the device, so the clamp cannot help there
++        // and the pin has to win.
+         if (this.isVolumeSizeUniform(name) && typeof value === 'number') {
+             value = this.clampVolumeSize(value)
+         }
+@@ -2324,6 +2373,7 @@
+      */
+     syncTime(time) {
+         this.lastTime = time
++        this._hasTimeReference = true
+     }
+-
++
+     /**
+@@ -2339,14 +2389,10 @@
+             return
+         }
+-
++
+-        // Handle deltaTime carefully - time is normalized 0-1 and wraps
+-        // When time wraps from ~1 to ~0, use a small positive delta instead of negative
+-        let deltaTime = this.lastTime > 0 ? time - this.lastTime : 0
+-        if (deltaTime < 0) {
+-            // Time wrapped around, use a reasonable small delta
+-            deltaTime = 1.0 / 60.0 / 10.0  // Approximate one frame at 60fps normalized to 10s loop
+-        }
+-        this.lastTime = time
++        // Normalized time wraps once per loop.
++        let deltaTime = this._hasTimeReference ? time - this.lastTime : 0
++        if (deltaTime < 0) deltaTime += 1
++        this.syncTime(time)
+-
++
+         // Update global uniforms
+         this.updateGlobalUniforms(time, deltaTime)
+--- a/shaders/src/renderer/canvas.js
++++ b/shaders/src/renderer/canvas.js
+@@ -1812,6 +1812,11 @@
+             }
+         }
+         if (definition.paramAliases !== undefined) fail('paramAliases is no longer supported')
++        // The 2D and agent textures an effect hands on are texture names: the
++        // expander reads them as strings.
++        for (const field of ['outputTex', 'outputXyz', 'outputVel', 'outputRgba']) {
++            if (definition[field] !== undefined && !hasSource(definition[field])) fail(`${field} must be a nonempty texture name`)
++        }
+         if (getEffect(`user.${func}`) || getEffect(`user/${func}`)) fail(`user.${func} is already registered`)
+-
++
+         const instance = new Effect({ ...definition, func, namespace: 'user' })
+@@ -2260,14 +2265,11 @@
+     // Mesh Loading (for meshLoader effect OBJ import)
+     // =========================================================================
+-
++
+-    /** @private Pack mesh data, cache it, and upload to backend */
+-    _packCacheAndUploadMesh(meshId, meshData, packMeshDataForTextures) {
++    /** @private Pack geometry, cache it, and upload to backend */
++    _packCacheAndUploadMesh(meshId, geometry) {
+         const texWidth = 256
+         const texHeight = 256
+-        const packed = packMeshDataForTextures(
+-            meshData.positions, meshData.normals, meshData.uvs,
+-            texWidth, texHeight
+-        )
++        const packed = geometry.toPackedTextures(texWidth, texHeight)
+         this._meshCache.set(meshId, {
+             positionData: packed.positionData,
+             normalData: packed.normalData,
+@@ -2296,11 +2298,11 @@
+-
++
+         try {
+             // Dynamic import to avoid loading parser until needed
+-            const { loadOBJ, packMeshDataForTextures } = await import('../runtime/obj-parser.js')
+-
+-            const meshData = await loadOBJ(url)
+-
+-            const result = this._packCacheAndUploadMesh(meshId, meshData, packMeshDataForTextures)
++            const { loadOBJ } = await import('../runtime/obj-parser.js')
++
++            const geometry = await loadOBJ(url)
++
++            const result = this._packCacheAndUploadMesh(meshId, geometry)
+             return { success: true, vertexCount: result.vertexCount }
+         } catch (err) {
+             console.error('[Canvas] Failed to load OBJ:', err)
+@@ -2321,10 +2323,10 @@
+         }
+-
++
+         try {
+-            const { parseOBJ, packMeshDataForTextures } = await import('../runtime/obj-parser.js')
+-
+-            const meshData = parseOBJ(objText)
+-            const result = this._packCacheAndUploadMesh(meshId, meshData, packMeshDataForTextures)
++            const { parseOBJ } = await import('../runtime/obj-parser.js')
++
++            const geometry = parseOBJ(objText)
++            const result = this._packCacheAndUploadMesh(meshId, geometry)
+             return { success: true, vertexCount: result.vertexCount }
+         } catch (err) {
+             console.error('[Canvas] Failed to parse OBJ:', err)
+--- a/shaders/src/runtime/backends/webgl2.js
++++ b/shaders/src/runtime/backends/webgl2.js
+@@ -446,11 +446,17 @@
+             if (existing.width !== width || existing.height !== height) {
+                 gl.bindRenderbuffer(gl.RENDERBUFFER, existing.buffer)
+                 gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT24, width, height)
++                gl.bindRenderbuffer(gl.RENDERBUFFER, null)
+                 existing.width = width
+                 existing.height = height
+             }
+             return
+         }
++
++        // executePass binds the target FBO before calling this and draws right
++        // after, so the caller's binding has to survive. Finishing on null sent
++        // that draw to the default framebuffer instead.
++        const previousFramebuffer = gl.getParameter(gl.FRAMEBUFFER_BINDING)
+-
++
+         // Create new depth renderbuffer
+         const depthBuffer = gl.createRenderbuffer()
+@@ -467,7 +473,7 @@
+             console.warn(`[ensureDepthBuffer] FBO incomplete after adding depth: ${status}`)
+         }
+-
++
+-        gl.bindFramebuffer(gl.FRAMEBUFFER, null)
++        gl.bindFramebuffer(gl.FRAMEBUFFER, previousFramebuffer)
+         gl.bindRenderbuffer(gl.RENDERBUFFER, null)
+-
++
+         this.depthBuffers.set(fbo, { buffer: depthBuffer, width, height })
+@@ -778,10 +784,17 @@
+     }
+-
++
+     /**
+-     * Read pixels from a texture for testing/parity diffing. Mirrors
+-     * WebGPUBackend.readPixels(): returns top-down RGBA8 (0-255) regardless of the
+-     * texture's internal format. gl.readPixels is bottom-up, so the rows are flipped
+-     * to top-down to match the WebGPU backend's readback orientation.
++     * Read pixels from a texture for testing/parity diffing. Returns RGBA8
++     * (0-255) regardless of the texture's internal format, top row first:
++     * gl.readPixels is bottom-up, so the rows are flipped. WebGPUBackend's
++     * readPixels() returns the rows as its texture holds them, which is not top
++     * row first for every target: see its comment.
++     *
++     * Single-channel attachments (R8/R16F/R32F — scene_gbuf_depth is r32f) are
++     * read as RED, which is their implementation colour read format; asking for
++     * RGBA there is an invalid operation. The one channel expands to greyscale
++     * — value in R, G and B, alpha opaque — matching WebGPUBackend.readPixels()
++     * so the two backends stay diffable.
+      * @param {string} textureId
+      * @returns {{width:number, height:number, data:Uint8Array}}
+      */
+@@ -798,7 +811,23 @@
+         const out = new Uint8Array(width * height * 4)
+         if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE) {
+             const isFloat = glFormat && (glFormat.type === gl.HALF_FLOAT || glFormat.type === gl.FLOAT)
+-            if (isFloat) {
++            if (glFormat?.format === gl.RED) {
++                // One channel per pixel, expanded to greyscale on the way out.
++                // This assumes IMPLEMENTATION_COLOR_READ_FORMAT/TYPE for these
++                // attachments is RED/FLOAT, which holds on ANGLE (Chrome, every
++                // browser this runs in). A driver reporting something else
++                // would need the pair queried and a conversion here.
++                const pixels = width * height
++                const buf = isFloat ? new Float32Array(pixels) : new Uint8Array(pixels)
++                gl.readPixels(0, 0, width, height, gl.RED, isFloat ? gl.FLOAT : gl.UNSIGNED_BYTE, buf)
++                for (let i = 0; i < pixels; i++) {
++                    const v = isFloat ? Math.max(0, Math.min(255, Math.round(buf[i] * 255))) : buf[i]
++                    out[i * 4] = v
++                    out[i * 4 + 1] = v
++                    out[i * 4 + 2] = v
++                    out[i * 4 + 3] = 255
++                }
++            } else if (isFloat) {
+                 const buf = new Float32Array(width * height * 4)
+                 gl.readPixels(0, 0, width, height, gl.RGBA, gl.FLOAT, buf)
+                 for (let i = 0; i < out.length; i++) {
+@@ -831,6 +860,7 @@
+         // Delete single-texture FBO for this texture
+         const fbo = this.fbos.get(id)
+         if (fbo) {
++            this.releaseDepthBuffer(fbo)
+             gl.deleteFramebuffer(fbo)
+             this.fbos.delete(id)
+         }
+@@ -844,9 +874,29 @@
+             }
+         }
+         for (const mrtId of mrtToDelete) {
+-            gl.deleteFramebuffer(this.fbos.get(mrtId))
++            const mrtFbo = this.fbos.get(mrtId)
++            this.releaseDepthBuffer(mrtFbo)
++            gl.deleteFramebuffer(mrtFbo)
+             this.fbos.delete(mrtId)
+         }
++    }
++
++    /**
++     * Release the depth renderbuffer attached to an FBO, if any.
++     *
++     * depthBuffers is keyed by the WebGLFramebuffer object itself, so deleting
++     * the framebuffer without this both leaks the DEPTH_COMPONENT24 storage and
++     * leaves a Map entry keyed by a dead object. SceneRenderer.resize()
++     * destroys and recreates every scene texture, so that happened once per FBO
++     * per resize event.
++     * @param {WebGLFramebuffer} fbo - Framebuffer being deleted
++     */
++    releaseDepthBuffer(fbo) {
++        if (!fbo) return
++        const depth = this.depthBuffers.get(fbo)
++        if (!depth) return
++        this.gl.deleteRenderbuffer(depth.buffer)
++        this.depthBuffers.delete(fbo)
+     }
+-
++
+     /**
+@@ -1493,1 +1543,2 @@
+-            } else if (count === 'auto' || count === 'input') {
++            }
++            if (count === 'auto' || count === 'screen' || count === 'input') {
+@@ -1586,7 +1637,7 @@
+         }
+-
++
+         // If outputs exist but use compute conventions (outputBuffer -> fragColor)
+-        if (pass.outputs) {
++        if (pass.outputs && Object.keys(pass.outputs).length > 0) {
+             renderPass.outputs = {}
+             for (const [key, texId] of Object.entries(pass.outputs)) {
+                 // Normalize output names
+@@ -1653,11 +1704,15 @@
+                 texture = this.defaultTexture
+             }
+-
++
+-            // Check if this is a 3D texture
++            // Select the texture target from the registered texture shape.
+             const is3D = texInfo?.is3D
++            const isCube = texInfo?.cube
+-
++
+             gl.activeTexture(gl.TEXTURE0 + unit)
+-            gl.bindTexture(is3D ? gl.TEXTURE_3D : gl.TEXTURE_2D, texture || null)
++            gl.bindTexture(
++                is3D ? gl.TEXTURE_3D : (isCube ? gl.TEXTURE_CUBE_MAP : gl.TEXTURE_2D),
++                texture || null
++            )
+-
++
+             // Bind sampler uniform
+             const uniform = program.uniforms[samplerName]
+@@ -1901,6 +1956,34 @@
+         }
+     }
+-
++
++    /**
++     * Resolve once the GL pipeline has retired all submitted work.
++     *
++     * Polls a fence rather than calling gl.finish(), which would block the
++     * calling thread until the GPU drains.
++     * @returns {Promise<void>}
++     */
++    async waitForIdle() {
++        const gl = this.gl
++        if (!gl) return
++        const sync = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0)
++        if (!sync) {
++            gl.finish()
++            return
++        }
++        gl.flush()
++        try {
++            for (;;) {
++                const status = gl.clientWaitSync(sync, 0, 0)
++                if (status === gl.ALREADY_SIGNALED || status === gl.CONDITION_SATISFIED) return
++                if (status === gl.WAIT_FAILED) return
++                await new Promise((resolve) => setTimeout(resolve, 1))
++            }
++        } finally {
++            gl.deleteSync(sync)
++        }
++    }
++
+     present(textureId) {
+         const gl = this.gl
+         const tex = this.textures.get(textureId)
+@@ -2112,1 +2195,1 @@
+-        return factors[factor] || gl.ONE
++        return factors[factor] ?? gl.ONE
+--- a/shaders/src/runtime/backends/webgpu.js
++++ b/shaders/src/runtime/backends/webgpu.js
+@@ -118,6 +118,90 @@
+     // Normalized number
+     const f = 1 + mantissa / 1024
+     return (sign ? -1 : 1) * f * Math.pow(2, exponent - 15)
++}
++
++/** How many distinct viewport sizes keep a depth texture alive. */
++const DEPTH_TEXTURE_CACHE_LIMIT = 4
++
++/**
++ * Strip WGSL line and block comments so brace/paren scanning is not fooled by
++ * a `{`, `}` or `)` that only exists inside a comment. WGSL has no string
++ * literals, so a plain scan is safe.
++ * @param {string} source
++ * @returns {string}
++ */
++function stripWgslComments(source) {
++    return source.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/\/\/[^\n]*/g, '')
++}
++
++/**
++ * Extract the body text of `struct <name> { ... }` by counting braces.
++ *
++ * The obvious regex — `struct\s+X\s*\{([^}]+)\}` — stops at the FIRST
++ * closing brace, so any struct whose body contains nested braces parses short
++ * (or not at all) and the caller silently falls back to a wrong layout.
++ * @param {string} source - WGSL source to search
++ * @param {string} name - Struct name
++ * @returns {string|null} The body between the outermost braces, or null when
++ *   the struct is absent or unterminated.
++ */
++export function extractWgslStructBody(source, name) {
++    if (!source || !name) return null
++    const cleaned = stripWgslComments(source)
++    const decl = new RegExp(`\\bstruct\\s+${name}\\s*\\{`)
++    const match = decl.exec(cleaned)
++    if (!match) return null
++    const start = match.index + match[0].length
++    let depth = 1
++    for (let i = start; i < cleaned.length; i++) {
++        const c = cleaned[i]
++        if (c === '{') depth++
++        else if (c === '}') {
++            depth--
++            if (depth === 0) return cleaned.slice(start, i)
++        }
++    }
++    return null
++}
++
++/**
++ * Count the `@location` outputs declared by a fragment entry point.
++ *
++ * Handles both return forms: a bare `-> @location(0) vec4f` and a struct
++ * return whose members carry the locations. Vertex-stage varyings also use
++ * `@location`, so this deliberately inspects only the fragment function's
++ * return type rather than counting occurrences across the source.
++ * @param {string} source - WGSL source containing the fragment stage
++ * @param {string} entryPoint - Fragment entry point name
++ * @returns {number} Output count; 1 when the return type cannot be resolved,
++ *   which preserves the historical single-target assumption.
++ */
++export function countFragmentOutputs(source, entryPoint) {
++    if (!source || !entryPoint) return 1
++    const cleaned = stripWgslComments(source)
++    const fnMatch = new RegExp(`@fragment\\s*fn\\s+${entryPoint}\\s*\\(`).exec(cleaned)
++    if (!fnMatch) return 1
++
++    // Skip the parameter list.
++    let depth = 1
++    let i = fnMatch.index + fnMatch[0].length
++    for (; i < cleaned.length && depth > 0; i++) {
++        if (cleaned[i] === '(') depth++
++        else if (cleaned[i] === ')') depth--
++    }
++    const bodyStart = cleaned.indexOf('{', i)
++    if (bodyStart < 0) return 1
++    const returnDecl = cleaned.slice(i, bodyStart)
++    if (!returnDecl.includes('->')) return 1
++
++    const inlineLocations = returnDecl.match(/@location\s*\(/g)
++    if (inlineLocations) return inlineLocations.length
++
++    const typeMatch = /->\s*([A-Za-z_]\w*)/.exec(returnDecl)
++    if (!typeMatch) return 1
++    const structBody = extractWgslStructBody(cleaned, typeMatch[1])
++    if (!structBody) return 1
++    return (structBody.match(/@location\s*\(/g) || []).length || 1
+ }
+-
++
+ export class WebGPUBackend extends Backend {
+@@ -137,9 +221,11 @@
+             ? navigator.gpu.getPreferredCanvasFormat()
+             : null
+-
++
+-        // Depth texture for 3D mesh rendering (created lazily)
+-        this.depthTexture = null
+-        this.depthTextureSize = { width: 0, height: 0 }
++        // Depth textures for 3D mesh rendering, cached by viewport size.
++        // A frame may encode probe and screen passes at different sizes into
++        // one command buffer; destroying the first depth target while those
++        // commands are pending invalidates the entire submission.
++        this.depthTextures = new Map()
+-
++
+         // Uniform buffer pool for efficient buffer reuse
+         this.uniformBufferPool = []
+@@ -1338,39 +1424,53 @@
+         const fragmentEntryPoint = spec.fragmentEntryPoint || spec.entryPoint || DEFAULT_FRAGMENT_ENTRY_POINT
+         const outputFormat = this.resolveFormat(spec?.outputFormat || 'rgba16float')
+-
++
+-        // Create initial pipeline
+-        //const _tBeforePipeline = performance.now()
+-        const pipeline = this.device.createRenderPipeline({
+-            layout: 'auto',
+-            vertex: {
+-                module: vertexModule,
+-                entryPoint: vertexEntryPoint
+-            },
+-            fragment: {
+-                module: fragmentModule,
+-                entryPoint: fragmentEntryPoint,
+-                targets: [{
+-                    format: outputFormat,
+-                    blend: this.resolveBlendState(spec?.blend)
+-                }]
+-            },
+-            primitive: {
+-                topology: spec?.topology || 'triangle-list'
+-            }
+-        })
+-        //const _tPipeline = performance.now()
+-
+-        // Knob 1: per-phase compile timings (logging only — see HANDOFF-shader-compile.md)
+-        //console.log(`[compile-wgsl-render ${id}] module=${(_tModule - _t0).toFixed(1)}ms info=${(_tInfo - _tModule).toFixed(1)}ms pipeline=${(_tPipeline - _tBeforePipeline).toFixed(1)}ms total=${(_tPipeline - _t0).toFixed(1)}ms src=${source.length}b`)
++        // A fragment stage with more than one @location output (the scene
++        // G-buffer pass writes four) cannot be described by the single-target
++        // pipeline below: interface matching fails and the device raises an
++        // uncaptured validation error at every program load. Those passes go
++        // through executeMRTRenderPass, which builds a correctly shaped
++        // pipeline via resolveMRTRenderPipeline on first use, so the eager
++        // build is skipped. Single-output programs — every 2D effect — keep
++        // it: it warms the shader before the first frame.
++        const fragmentOutputCount = countFragmentOutputs(source, fragmentEntryPoint)
+-
++
+         // Create pipeline cache for different output formats/blend modes
+         const pipelineCache = new Map()
+-        const initialKey = this.getPipelineKey({
+-            topology: spec?.topology,
+-            blend: spec?.blend,
+-            format: outputFormat
+-        })
+-        pipelineCache.set(initialKey, pipeline)
++        let pipeline = null
++
++        if (fragmentOutputCount <= 1) {
++            // Create initial pipeline
++            //const _tBeforePipeline = performance.now()
++            pipeline = this.device.createRenderPipeline({
++                layout: 'auto',
++                vertex: {
++                    module: vertexModule,
++                    entryPoint: vertexEntryPoint
++                },
++                fragment: {
++                    module: fragmentModule,
++                    entryPoint: fragmentEntryPoint,
++                    targets: [{
++                        format: outputFormat,
++                        blend: this.resolveBlendState(spec?.blend)
++                    }]
++                },
++                primitive: {
++                    topology: spec?.topology || 'triangle-list'
++                }
++            })
++            //const _tPipeline = performance.now()
++
++            // Knob 1: per-phase compile timings (logging only — see HANDOFF-shader-compile.md)
++            //console.log(`[compile-wgsl-render ${id}] module=${(_tModule - _t0).toFixed(1)}ms info=${(_tInfo - _tModule).toFixed(1)}ms pipeline=${(_tPipeline - _tBeforePipeline).toFixed(1)}ms total=${(_tPipeline - _t0).toFixed(1)}ms src=${source.length}b`)
++
++            const initialKey = this.getPipelineKey({
++                topology: spec?.topology,
++                blend: spec?.blend,
++                format: outputFormat
++            })
++            pipelineCache.set(initialKey, pipeline)
++        }
+-
++
+         const programInfo = {
+             module: fragmentModule,
+@@ -1382,6 +1482,9 @@
+             fragmentEntryPoint,
+             outputFormat,
+             pipelineCache,
++            // Number of @location outputs the fragment stage declares. > 1
++            // means the program is MRT-only and has no eager `pipeline`.
++            fragmentOutputCount,
+             bindings, // Store parsed bindings for bind group creation
+             samplerTextureNames: this.parseSamplerTextureUses(source + '\n' + (vertexSource || '')),
+             // See compileComputeProgram for what this flag is for.
+@@ -1418,10 +1521,8 @@
+         while ((bindingMatch = bindingRegex.exec(source)) !== null) {
+             const structName = bindingMatch[1]
+             // Find the matching struct declaration.
+-            const structRegex = new RegExp(`struct\\s+${structName}\\s*\\{([^}]+)\\}`, 'g')
+-            const structMatch = structRegex.exec(source)
+-            if (!structMatch) continue
+-            const body = structMatch[1]
++            const body = extractWgslStructBody(source, structName)
++            if (body === null) continue
+             // Compute the byte size of the struct body.
+             const size = this.computeWgslStructSize(body)
+             if (size > largestSize) largestSize = size
+@@ -1913,7 +2014,11 @@
+             let bindingType = 'unknown'
+             if (typeDecl.includes('texture_storage_2d') || typeDecl.includes('texture_storage_3d')) {
+                 bindingType = 'storage_texture'
+-            } else if (typeDecl.includes('texture_2d') || typeDecl.includes('texture_3d')) {
++            } else if (
++                typeDecl.includes('texture_2d') ||
++                typeDecl.includes('texture_3d') ||
++                typeDecl.includes('texture_cube')
++            ) {
+                 bindingType = 'texture'
+             } else if (typeDecl === 'sampler') {
+                 bindingType = 'sampler'
+@@ -2344,24 +2449,64 @@
+      * @returns {GPUTexture} - Depth texture for mesh rendering
+      */
+     getDepthTexture(width, height) {
+-        // Create or resize depth texture if needed
+-        if (!this.depthTexture ||
+-            this.depthTextureSize.width !== width ||
+-            this.depthTextureSize.height !== height) {
+-
+-            if (this.depthTexture) {
+-                this.depthTexture.destroy()
+-            }
+-
+-            this.depthTexture = this.device.createTexture({
+-                size: { width, height, depthOrArrayLayers: 1 },
+-                format: 'depth24plus',
+-                usage: GPUTextureUsage.RENDER_ATTACHMENT
+-            })
+-            this.depthTextureSize = { width, height }
+-        }
+-
+-        return this.depthTexture
++        if (!this.depthTextures) this.depthTextures = new Map()
++        const key = `${width}x${height}`
++        let depthTexture = this.depthTextures.get(key)
++        if (depthTexture) {
++            // Refresh recency: Map iterates in insertion order, so re-inserting
++            // moves this size to the young end for eviction purposes.
++            this.depthTextures.delete(key)
++            this.depthTextures.set(key, depthTexture)
++            return depthTexture
++        }
++        depthTexture = this.device.createTexture({
++            size: { width, height, depthOrArrayLayers: 1 },
++            format: 'depth24plus',
++            usage: GPUTextureUsage.RENDER_ATTACHMENT
++        })
++        this.depthTextures.set(key, depthTexture)
++
++        // Bound the cache. Keyed by size and never evicted, a resize drag
++        // allocated one depth24plus texture per distinct viewport size and kept
++        // every one of them until destroy().
++        while (this.depthTextures.size > DEPTH_TEXTURE_CACHE_LIMIT) {
++            const oldestKey = this.depthTextures.keys().next().value
++            const evicted = this.depthTextures.get(oldestKey)
++            this.depthTextures.delete(oldestKey)
++            this.retireDepthTexture(evicted)
++        }
++        return depthTexture
++    }
++
++    /**
++     * Destroy an evicted depth texture once the GPU has finished with it.
++     *
++     * Destroying a texture an in-flight command buffer still references is a
++     * validation error, which is why eviction cannot be immediate.
++     *
++     * Each eviction gets its OWN onSubmittedWorkDone(). That promise covers
++     * exactly the submits outstanding when it was requested, so batching later
++     * retirements behind the first one would release a texture a subsequent
++     * submit can still reference. One promise per eviction is safe because the
++     * victim is the LRU entry — last used in a frame that has already been
++     * submitted — and eviction only happens during a resize drag, so the extra
++     * promises cost nothing.
++     * @param {GPUTexture} texture - Evicted depth texture
++     */
++    retireDepthTexture(texture) {
++        if (!texture) return
++        if (!this._retiredDepthTextures) this._retiredDepthTextures = []
++        this._retiredDepthTextures.push(texture)
++        this.device.queue.onSubmittedWorkDone().then(() => {
++            const pending = this._retiredDepthTextures
++            if (!pending) return
++            const index = pending.indexOf(texture)
++            // destroy() drains the list on teardown; the texture is gone and
++            // the device it belonged to may be too.
++            if (index === -1) return
++            pending.splice(index, 1)
++            texture.destroy()
++        })
+     }
+-
++
+     /**
+@@ -2454,1 +2599,10 @@
+-                if (typeof factor === 'string') return factor.toLowerCase().replace(/_/g, '-')
++                if (typeof factor === 'string') {
++                    const normalized = factor.toLowerCase().replace(/_/g, '-')
++                    switch (normalized) {
++                        case 'src-color': return 'src'
++                        case 'dst-color': return 'dst'
++                        case 'one-minus-src-color': return 'one-minus-src'
++                        case 'one-minus-dst-color': return 'one-minus-dst'
++                        default: return normalized
++                    }
++                }
+@@ -2544,1 +2698,1 @@
+-        if (count === 'auto' || count === 'input' || count <= 0) {
++        if (count === 'auto' || count === 'screen' || count === 'input' || count <= 0) {
+@@ -3330,6 +3484,21 @@
+      * Legacy bind group creation for shaders that don't have parsed bindings.
+      */
+     createLegacyBindGroup(pass, program, state) {
++        // A multi-output program has no eager `pipeline`: compileRenderProgram
++        // skips it because a single-target descriptor fails interface matching
++        // against a fragment stage with several @location outputs. Its layout
++        // only exists on the pipeline resolveMRTRenderPipeline builds, which
++        // this path cannot reach — and it would build the wrong entries anyway.
++        if (!program.pipeline) {
++            const outputs = program.fragmentOutputCount ?? 'multiple'
++            throw new Error(
++                `Program '${pass.program}' has no eager pipeline to take a bind group layout from: ` +
++                `its fragment stage declares ${outputs} @location outputs, so it is MRT-only. ` +
++                `The legacy bind group path is for shaders with no @binding declarations at all; ` +
++                `declare them so the parsed-binding path builds the group instead.`
++            )
++        }
++
+         const entries = []
+         let binding = 0
+-
++
+@@ -3835,6 +4004,15 @@
+         }
+     }
+-
++
++    /**
++     * Resolve once the queue has retired all submitted work.
++     * @returns {Promise<void>}
++     */
++    async waitForIdle() {
++        if (!this.queue) return
++        await this.queue.onSubmittedWorkDone()
++    }
++
+     present(textureId) {
+         if (!this.context) return
+-
++
+@@ -3877,13 +4055,23 @@
+             this.textures.clear()
+         }
+-
++
+-        // The depth texture is owned by the backend but lives outside
++        // Depth textures are owned by the backend but live outside
+         // this.textures, so free it explicitly regardless of skipTextures —
+         // neither teardown path reaches it through the texture registry.
+-        if (this.depthTexture) {
+-            this.depthTexture.destroy()
+-            this.depthTexture = null
+-            this.depthTextureSize = { width: 0, height: 0 }
++        if (this.depthTextures) {
++            for (const depthTexture of this.depthTextures.values()) {
++                depthTexture.destroy()
++            }
++            this.depthTextures.clear()
++        }
++
++        // Evictions waiting on onSubmittedWorkDone() would otherwise fire after
++        // teardown, against a device that is on its way out. Release them here
++        // and empty the list, which is also how the deferred callbacks above
++        // learn there is nothing left for them to do.
++        if (this._retiredDepthTextures) {
++            for (const retired of this._retiredDepthTextures) retired.destroy()
++            this._retiredDepthTextures.length = 0
+         }
+-
++
+         this.programs.clear()
+@@ -4236,6 +4424,17 @@
+     /**
+      * Read pixels from a texture for testing purposes.
+      * Note: This is async due to WebGPU's buffer mapping requirements.
++     *
++     * Returns RGBA8 (0-255), whatever the texture's internal format, with the
++     * rows in the order the texture holds them. That is top row first for some
++     * targets and bottom row first for others, among them a surface a 2D
++     * program draws: Pipeline.renderCubemap() turns its faces over for that
++     * reason. Single-channel formats (r32float, r16float — scene_gbuf_depth is
++     * r32f) expand to greyscale: the value in R, G and B with alpha opaque,
++     * rather than R-only, so the same RGB-mean helpers that consume the colour
++     * surfaces read a depth surface as the greyscale image it is. Float values
++     * are scaled by 255 and clamped, matching the existing rgba16float and
++     * rgba32float paths.
+      * @param {string} textureId - The texture ID to read from
+      * @returns {Promise<{width: number, height: number, data: Uint8Array}>}
+      */
+@@ -4253,6 +4452,10 @@
+             bytesPerPixel = 8 // 2 bytes per channel * 4 channels
+         } else if (gpuFormat === 'rgba32float') {
+             bytesPerPixel = 16 // 4 bytes per channel * 4 channels
++        } else if (gpuFormat === 'r32float') {
++            bytesPerPixel = 4 // 4 bytes per channel * 1 channel
++        } else if (gpuFormat === 'r16float') {
++            bytesPerPixel = 2 // 2 bytes per channel * 1 channel
+         }
+-
++
+         const bytesPerRow = Math.ceil(width * bytesPerPixel / 256) * 256 // Align to 256 bytes
+@@ -4310,6 +4513,27 @@
+                     }
+                 }
+             }
++        } else if (gpuFormat === 'r32float' || gpuFormat === 'r16float') {
++            // Single-channel float: ONE value per pixel, not four. Falling
++            // through to the rgba8unorm branch below reinterpreted the float's
++            // raw bytes as four unorm channels.
++            const isHalf = gpuFormat === 'r16float'
++            const bytesPerElement = isHalf ? 2 : 4
++            const srcData = isHalf ? new Uint16Array(mappedRange) : new Float32Array(mappedRange)
++            const elementsPerRow = bytesPerRow / bytesPerElement
++            for (let row = 0; row < height; row++) {
++                const srcRowOffset = row * elementsPerRow
++                for (let col = 0; col < width; col++) {
++                    const raw = srcData[srcRowOffset + col]
++                    const f32 = isHalf ? float16ToFloat32(raw) : raw
++                    const v = Math.max(0, Math.min(255, Math.round(f32 * 255)))
++                    const dstPixel = (row * width + col) * 4
++                    data[dstPixel] = v
++                    data[dstPixel + 1] = v
++                    data[dstPixel + 2] = v
++                    data[dstPixel + 3] = 255
++                }
++            }
+         } else {
+             // Assume rgba8unorm - direct copy (removing row padding)
+             const srcData = new Uint8Array(mappedRange)

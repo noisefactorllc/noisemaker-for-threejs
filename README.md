@@ -28,14 +28,14 @@ engine runs in the browser at [noisedeck.app](https://noisedeck.app).
 **Noisemaker for Three.js** runs that same engine in **three.js**, so you can use Noisemaker's ~210 effects
 as live textures, materials, and backgrounds in any three.js scene.
 
-This is a **thin adapter, not a port** — about 2,900 lines of new code wrapped around the
-**unmodified** Noisemaker engine. The engine already runs on JavaScript and WebGL2, which is exactly
-what three.js uses, so the DSL compiler, the effects, and their shaders are reused as-is. The only
-real new code is one small piece — a `ThreeBackend` — that lets the engine draw through three.js.
+The adapter runs Noisemaker's stable compiler and pipeline through `ThreeBackend`, which lets
+the engine draw through three.js. The reviewed engine source lock and patch retain stable
+upstream behavior while excluding experimental modules and language features.
 
-The engine itself is **never committed here**. It's fetched from the Noisemaker CDN
-([shaders.noisedeck.app](https://shaders.noisedeck.app)) into a git-ignored `vendor/` folder — the
-same way `node_modules` works.
+The published reference and effect bundles are fetched from the Noisemaker CDN
+([shaders.noisedeck.app](https://shaders.noisedeck.app)); locked source modules are fetched from
+the upstream repository. This working cache stays ignored under `vendor/noisemaker/`.
+The reproducible stable engine for export kits is committed under `export-kit/engine/`.
 
 ## What you can do with it
 
@@ -58,11 +58,12 @@ same way `node_modules` works.
 
 ```bash
 npm install        # three + tooling
-npm run vendor     # fetch the Noisemaker engine from the CDN into vendor/ (git-ignored)
+npm run vendor     # fetch and derive the reviewed stable engine
 ```
 
-The `vendor` step is required once: it downloads the engine and effect bundles the adapter drives.
-The engine bytes are never committed — only the fetch script is.
+The `vendor` step prepares the engine and effect bundles the adapter drives.
+After an engine sync, `node vendor/build-stable-kit.mjs` reproduces the export kit's engine;
+`node vendor/build-stable-kit.mjs --check` verifies its committed bytes.
 
 Then serve the repo root with any static server:
 
@@ -204,8 +205,8 @@ allocate render targets, compile shaders, draw passes.
 Because three.js is JavaScript + WebGL2 — exactly what the reference engine already targets — none of
 that needed re-implementing. This adapter supplies one new backend, `ThreeBackend`, that maps the
 engine's GPU calls onto three.js primitives (`WebGLRenderTarget`, `RawShaderMaterial`, a fullscreen
-triangle, double-buffered surfaces). Everything else — the compiler, the effects, the GLSL — is the
-unmodified engine fetched from the CDN.
+triangle, double-buffered surfaces). The compiler and pipeline are derived from locked upstream
+source; the effect bundles retain the published shader bytes.
 
 ## Contributing
 

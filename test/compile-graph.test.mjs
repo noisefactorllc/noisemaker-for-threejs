@@ -204,11 +204,15 @@ test('output-shaped member segments and other reference families keep existing b
   )
 })
 
-test('mutation introspection excludes builtins from steps and replacement targets', { skip }, () => {
+test('mutation introspection identifies builtins and rejects them as replacement targets', { skip }, () => {
   const compiled = eng.core.compile('search synth, filter\nnoise(10).write(o0)\nrender(o0)')
   const steps = eng.core.listSteps(compiled)
-  assert.equal(steps.length, 1, 'listSteps should only return user effect steps, excluding builtins')
+  assert.equal(steps.length, 2, 'listSteps includes the effect and structural write')
   assert.equal(steps[0].effectName, 'synth.noise', 'First step is noise')
+  assert.equal(steps[0].kind, 'effect')
+  assert.equal(steps[1].kind, 'builtin')
+  assert.equal(steps[1].canReplaceWithStarter, false)
+  assert.equal(steps[1].canReplaceWithNonStarter, false)
 
   const builtinSteps = compiled.plans[0].chain.filter((step) => step.builtin)
   assert.ok(builtinSteps.length >= 1, 'chain has builtin steps')
@@ -924,7 +928,7 @@ test('valid subchains preserve permissive arguments, defaults, and compiled op e
       type: 'Subchain',
       name,
       id,
-      body: [{ type: 'Call', name: 'invert', args: [] }],
+      body: [{ type: 'Call', name: 'invert', args: [], loc: { line: 2, col: 24 + args.length } }],
       loc: { line: 2, col: 10 }
     })
     const result = compile(source)
@@ -1081,9 +1085,9 @@ test('parser remaining expectation diagnostics and number coercion diagnostics (
   }
 })
 
-test('number coercion diagnostics represent unavailable locations explicitly', { skip }, () => {
+test('number coercion diagnostics retain call locations and unavailable surface locations', { skip }, () => {
   const { compile } = eng.core
-  for (const source of ['search synth\nlet x = 1 + o0', 'search synth\nlet x = noise() + 1']) {
+  for (const [source, location] of [['search synth\nlet x = 1 + o0', null], ['search synth\nlet x = noise() + 1', { line: 2, column: 9 }]]) {
     assert.throws(
       () => compile(source),
       (err) => {
@@ -1094,7 +1098,7 @@ test('number coercion diagnostics represent unavailable locations explicitly', {
           stage: 'parser',
           severity: 'error',
           message: 'Expected number',
-          location: null,
+          location,
           span: null
         })
         return true
@@ -1109,12 +1113,12 @@ test('array literal ASTs keep their public shape with private source provenance'
   const array = parse(lex(source)).vars[0].expr
   assert.deepEqual(array, {
     type: 'ArrayLiteral',
-    elements: [{ type: 'Number', value: 1 }, { type: 'Number', value: 2 }],
+    elements: [{ type: 'Number', value: 1, loc: { line: 2, col: 10 } }, { type: 'Number', value: 2, loc: { line: 2, col: 13 } }],
     loc: { line: 2, col: 9 }
   })
   assert.deepEqual(JSON.parse(JSON.stringify(array)), {
     type: 'ArrayLiteral',
-    elements: [{ type: 'Number', value: 1 }, { type: 'Number', value: 2 }],
+    elements: [{ type: 'Number', value: 1, loc: { line: 2, col: 10 } }, { type: 'Number', value: 2, loc: { line: 2, col: 13 } }],
     loc: { line: 2, col: 9 }
   })
   assert.deepEqual(Object.getOwnPropertyDescriptor(array, 'position'), {
@@ -1166,6 +1170,7 @@ test('valid call forms retain from-override namespaces and mixed automation argu
     type: 'Call',
     name: 'probe',
     args: [],
+    loc: { line: 2, col: 21 },
     namespace: {
       name: 'synth',
       path: ['synth'],

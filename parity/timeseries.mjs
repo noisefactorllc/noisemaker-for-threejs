@@ -146,7 +146,12 @@ async function runMode(browser, port, mode, testCase) {
   page.on('console', (m) => msgs.push(`[${m.type()}] ${m.text()}`))
   page.on('pageerror', (e) => msgs.push(`[pageerror] ${e.message}`))
   await page.goto(`http://127.0.0.1:${port}/parity/page-timeseries.html`, { timeout: 60000 })
-  await page.waitForFunction(() => window.__nm_ts_ready === true, { timeout: 30000 })
+  try {
+    await page.waitForFunction(() => window.__nm_ts_ready === true, { timeout: 30000 })
+  } catch (error) {
+    process.stderr.write(`${msgs.join('\n')}\n`)
+    throw error
+  }
   // Per-mode watchdog: a case that never finishes must not hang the whole
   // batched run (an earlier windows CI leg lost its runner after ~55 minutes
   // with no timeout in place). The timeout marks the case ERR, not a pass.
@@ -229,13 +234,16 @@ async function runCase(browser, port, testCase) {
 // 36542869365, shard 47of48). Race close() with 30 s, then SIGKILL the
 // browser process so the next case starts clean.
 async function closeBrowser(browser) {
+  let closeTimer
   try {
     await Promise.race([
       browser.close(),
-      new Promise((resolve) => setTimeout(resolve, 30000)),
+      new Promise((resolve) => { closeTimer = setTimeout(resolve, 30000) }),
     ])
   } catch {
     // fall through to the SIGKILL below
+  } finally {
+    clearTimeout(closeTimer)
   }
   try {
     browser.process()?.kill('SIGKILL')

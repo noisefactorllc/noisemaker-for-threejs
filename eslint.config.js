@@ -18,5 +18,5 @@ export default [
     }
   },
   // src/vendor/ is a snapshot of reference engine source — lint the adapter, not the engine.
-  { ignores: ['vendor/', 'src/vendor/', 'examples/bundle.js', 'examples/cubemap-bundle.js', 'node_modules/'] }
+  { ignores: ['vendor/', 'src/vendor/', 'export-kit/engine/', 'examples/bundle.js', 'examples/cubemap-bundle.js', 'node_modules/'] }
 ]
