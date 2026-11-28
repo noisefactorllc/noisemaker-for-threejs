@@ -844,6 +844,7 @@ export class ThreeBackend extends Backend {
   setExternalTexture(id, texture, width, height) {
     const existing = this.textures.get(id)
     if (existing && !existing.external) this.destroyTexture(id) // replace an owned RT
+    else if (existing?.externalGL) this.gl?.deleteTexture(existing.externalGL)
     const w = width ?? texture?.image?.width ?? this.width ?? 0
     const h = height ?? texture?.image?.height ?? this.height ?? 0
     const mediaTopDown = MEDIA_INPUT_ID.test(id)

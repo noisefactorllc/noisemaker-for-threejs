@@ -41,7 +41,10 @@ function makeMockRenderer() {
     NEAREST: 0x2600,
     CLAMP_TO_EDGE: 0x812f,
     RGBA: 0x1908,
+    RGBA16F: 0x881a,
+    RGBA32F: 0x8814,
     UNSIGNED_BYTE: 0x1401,
+    FLOAT: 0x1406,
     UNPACK_FLIP_Y_WEBGL: 0x9240,
     createRenderbuffer() {
       const rb = { id: renderbuffers.length + 1 }
@@ -239,4 +242,71 @@ test('a rejected compile keeps the accepted programs and releases the candidate'
   assert.equal(backend.programs.get('kept')?.material, kept, 'the accepted program stayed')
   assert.ok(!backend.programs.has('cand0'), 'the rejected candidate left the program map')
   assert.ok(!keptDisposed, 'the accepted program material was not disposed')
+})
+
+test('setExternalTexture deletes an earlier updateTextureFromSource GL handle once and does not dispose the caller texture', () => {
+  const { renderer, glTextures, deletedTextures } = makeMockRenderer()
+  const backend = new ThreeBackend(renderer)
+  const callerTexture = new THREE.Texture()
+  let callerDisposed = false
+  callerTexture.addEventListener('dispose', () => { callerDisposed = true })
+
+  backend.updateTextureFromSource('imageTex_step_0', { width: 4, height: 4 })
+  assert.equal(glTextures.length, 1)
+  assert.equal(deletedTextures.length, 0)
+
+  backend.setExternalTexture('imageTex_step_0', callerTexture, 4, 4)
+  assert.equal(deletedTextures.length, 1)
+  assert.equal(deletedTextures[0], glTextures[0])
+  assert.equal(callerDisposed, false)
+
+  backend.destroy()
+  assert.equal(glTextures.length - deletedTextures.length, 0)
+  assert.equal(deletedTextures.length, 1)
+  assert.equal(callerDisposed, false)
+})
+
+test('ten updateTextureFromSource and setExternalTexture cycles on one id leave 0 live GL textures', () => {
+  const { renderer, glTextures, deletedTextures } = makeMockRenderer()
+  const backend = new ThreeBackend(renderer)
+  const disposedFlags = []
+
+  for (let i = 0; i < 10; i++) {
+    backend.updateTextureFromSource('imageTex_step_0', { width: 4, height: 4 })
+    const callerTexture = new THREE.Texture()
+    let disposed = false
+    callerTexture.addEventListener('dispose', () => { disposed = true })
+    disposedFlags.push(() => disposed)
+    backend.setExternalTexture('imageTex_step_0', callerTexture, 4, 4)
+  }
+
+  backend.destroy()
+  assert.equal(glTextures.length, 10)
+  assert.equal(deletedTextures.length, 10)
+  assert.equal(glTextures.length - deletedTextures.length, 0)
+  assert.ok(disposedFlags.every((check) => !check()), 'caller textures must not be disposed')
+})
+
+test('setExternalTexture deletes the replaced uploadMeshData GL handle on global_mesh0_positions', () => {
+  const { renderer, glTextures, deletedTextures } = makeMockRenderer()
+  const backend = new ThreeBackend(renderer)
+  const data = new Float32Array(2 * 2 * 4)
+  const callerTexture = new THREE.Texture()
+  let callerDisposed = false
+  callerTexture.addEventListener('dispose', () => { callerDisposed = true })
+
+  backend.uploadMeshData('mesh0', data, data, data, 2, 2, 3)
+  assert.equal(glTextures.length, 3)
+  assert.equal(deletedTextures.length, 0)
+
+  backend.setExternalTexture('global_mesh0_positions', callerTexture, 2, 2)
+  assert.equal(deletedTextures.length, 1)
+  assert.equal(deletedTextures[0], glTextures[0])
+  assert.equal(callerDisposed, false)
+
+  backend.destroy()
+  assert.equal(glTextures.length, 3)
+  assert.equal(deletedTextures.length, 3)
+  assert.equal(glTextures.length - deletedTextures.length, 0)
+  assert.equal(callerDisposed, false)
 })
